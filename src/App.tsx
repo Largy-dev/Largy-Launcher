@@ -92,7 +92,7 @@ function AppShell() {
     checkForAppUpdate()
       .then((update) => {
         if (!update) return;
-        toast.info(`Nouvelle version disponible : v${update.version}`, {
+        toast.info(`Nouvelle version disponible : v${update.currentVersion} → v${update.version}`, {
           duration: Infinity,
           action: {
             label: "Mettre à jour",

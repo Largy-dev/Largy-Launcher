@@ -225,7 +225,7 @@ export function GlobalSettingsScreen() {
                 ? "Tu utilises la dernière version."
                 : installing
                   ? `Téléchargement… ${installPercent}%`
-                  : `Nouvelle version disponible : v${updateMutation.data.version}`
+                  : `Nouvelle version disponible : v${updateMutation.data.currentVersion} → v${updateMutation.data.version}`
             }
             control={
               updateMutation.data ? (
