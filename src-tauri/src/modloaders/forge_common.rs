@@ -165,15 +165,11 @@ fn downloadable_items(libraries: &[RawLibrary], libraries_dir: &Path) -> Vec<Dow
         .collect()
 }
 
-/// Keeps only the last occurrence of each `group:artifact`. The install
-/// profile and the generated `version.json` can both declare the same
-/// library at different versions (the install profile's copy is often an
-/// install-time processor dependency, unrelated to what the patched client
-/// needs at runtime) — having two versions of one library on the classpath
-/// crashes the JVM at launch, so `version.json`'s copy (extended in last,
-/// see [`install_from_installer_jar`]) wins. Only affects the runtime
-/// classpath; both versions are still downloaded so processors that need
-/// the older one can find it on disk.
+/// Keeps only the last occurrence of each `group:artifact`. Applied to
+/// `version.json`'s own library list as a defensive net in case it ever
+/// declares the same coordinate twice — the real duplicate-library fix is
+/// building the runtime classpath from `version.json` alone rather than
+/// merging in `install_profile.libraries` (see [`install_from_installer_jar`]).
 fn dedupe_libraries(libraries: Vec<RawLibrary>) -> Vec<RawLibrary> {
     let mut keyed: HashMap<String, RawLibrary> = HashMap::new();
     let mut unkeyed: Vec<RawLibrary> = Vec::new();
@@ -361,7 +357,16 @@ pub async fn install_from_installer_jar(
         std::fs::write(&marker, "ok")?;
     }
 
-    let extra_libraries = library_entries(&dedupe_libraries(all_libraries), &paths.libraries_dir());
+    // The runtime classpath comes from version.json alone, never from
+    // install_profile.libraries: several install_profile entries (e.g.
+    // AutoRenamingTool, a shaded jar that bundles its own copy of gson) are
+    // install-time-only processor dependencies with no place on the actual
+    // game's module path. Including them causes the JPMS module resolver to
+    // see the same package (e.g. com.google.gson.stream) exported by two
+    // modules and refuse to launch at all. `all_libraries` above still
+    // includes install_profile's libraries — that's needed so every
+    // processor dependency actually gets downloaded to disk.
+    let extra_libraries = library_entries(&dedupe_libraries(version_json.libraries.clone()), &paths.libraries_dir());
     let (extra_jvm_args, extra_game_args) = match &version_json.arguments {
         Some(args) => (manifest::flatten_args(&args.jvm), manifest::flatten_args(&args.game)),
         None => (Vec::new(), Vec::new()),
