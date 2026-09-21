@@ -261,3 +261,35 @@ pub fn detect_java_home() -> Option<PathBuf> {
     let exe = PathBuf::from(home).join(java_binary_name());
     exe.exists().then_some(exe)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::minecraft::manifest::JavaVersionRef;
+
+    #[test]
+    fn component_for_major_covers_every_bracket() {
+        assert_eq!(component_for_major(8), "jre-legacy");
+        assert_eq!(component_for_major(16), "java-runtime-alpha");
+        assert_eq!(component_for_major(17), "java-runtime-gamma");
+        assert_eq!(component_for_major(21), "java-runtime-delta");
+        assert_eq!(component_for_major(22), "java-runtime-epsilon");
+    }
+
+    #[test]
+    fn resolve_component_prefers_explicit_component_over_major_guess() {
+        let jv = JavaVersionRef { component: Some("java-runtime-gamma".to_string()), major_version: 21 };
+        assert_eq!(resolve_component(Some(&jv)), "java-runtime-gamma");
+    }
+
+    #[test]
+    fn resolve_component_falls_back_to_major_guess_when_no_component() {
+        let jv = JavaVersionRef { component: None, major_version: 21 };
+        assert_eq!(resolve_component(Some(&jv)), "java-runtime-delta");
+    }
+
+    #[test]
+    fn resolve_component_defaults_to_legacy_when_no_java_version_at_all() {
+        assert_eq!(resolve_component(None), "jre-legacy");
+    }
+}

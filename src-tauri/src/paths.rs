@@ -62,6 +62,11 @@ impl AppPaths {
     pub fn installers_dir(&self) -> PathBuf {
         self.cache_dir().join("installers")
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_root(root: PathBuf) -> Self {
+        Self { root }
+    }
 }
 
 pub fn ensure_dir(path: &std::path::Path) -> std::io::Result<()> {

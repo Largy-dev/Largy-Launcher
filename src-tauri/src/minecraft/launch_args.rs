@@ -75,3 +75,82 @@ pub fn build_command_args(ctx: &LaunchContext) -> Vec<String> {
 
     args
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_ctx() -> LaunchContext {
+        let mut placeholders = HashMap::new();
+        placeholders.insert("auth_player_name".to_string(), "Steve".to_string());
+        LaunchContext {
+            java_path: PathBuf::from("/usr/bin/java"),
+            game_directory: PathBuf::from("/instances/demo"),
+            natives_directory: PathBuf::from("/instances/demo/natives"),
+            classpath: vec![PathBuf::from("/libs/a.jar"), PathBuf::from("/libs/b.jar")],
+            main_class: "net.minecraft.client.main.Main".to_string(),
+            min_memory_mb: 1024,
+            max_memory_mb: 4096,
+            extra_jvm_args: vec!["-Dfoo=bar".to_string()],
+            placeholders,
+            raw_jvm_args: vec!["-Dextra=1".to_string()],
+            raw_game_args: vec!["--username".to_string(), "${auth_player_name}".to_string()],
+        }
+    }
+
+    #[test]
+    fn build_command_args_assembles_memory_natives_classpath_and_main_class_in_order() {
+        let ctx = fixture_ctx();
+        let args = build_command_args(&ctx);
+
+        assert_eq!(args[0], "-Xms1024M");
+        assert_eq!(args[1], "-Xmx4096M");
+        assert!(args.contains(&"-Dfoo=bar".to_string()));
+        assert!(args.iter().any(|a| a.starts_with("-Djava.library.path=")));
+        assert!(args.contains(&"-Dminecraft.launcher.brand=LargyLauncher".to_string()));
+        assert!(args.contains(&"-Dextra=1".to_string()));
+
+        let cp_index = args.iter().position(|a| a == "-cp").unwrap();
+        let separator = if cfg!(windows) { ";" } else { ":" };
+        assert_eq!(args[cp_index + 1], format!("/libs/a.jar{separator}/libs/b.jar"));
+
+        let main_class_index = args.iter().position(|a| a == "net.minecraft.client.main.Main").unwrap();
+        assert!(main_class_index > cp_index);
+
+        assert_eq!(args[args.len() - 2], "--username");
+        assert_eq!(args[args.len() - 1], "Steve");
+    }
+
+    #[test]
+    fn apply_loader_profile_merges_main_class_and_extra_args() {
+        let mut ctx = fixture_ctx();
+        let profile = LoaderProfile {
+            extra_libraries: Vec::new(),
+            main_class_override: Some("net.minecraftforge.Main".to_string()),
+            extra_jvm_args: vec!["-Dloader=1".to_string()],
+            extra_game_args: vec!["--forge".to_string()],
+            install_side_effects: Vec::new(),
+        };
+
+        apply_loader_profile(&mut ctx, &profile);
+
+        assert_eq!(ctx.main_class, "net.minecraftforge.Main");
+        assert!(ctx.extra_jvm_args.contains(&"-Dloader=1".to_string()));
+        assert!(ctx.raw_game_args.contains(&"--forge".to_string()));
+    }
+
+    #[test]
+    fn apply_loader_profile_keeps_vanilla_main_class_when_no_override() {
+        let mut ctx = fixture_ctx();
+        let profile = LoaderProfile {
+            extra_libraries: Vec::new(),
+            main_class_override: None,
+            extra_jvm_args: Vec::new(),
+            extra_game_args: Vec::new(),
+            install_side_effects: Vec::new(),
+        };
+
+        apply_loader_profile(&mut ctx, &profile);
+        assert_eq!(ctx.main_class, "net.minecraft.client.main.Main");
+    }
+}

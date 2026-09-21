@@ -77,3 +77,23 @@ impl Serialize for AppError {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serializes_as_kind_and_message() {
+        let err = AppError::Auth("échec de connexion".to_string());
+        let value = serde_json::to_value(&err).unwrap();
+        assert_eq!(value["kind"], "auth");
+        assert_eq!(value["message"], "authentication failed: échec de connexion");
+    }
+
+    #[test]
+    fn every_variant_reports_its_own_kind() {
+        assert_eq!(serde_json::to_value(AppError::Loader("x".into())).unwrap()["kind"], "loader");
+        assert_eq!(serde_json::to_value(AppError::Launch("x".into())).unwrap()["kind"], "launch");
+        assert_eq!(serde_json::to_value(AppError::Other("x".into())).unwrap()["kind"], "other");
+    }
+}

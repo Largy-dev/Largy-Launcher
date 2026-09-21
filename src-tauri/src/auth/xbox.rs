@@ -93,3 +93,32 @@ fn parse_token_response(body: &serde_json::Value) -> AppResult<XblToken> {
 
     Ok(XblToken { token, uhs })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_token_response_extracts_token_and_uhs() {
+        let body = json!({
+            "Token": "abc123",
+            "DisplayClaims": { "xui": [{ "uhs": "deadbeef" }] }
+        });
+        let token = parse_token_response(&body).unwrap();
+        assert_eq!(token.token, "abc123");
+        assert_eq!(token.uhs, "deadbeef");
+    }
+
+    #[test]
+    fn parse_token_response_errors_when_uhs_missing() {
+        let body = json!({ "Token": "abc123", "DisplayClaims": { "xui": [] } });
+        assert!(parse_token_response(&body).is_err());
+    }
+
+    #[test]
+    fn parse_token_response_errors_when_token_missing() {
+        let body = json!({ "DisplayClaims": { "xui": [{ "uhs": "deadbeef" }] } });
+        assert!(parse_token_response(&body).is_err());
+    }
+}

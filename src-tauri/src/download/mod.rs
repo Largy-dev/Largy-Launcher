@@ -199,3 +199,50 @@ pub async fn sha1_of_file(path: &std::path::Path) -> AppResult<String> {
     let bytes = tokio::fs::read(path).await?;
     Ok(sha1_of_bytes(&bytes))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sha1_of_bytes_matches_known_vectors() {
+        assert_eq!(sha1_of_bytes(b""), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+        assert_eq!(sha1_of_bytes(b"abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
+    }
+
+    #[tokio::test]
+    async fn ensure_file_skips_existing_file_with_matching_checksum() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("already-here.txt");
+        std::fs::write(&dest, b"hello").unwrap();
+
+        let manager = DownloadManager::new(reqwest::Client::new());
+        let item = DownloadItem {
+            url: "https://example.invalid/should-not-be-fetched".to_string(),
+            dest: dest.clone(),
+            sha1: Some(sha1_of_bytes(b"hello")),
+            size: Some(5),
+        };
+
+        let bytes_transferred = manager.ensure_file(&item).await.unwrap();
+        assert_eq!(bytes_transferred, 0);
+        assert_eq!(std::fs::read(&dest).unwrap(), b"hello");
+    }
+
+    #[tokio::test]
+    async fn ensure_file_skips_existing_file_when_no_checksum_requested() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("no-checksum.txt");
+        std::fs::write(&dest, b"anything").unwrap();
+
+        let manager = DownloadManager::new(reqwest::Client::new());
+        let item = DownloadItem {
+            url: "https://example.invalid/should-not-be-fetched".to_string(),
+            dest: dest.clone(),
+            sha1: None,
+            size: None,
+        };
+
+        assert_eq!(manager.ensure_file(&item).await.unwrap(), 0);
+    }
+}

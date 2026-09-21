@@ -63,3 +63,38 @@ impl GlobalSettings {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_returns_defaults_when_no_settings_file_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let settings = GlobalSettings::load(&paths).unwrap();
+        assert_eq!(settings.default_min_memory_mb, 1024);
+        assert!(!settings.offline_mode);
+    }
+
+    #[test]
+    fn save_then_load_round_trips_every_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+
+        let settings = GlobalSettings {
+            azure_client_id: "client-id".to_string(),
+            offline_mode: true,
+            offline_username: "Steve".to_string(),
+            default_jvm_args: vec!["-Xmx2G".to_string()],
+            ..GlobalSettings::default()
+        };
+        settings.save(&paths).unwrap();
+
+        let loaded = GlobalSettings::load(&paths).unwrap();
+        assert_eq!(loaded.azure_client_id, "client-id");
+        assert!(loaded.offline_mode);
+        assert_eq!(loaded.offline_username, "Steve");
+        assert_eq!(loaded.default_jvm_args, vec!["-Xmx2G".to_string()]);
+    }
+}

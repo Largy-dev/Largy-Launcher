@@ -137,3 +137,90 @@ pub fn touch_last_played(paths: &AppPaths, id: &str) -> AppResult<()> {
     instance.last_played_at = Some(now_unix());
     save(&instance)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_input(name: &str) -> CreateInstanceInput {
+        CreateInstanceInput {
+            name: name.to_string(),
+            minecraft_version: "1.20.1".to_string(),
+            loader: LoaderKind::Vanilla,
+            loader_version: None,
+            modpack: None,
+            icon_url: None,
+        }
+    }
+
+    #[test]
+    fn create_then_get_round_trips_and_creates_subfolders() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+
+        let created = create(&paths, test_input("Demo")).unwrap();
+        let fetched = get(&paths, &created.id).unwrap();
+
+        assert_eq!(fetched.name, "Demo");
+        assert_eq!(fetched.minecraft_version, "1.20.1");
+        for sub in ["mods", "saves", "config", "resourcepacks", "shaderpacks", "natives"] {
+            assert!(created.directory.join(sub).is_dir());
+        }
+    }
+
+    #[test]
+    fn list_sorts_newest_first_and_skips_unreadable_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+
+        let mut first = create(&paths, test_input("First")).unwrap();
+        first.created_at = 100;
+        save(&first).unwrap();
+
+        let mut second = create(&paths, test_input("Second")).unwrap();
+        second.created_at = 200;
+        save(&second).unwrap();
+
+        // An instance folder with a corrupt instance.json must not break listing.
+        let broken_dir = paths.instances_dir().join("broken");
+        std::fs::create_dir_all(&broken_dir).unwrap();
+        std::fs::write(broken_dir.join("instance.json"), "not json").unwrap();
+
+        let listed = list(&paths).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].name, "Second");
+        assert_eq!(listed[1].name, "First");
+    }
+
+    #[test]
+    fn get_missing_instance_returns_instance_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        assert!(matches!(get(&paths, "does-not-exist"), Err(AppError::Instance(_))));
+    }
+
+    #[test]
+    fn delete_removes_the_instance_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let created = create(&paths, test_input("ToDelete")).unwrap();
+
+        delete(&paths, &created.id).unwrap();
+
+        assert!(!created.directory.exists());
+        assert!(get(&paths, &created.id).is_err());
+    }
+
+    #[test]
+    fn touch_last_played_updates_and_persists_the_timestamp() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let created = create(&paths, test_input("Played")).unwrap();
+        assert!(created.last_played_at.is_none());
+
+        touch_last_played(&paths, &created.id).unwrap();
+
+        let fetched = get(&paths, &created.id).unwrap();
+        assert!(fetched.last_played_at.is_some());
+    }
+}
