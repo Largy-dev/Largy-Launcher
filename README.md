@@ -33,4 +33,18 @@ npm run tauri build
 - `src-tauri/src/download/` — moteur de téléchargement concurrent
 - `src/screens/` — écrans de l'application (Login, Instances, Modpacks, Paramètres...)
 
-Voir le plan de développement complet pour le détail des phases.
+## Authentification Microsoft
+
+La connexion utilise le flux OAuth « device code » (`consumers` tenant), sans secret client.
+Il faut :
+
+1. Enregistrer une application publique sur [Entra ID](https://entra.microsoft.com) (App
+   registrations → New registration), avec « Allow public client flows » activé.
+2. Renseigner son Client ID dans Paramètres → Comptes & API.
+3. Faire approuver cette application pour l'API Minecraft Services via le formulaire officiel
+   [aka.ms/mce-reviewappid](https://aka.ms/mce-reviewappid) — obligatoire pour toute nouvelle
+   application Azure, sans quoi l'appel à `api.minecraftservices.com` échoue avec un 403.
+
+En attendant l'approbation (ou sans compte Microsoft), le **Mode Hors-ligne** (Paramètres) permet
+de lancer le jeu avec un profil local — utilisable en solo ou sur un serveur configuré en mode
+hors-ligne, pas sur les serveurs officiels.
