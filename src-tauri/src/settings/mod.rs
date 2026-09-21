@@ -7,13 +7,20 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppResult;
 use crate::paths::AppPaths;
 
+/// Largy Launcher's own public-client Azure AD application id (device code
+/// flow, `consumers` tenant, "Allow public client flows" — no secret
+/// involved, so it's safe to ship). Baked in so anyone downloading a release
+/// build can log in with their own Microsoft account with zero setup; still
+/// overridable per-install by editing `azure_client_id` in settings.json.
+const DEFAULT_AZURE_CLIENT_ID: &str = "d3201869-49d5-4102-88b0-42495ac2ac12";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalSettings {
     pub default_min_memory_mb: u32,
     pub default_max_memory_mb: u32,
     pub default_jvm_args: Vec<String>,
     /// Public-client Azure AD application id (device code flow, `consumers`
-    /// tenant) — required for Microsoft login. See Settings screen for setup.
+    /// tenant). Defaults to Largy Launcher's own — see [`DEFAULT_AZURE_CLIENT_ID`].
     #[serde(default)]
     pub azure_client_id: String,
     /// CurseForge Core API key from console.curseforge.com — required to
@@ -38,7 +45,7 @@ impl Default for GlobalSettings {
             default_min_memory_mb: 1024,
             default_max_memory_mb: 4096,
             default_jvm_args: Vec::new(),
-            azure_client_id: String::new(),
+            azure_client_id: DEFAULT_AZURE_CLIENT_ID.to_string(),
             curseforge_api_key: String::new(),
             java_path_override: None,
             offline_mode: false,
@@ -75,6 +82,7 @@ mod tests {
         let settings = GlobalSettings::load(&paths).unwrap();
         assert_eq!(settings.default_min_memory_mb, 1024);
         assert!(!settings.offline_mode);
+        assert_eq!(settings.azure_client_id, DEFAULT_AZURE_CLIENT_ID);
     }
 
     #[test]

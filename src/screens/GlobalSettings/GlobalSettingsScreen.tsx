@@ -89,20 +89,8 @@ export function GlobalSettingsScreen() {
 
       <SettingSection title="Comptes & API">
         <SettingRow
-          label="Azure Client ID"
-          description="Requis pour la connexion Microsoft : crée une application publique (flux « device code ») sur portal.azure.com."
-          control={
-            <Input
-              className="w-64"
-              placeholder="00000000-0000-0000-0000-000000000000"
-              value={form.azure_client_id}
-              onChange={(e) => update("azure_client_id", e.target.value)}
-            />
-          }
-        />
-        <SettingRow
           label="Clé API CurseForge"
-          description="Depuis console.curseforge.com, pour parcourir et installer des modpacks CurseForge."
+          description="Gratuite, depuis console.curseforge.com — active l'onglet CurseForge dans Modpacks (voir le README)."
           control={
             <Input
               className="w-64"

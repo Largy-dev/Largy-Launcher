@@ -35,16 +35,31 @@ npm run tauri build
 
 ## Authentification Microsoft
 
-La connexion utilise le flux OAuth « device code » (`consumers` tenant), sans secret client.
-Il faut :
+La connexion utilise le flux OAuth « device code » (`consumers` tenant), sans secret client, avec
+l'application Azure de Largy Launcher **déjà intégrée** : rien à configurer, connecte-toi simplement
+avec ton compte Microsoft depuis l'écran de connexion.
 
-1. Enregistrer une application publique sur [Entra ID](https://entra.microsoft.com) (App
-   registrations → New registration), avec « Allow public client flows » activé.
-2. Renseigner son Client ID dans Paramètres → Comptes & API.
-3. Faire approuver cette application pour l'API Minecraft Services via le formulaire officiel
-   [aka.ms/mce-reviewappid](https://aka.ms/mce-reviewappid) — obligatoire pour toute nouvelle
-   application Azure, sans quoi l'appel à `api.minecraftservices.com` échoue avec un 403.
+Cette application est en cours d'approbation par Microsoft pour l'API Minecraft Services (obligatoire
+depuis peu pour toute nouvelle application Azure — voir [aka.ms/mce-reviewappid](https://aka.ms/mce-reviewappid)).
+Tant que l'approbation n'est pas passée, la connexion Microsoft échoue avec une erreur 403 : utilise le
+**Mode Hors-ligne** (Paramètres) en attendant — il permet de lancer le jeu avec un profil local, sur du
+solo ou un serveur explicitement configuré en mode hors-ligne (pas sur les serveurs officiels).
 
-En attendant l'approbation (ou sans compte Microsoft), le **Mode Hors-ligne** (Paramètres) permet
-de lancer le jeu avec un profil local — utilisable en solo ou sur un serveur configuré en mode
-hors-ligne, pas sur les serveurs officiels.
+Si tu veux utiliser ta propre application Azure à la place (par exemple pour ton propre fork), tu peux
+enregistrer la tienne sur [Entra ID](https://entra.microsoft.com) (App registrations → New registration,
+avec « Allow public client flows » activé) et éditer `azure_client_id` directement dans le fichier
+`settings.json` du launcher.
+
+## Modpacks CurseForge
+
+FTB fonctionne sans aucune configuration. Pour parcourir et installer des modpacks **CurseForge**, il
+faut une clé API personnelle, gratuite :
+
+1. Va sur [console.curseforge.com](https://console.curseforge.com/) et crée un compte / connecte-toi.
+2. Génère une clé API (section **API Keys**).
+3. Colle-la dans Largy Launcher → Paramètres → Comptes & API → Clé API CurseForge.
+
+L'onglet CurseForge apparaît automatiquement dans Modpacks dès qu'une clé valide est enregistrée —
+sans clé, seul FTB est affiché. Cette clé est personnelle : ne la partage pas, les conditions
+d'utilisation de CurseForge interdisent de la distribuer (voir leurs
+[conditions d'utilisation de l'API](https://support.curseforge.com/support/solutions/articles/9000207405)).

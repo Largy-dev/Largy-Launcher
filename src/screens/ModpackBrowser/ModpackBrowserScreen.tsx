@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { errorMessage, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
+import { errorMessage, providersApi, settingsApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
 
 import { ModpackDetailDialog } from "./ModpackDetailDialog";
 
@@ -87,23 +87,36 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
 export function ModpackBrowserScreen() {
   const [provider, setProvider] = useState<ProviderId>("ftb");
   const [selected, setSelected] = useState<ModpackSummary | null>(null);
+  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+  const curseforgeEnabled = !!settings?.curseforge_api_key.trim();
 
   return (
     <div className="flex flex-1 flex-col">
-      <PageHeader title="Modpacks" description="Parcours et installe des modpacks FTB ou CurseForge." />
+      <PageHeader
+        title="Modpacks"
+        description={
+          curseforgeEnabled
+            ? "Parcours et installe des modpacks FTB ou CurseForge."
+            : "Parcours et installe des modpacks FTB."
+        }
+      />
 
-      <Tabs value={provider} onValueChange={(v) => setProvider(v as ProviderId)} className="flex flex-1 flex-col">
-        <TabsList>
-          <TabsTrigger value="ftb">FTB</TabsTrigger>
-          <TabsTrigger value="curseforge">CurseForge</TabsTrigger>
-        </TabsList>
-        <TabsContent value="ftb" className="flex flex-1 flex-col">
-          <ModpackGrid provider="ftb" onSelect={setSelected} />
-        </TabsContent>
-        <TabsContent value="curseforge" className="flex flex-1 flex-col">
-          <ModpackGrid provider="curseforge" onSelect={setSelected} />
-        </TabsContent>
-      </Tabs>
+      {curseforgeEnabled ? (
+        <Tabs value={provider} onValueChange={(v) => setProvider(v as ProviderId)} className="flex flex-1 flex-col">
+          <TabsList>
+            <TabsTrigger value="ftb">FTB</TabsTrigger>
+            <TabsTrigger value="curseforge">CurseForge</TabsTrigger>
+          </TabsList>
+          <TabsContent value="ftb" className="flex flex-1 flex-col">
+            <ModpackGrid provider="ftb" onSelect={setSelected} />
+          </TabsContent>
+          <TabsContent value="curseforge" className="flex flex-1 flex-col">
+            <ModpackGrid provider="curseforge" onSelect={setSelected} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <ModpackGrid provider="ftb" onSelect={setSelected} />
+      )}
 
       <ModpackDetailDialog
         provider={provider}
