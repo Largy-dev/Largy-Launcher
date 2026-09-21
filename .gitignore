@@ -1,0 +1,58 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust / Tauri build output and generated capability schemas
+/src-tauri/target
+/src-tauri/gen/schemas
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI tool / agent config and runtime dirs (not part of the project itself)
+.agents/
+.augment/
+.claude/
+.claude-flow/
+.codebuddy/
+.codewhale/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.github/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.swarm/
+.trae/
+.warp/
+.windsurf/
+
+# Ruflo local secrets
+.env
+.env.local
+.env.*.local
+
+# Ruflo runtime data
+ruvector.db

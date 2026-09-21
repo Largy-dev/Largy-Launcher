@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --font-mono: ui-monospace, "Geist Mono", "SF Mono", Consolas, monospace;
+    --color-brand: var(--brand);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+}
+
+/*
+  Palette: warm neutral surfaces + a single restrained moss-green accent
+  (a quiet nod to Minecraft without going neon/cartoon). No gradients,
+  no glow — flat surfaces, real borders, deliberate contrast.
+*/
+:root {
+    --background: #faf9f7;
+    --foreground: #1c1c1a;
+    --card: #ffffff;
+    --card-foreground: #1c1c1a;
+    --popover: #ffffff;
+    --popover-foreground: #1c1c1a;
+    --primary: #1b7a3e;
+    --primary-foreground: #ffffff;
+    --secondary: #f0efec;
+    --secondary-foreground: #1c1c1a;
+    --muted: #f0efec;
+    --muted-foreground: #6b6b64;
+    --accent: #eaf3ec;
+    --accent-foreground: #145c30;
+    --destructive: #c62828;
+    --border: #e4e2dd;
+    --input: #e4e2dd;
+    --ring: #2f9e52;
+    --radius: 0.5rem;
+    --brand: #1b7a3e;
+    --sidebar: #f2f1ed;
+    --sidebar-foreground: #1c1c1a;
+    --sidebar-primary: #1b7a3e;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #e6e4de;
+    --sidebar-accent-foreground: #1c1c1a;
+    --sidebar-border: #e0ded8;
+    --sidebar-ring: #2f9e52;
+}
+
+.dark {
+    --background: #131311;
+    --foreground: #ecebe6;
+    --card: #1a1a17;
+    --card-foreground: #ecebe6;
+    --popover: #1a1a17;
+    --popover-foreground: #ecebe6;
+    --primary: #3fae67;
+    --primary-foreground: #0d1f13;
+    --secondary: #232320;
+    --secondary-foreground: #ecebe6;
+    --muted: #201f1c;
+    --muted-foreground: #a3a199;
+    --accent: #1c2a1f;
+    --accent-foreground: #7fd39c;
+    --destructive: #e5484d;
+    --border: #2b2a26;
+    --input: #2b2a26;
+    --ring: #3fae67;
+    --brand: #3fae67;
+    --sidebar: #171714;
+    --sidebar-foreground: #ecebe6;
+    --sidebar-primary: #3fae67;
+    --sidebar-primary-foreground: #0d1f13;
+    --sidebar-accent: #1e1e1a;
+    --sidebar-accent-foreground: #ecebe6;
+    --sidebar-border: #262622;
+    --sidebar-ring: #3fae67;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
