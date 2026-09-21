@@ -1,6 +1,14 @@
 # Largy Launcher
 
+![CI](https://github.com/Largy-dev/Largy-Launcher/actions/workflows/ci.yml/badge.svg)
+
 Un launcher Minecraft personnel pour Windows (auth Microsoft, modpacks FTB, gestion d'instances multi-loaders), construit avec Tauri (Rust) + React/TypeScript.
+
+## Installer
+
+Télécharge le dernier installeur (`*_x64-setup.exe`) depuis la
+[page Releases](https://github.com/Largy-dev/Largy-Launcher/releases/latest) et lance-le —
+aucune configuration requise pour se connecter avec un compte Microsoft.
 
 ## Stack
 
@@ -21,6 +29,21 @@ npm run tauri dev
 ```bash
 npm run tauri build
 ```
+
+## Release
+
+Pousser un tag `vX.Y.Z` déclenche `.github/workflows/release.yml` : build complet sur un runner
+Windows, puis publication d'une **release GitHub en brouillon** avec les installeurs (`.exe`, `.msi`)
+attachés automatiquement. Il ne reste plus qu'à relire les notes et cliquer sur *Publish* :
+
+```bash
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+```
+
+Chaque push sur `main` (et chaque pull request) déclenche aussi `.github/workflows/ci.yml`
+(`cargo test`, `cargo clippy -D warnings`, `tsc --noEmit`) pour attraper les régressions avant même
+de tagger une release.
 
 ## Structure
 

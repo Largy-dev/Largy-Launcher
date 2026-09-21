@@ -38,7 +38,8 @@ dist-ssr
 .cursor/
 .factory/
 .gemini/
-.github/
+.github/*
+!.github/workflows/
 .kilocode/
 .kiro/
 .opencode/
