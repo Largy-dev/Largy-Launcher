@@ -30,5 +30,5 @@ pub async fn loaders_list_versions(
         .loaders
         .get(loader)
         .ok_or_else(|| AppError::Loader("mod loader non supporté".to_string()))?;
-    Ok(installer.list_versions(&minecraft_version).await.map_err(AppError::from)?)
+    installer.list_versions(&minecraft_version).await.map_err(AppError::from)
 }

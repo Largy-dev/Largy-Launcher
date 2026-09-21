@@ -93,3 +93,16 @@ impl LoaderInstaller for ForgeInstaller {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn installer_url_matches_minecraftforge_maven_layout() {
+        assert_eq!(
+            ForgeInstaller::installer_url("1.20.1", "47.2.20"),
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.2.20/forge-1.20.1-47.2.20-installer.jar"
+        );
+    }
+}

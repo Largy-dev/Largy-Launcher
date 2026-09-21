@@ -89,7 +89,7 @@ struct CfMod {
 }
 
 impl CfMod {
-    fn into_summary(&self) -> ModpackSummary {
+    fn to_summary(&self) -> ModpackSummary {
         ModpackSummary {
             id: self.id.to_string(),
             provider: "curseforge".to_string(),
@@ -122,17 +122,22 @@ impl CfFile {
             .cloned()
     }
 
+    /// A file's `gameVersions` tags aren't mutually exclusive: many 1.20.1+
+    /// packs are tagged both `Forge` and `NeoForge` since NeoForge stayed
+    /// binary-compatible with Forge mods for a while, and authors tag both
+    /// for search visibility. When several loader tags are present, prefer
+    /// the more specific/newer one — a pack actually built for NeoForge is
+    /// often *also* tagged `Forge`, but the reverse (a real Forge pack tagged
+    /// `NeoForge`) essentially never happens. Real per-loader files are the
+    /// normal case and only ever carry one tag, so this ordering doesn't
+    /// affect them.
     fn loader(&self) -> Option<(LoaderKind, String)> {
-        self.game_versions.iter().find_map(|v| {
-            let kind = match v.to_lowercase().as_str() {
-                "forge" => LoaderKind::Forge,
-                "neoforge" => LoaderKind::NeoForge,
-                "fabric" => LoaderKind::Fabric,
-                "quilt" => LoaderKind::Quilt,
-                _ => return None,
-            };
-            Some((kind, String::new()))
-        })
+        const PRIORITY: [LoaderKind; 4] =
+            [LoaderKind::NeoForge, LoaderKind::Quilt, LoaderKind::Fabric, LoaderKind::Forge];
+        PRIORITY
+            .into_iter()
+            .find(|kind| self.game_versions.iter().any(|v| LoaderKind::from_name(v) == Some(*kind)))
+            .map(|kind| (kind, String::new()))
     }
 }
 
@@ -173,14 +178,7 @@ fn default_true() -> bool {
 
 fn parse_loader_id(id: &str) -> Option<(LoaderKind, String)> {
     let (name, version) = id.split_once('-')?;
-    let kind = match name.to_lowercase().as_str() {
-        "forge" => LoaderKind::Forge,
-        "neoforge" => LoaderKind::NeoForge,
-        "fabric" => LoaderKind::Fabric,
-        "quilt" => LoaderKind::Quilt,
-        _ => return None,
-    };
-    Some((kind, version.to_string()))
+    LoaderKind::from_name(name).map(|kind| (kind, version.to_string()))
 }
 
 #[async_trait]
@@ -213,7 +211,7 @@ impl ModpackProvider for CurseForgeProvider {
             .json()
             .await?;
 
-        Ok(response.data.iter().map(CfMod::into_summary).collect())
+        Ok(response.data.iter().map(CfMod::to_summary).collect())
     }
 
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {
@@ -229,7 +227,7 @@ impl ModpackProvider for CurseForgeProvider {
             .await?;
 
         Ok(ModpackDetails {
-            summary: response.data.into_summary(),
+            summary: response.data.to_summary(),
             description: response.data.summary.clone(),
         })
     }
@@ -402,4 +400,72 @@ fn extract_manifest_and_overrides(zip_path: &std::path::Path, extract_dir: &std:
     }
 
     Ok(manifest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_loader_id_splits_name_and_version() {
+        assert_eq!(
+            parse_loader_id("forge-47.2.20"),
+            Some((LoaderKind::Forge, "47.2.20".to_string()))
+        );
+        assert_eq!(
+            parse_loader_id("neoforge-20.4.190"),
+            Some((LoaderKind::NeoForge, "20.4.190".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_loader_id_rejects_unknown_loader_or_missing_dash() {
+        assert_eq!(parse_loader_id("optifine-1.0"), None);
+        assert_eq!(parse_loader_id("forge"), None);
+    }
+
+    #[test]
+    fn cf_file_minecraft_version_picks_first_numeric_game_version() {
+        let file = CfFile {
+            id: 1,
+            display_name: "Test".to_string(),
+            file_name: "test.zip".to_string(),
+            download_url: None,
+            game_versions: vec!["Forge".to_string(), "1.20.1".to_string(), "Client".to_string()],
+        };
+        assert_eq!(file.minecraft_version(), Some("1.20.1".to_string()));
+        assert_eq!(file.loader(), Some((LoaderKind::Forge, String::new())));
+    }
+
+    #[test]
+    fn cf_file_loader_prefers_neoforge_when_a_file_is_tagged_both() {
+        // Real-world case: a 1.20.1 modpack file tagged both `Forge` and
+        // `NeoForge` for search visibility is a NeoForge pack, not Forge.
+        let file = CfFile {
+            id: 1,
+            display_name: "Test".to_string(),
+            file_name: "test.zip".to_string(),
+            download_url: None,
+            game_versions: vec!["1.20.1".to_string(), "Forge".to_string(), "NeoForge".to_string()],
+        };
+        assert_eq!(file.loader(), Some((LoaderKind::NeoForge, String::new())));
+    }
+
+    #[test]
+    fn cf_manifest_deserializes_from_real_shape() {
+        let json = r#"{
+            "minecraft": {
+                "version": "1.20.1",
+                "modLoaders": [{"id": "forge-47.2.20", "primary": true}]
+            },
+            "files": [{"projectID": 123, "fileID": 456, "required": true}]
+        }"#;
+        let manifest: CfManifest = serde_json::from_str(json).unwrap();
+        assert_eq!(manifest.minecraft.version, "1.20.1");
+        assert_eq!(manifest.files.len(), 1);
+        assert_eq!(manifest.files[0].project_id, 123);
+        let (loader, version) = parse_loader_id(&manifest.minecraft.mod_loaders[0].id).unwrap();
+        assert_eq!(loader, LoaderKind::Forge);
+        assert_eq!(version, "47.2.20");
+    }
 }

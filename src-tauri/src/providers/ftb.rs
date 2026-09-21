@@ -73,7 +73,7 @@ struct FtbPackResponse {
 }
 
 impl FtbPackResponse {
-    fn into_summary(&self) -> ModpackSummary {
+    fn to_summary(&self) -> ModpackSummary {
         ModpackSummary {
             id: self.id.to_string(),
             provider: "ftb".to_string(),
@@ -118,16 +118,6 @@ struct FtbVersionDetail {
     targets: Vec<FtbTarget>,
     #[serde(default)]
     files: Vec<FtbFile>,
-}
-
-fn loader_kind_from_name(name: &str) -> Option<LoaderKind> {
-    match name.to_lowercase().as_str() {
-        "forge" => Some(LoaderKind::Forge),
-        "neoforge" => Some(LoaderKind::NeoForge),
-        "fabric" => Some(LoaderKind::Fabric),
-        "quilt" => Some(LoaderKind::Quilt),
-        _ => None,
-    }
 }
 
 #[async_trait]
@@ -179,7 +169,7 @@ impl ModpackProvider for FtbProvider {
         let mut summaries = Vec::new();
         while let Some(result) = set.join_next().await {
             if let Ok(Ok(pack)) = result {
-                summaries.push(pack.into_summary());
+                summaries.push(pack.to_summary());
             }
         }
         Ok(summaries)
@@ -188,7 +178,7 @@ impl ModpackProvider for FtbProvider {
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {
         let pack = self.fetch_pack(pack_id).await?;
         Ok(ModpackDetails {
-            summary: pack.into_summary(),
+            summary: pack.to_summary(),
             description: pack.description.clone(),
         })
     }
@@ -212,7 +202,7 @@ impl ModpackProvider for FtbProvider {
                 let (loader, loader_version) = version
                     .targets
                     .iter()
-                    .find_map(|t| loader_kind_from_name(&t.name).map(|kind| (kind, t.version.clone())))
+                    .find_map(|t| LoaderKind::from_name(&t.name).map(|kind| (kind, t.version.clone())))
                     .unwrap_or((LoaderKind::Vanilla, String::new()));
 
                 ModpackVersionSummary {
@@ -253,7 +243,7 @@ impl ModpackProvider for FtbProvider {
         let (loader, loader_version) = detail
             .targets
             .iter()
-            .find_map(|t| loader_kind_from_name(&t.name).map(|k| (k, t.version.clone())))
+            .find_map(|t| LoaderKind::from_name(&t.name).map(|k| (k, t.version.clone())))
             .unwrap_or((LoaderKind::Vanilla, String::new()));
 
         let files = detail
@@ -287,5 +277,61 @@ impl ModpackProvider for FtbProvider {
                 file.file_id
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_summary_prefers_square_or_logo_art_and_first_author() {
+        let pack = FtbPackResponse {
+            id: 42,
+            name: "Test Pack".to_string(),
+            synopsis: "A pack".to_string(),
+            description: String::new(),
+            art: vec![
+                FtbArt { url: "banner.png".to_string(), kind: "splash".to_string() },
+                FtbArt { url: "square.png".to_string(), kind: "square".to_string() },
+            ],
+            authors: vec![FtbAuthor { name: "Larry".to_string() }],
+            versions: Vec::new(),
+        };
+        let summary = pack.to_summary();
+        assert_eq!(summary.id, "42");
+        assert_eq!(summary.provider, "ftb");
+        assert_eq!(summary.author, "Larry");
+        assert_eq!(summary.icon_url, Some("square.png".to_string()));
+    }
+
+    #[test]
+    fn version_detail_resolves_minecraft_target_and_loader() {
+        let json = r#"{
+            "targets": [
+                {"name": "minecraft", "version": "1.20.1"},
+                {"name": "neoforge", "version": "20.1.80"}
+            ],
+            "files": []
+        }"#;
+        let detail: FtbVersionDetail = serde_json::from_str(json).unwrap();
+        let mc = detail.targets.iter().find(|t| t.name == "minecraft").map(|t| t.version.clone());
+        assert_eq!(mc, Some("1.20.1".to_string()));
+        let loader = detail
+            .targets
+            .iter()
+            .find_map(|t| LoaderKind::from_name(&t.name).map(|k| (k, t.version.clone())));
+        assert_eq!(loader, Some((LoaderKind::NeoForge, "20.1.80".to_string())));
+    }
+
+    #[test]
+    fn files_filter_excludes_server_only_unless_also_client_only() {
+        let files = vec![
+            FtbFile { id: 1, path: "./mods".to_string(), name: "a.jar".to_string(), url: "u1".to_string(), sha1: String::new(), size: 0, serveronly: true, clientonly: false },
+            FtbFile { id: 2, path: "./mods".to_string(), name: "b.jar".to_string(), url: "u2".to_string(), sha1: String::new(), size: 0, serveronly: true, clientonly: true },
+            FtbFile { id: 3, path: "./mods".to_string(), name: "c.jar".to_string(), url: "u3".to_string(), sha1: String::new(), size: 0, serveronly: false, clientonly: false },
+        ];
+        let kept: Vec<u64> = files.into_iter().filter(|f| !f.serveronly || f.clientonly).map(|f| f.id).collect();
+        assert_eq!(kept, vec![2, 3]);
     }
 }

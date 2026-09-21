@@ -18,6 +18,22 @@ pub enum LoaderKind {
     Quilt,
 }
 
+impl LoaderKind {
+    /// Case-insensitive match on a mod loader's name, as it appears in FTB's
+    /// `targets` array, CurseForge's `gameVersions` list, and manifest
+    /// `modLoaders[].id` prefixes. Shared by every provider instead of each
+    /// duplicating the same four-way match.
+    pub fn from_name(name: &str) -> Option<LoaderKind> {
+        match name.to_lowercase().as_str() {
+            "forge" => Some(LoaderKind::Forge),
+            "neoforge" => Some(LoaderKind::NeoForge),
+            "fabric" => Some(LoaderKind::Fabric),
+            "quilt" => Some(LoaderKind::Quilt),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModpackSummary {
     pub id: String,
@@ -145,5 +161,32 @@ impl ProviderRegistry {
 
     pub fn all(&self) -> impl Iterator<Item = &dyn ModpackProvider> {
         self.providers.iter().map(|p| p.as_ref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_name_matches_known_loaders_case_insensitively() {
+        assert_eq!(LoaderKind::from_name("forge"), Some(LoaderKind::Forge));
+        assert_eq!(LoaderKind::from_name("Forge"), Some(LoaderKind::Forge));
+        assert_eq!(LoaderKind::from_name("NEOFORGE"), Some(LoaderKind::NeoForge));
+        assert_eq!(LoaderKind::from_name("fabric"), Some(LoaderKind::Fabric));
+        assert_eq!(LoaderKind::from_name("Quilt"), Some(LoaderKind::Quilt));
+    }
+
+    #[test]
+    fn from_name_rejects_unknown_or_vanilla() {
+        assert_eq!(LoaderKind::from_name("vanilla"), None);
+        assert_eq!(LoaderKind::from_name("minecraft"), None);
+        assert_eq!(LoaderKind::from_name(""), None);
+    }
+
+    #[test]
+    fn registry_get_returns_none_for_unregistered_provider() {
+        let registry = ProviderRegistry::new();
+        assert!(registry.get("ftb").is_none());
     }
 }

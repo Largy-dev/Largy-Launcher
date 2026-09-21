@@ -94,6 +94,7 @@ fn extract_zip_entry(
 ///   to use as-is, quotes stripped; never a path.
 /// - `/relative/path/in/jar` (no quotes) — a real embedded resource;
 ///   extract into a scratch folder and substitute the resulting file path.
+///
 /// Anything else is returned unchanged (e.g. plain task-name arguments).
 fn resolve_token(
     archive: &mut zip::ZipArchive<std::fs::File>,
@@ -235,6 +236,7 @@ fn to_loader_err(e: impl std::fmt::Display) -> LoaderError {
 /// Downloads `installer_url`, runs its install profile's processor chain
 /// (skipped if `cache_key` was already installed), and returns the resulting
 /// `LoaderProfile`. Shared by Forge and NeoForge.
+#[allow(clippy::too_many_arguments)]
 pub async fn install_from_installer_jar(
     app: &AppHandle,
     client: &reqwest::Client,
@@ -360,4 +362,68 @@ pub fn unsupported_legacy_error(mc_version: &str) -> LoaderError {
          (pré-1.13), qui n'est pas encore supporté par Largy Launcher. Utilise Fabric ou Quilt \
          pour cette version."
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::minecraft::manifest::{LibraryArtifact, LibraryDownloads};
+
+    #[test]
+    fn substitute_placeholders_replaces_all_occurrences() {
+        let mut placeholders = HashMap::new();
+        placeholders.insert("SIDE".to_string(), "client".to_string());
+        placeholders.insert("MINECRAFT_VERSION".to_string(), "1.20.1".to_string());
+        let result = substitute_placeholders("--side {SIDE} --version {MINECRAFT_VERSION} {SIDE}", &placeholders);
+        assert_eq!(result, "--side client --version 1.20.1 client");
+    }
+
+    #[test]
+    fn substitute_placeholders_leaves_unknown_tokens_untouched() {
+        let placeholders = HashMap::new();
+        let result = substitute_placeholders("{UNKNOWN}", &placeholders);
+        assert_eq!(result, "{UNKNOWN}");
+    }
+
+    fn lib_with_artifact(name: &str, url: &str) -> RawLibrary {
+        RawLibrary {
+            name: name.to_string(),
+            downloads: Some(LibraryDownloads {
+                artifact: Some(LibraryArtifact {
+                    path: None,
+                    url: url.to_string(),
+                    sha1: Some("abc123".to_string()),
+                    size: Some(42),
+                }),
+                classifiers: None,
+            }),
+            rules: None,
+            natives: None,
+            url: None,
+            sha1: None,
+            size: None,
+        }
+    }
+
+    #[test]
+    fn downloadable_items_skips_entries_without_url() {
+        let libs = vec![
+            lib_with_artifact("net.minecraftforge:forge:1.0", "https://example.com/forge.jar"),
+            lib_with_artifact("net.minecraftforge:patched:1.0", ""),
+        ];
+        let items = downloadable_items(&libs, Path::new("/libs"));
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].url, "https://example.com/forge.jar");
+        assert!(items[0].dest.ends_with("net/minecraftforge/forge/1.0/forge-1.0.jar"));
+    }
+
+    #[test]
+    fn library_entries_covers_every_library_regardless_of_url() {
+        let libs = vec![
+            lib_with_artifact("net.minecraftforge:forge:1.0", "https://example.com/forge.jar"),
+            lib_with_artifact("net.minecraftforge:patched:1.0", ""),
+        ];
+        let entries = library_entries(&libs, Path::new("/libs"));
+        assert_eq!(entries.len(), 2);
+    }
 }

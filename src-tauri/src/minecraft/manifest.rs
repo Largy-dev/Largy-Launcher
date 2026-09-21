@@ -248,3 +248,67 @@ pub async fn fetch_version_json(client: &reqwest::Client, url: &str) -> AppResul
     let json: RawVersionJson = client.get(url).send().await?.json().await?;
     Ok(json)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rules_allow_defaults_to_allowed_with_no_rules() {
+        assert!(rules_allow(&None));
+    }
+
+    #[test]
+    fn rules_allow_respects_current_os_match() {
+        let matching = vec![Rule {
+            action: "allow".to_string(),
+            os: Some(OsRule { name: Some(current_os_name().to_string()), arch: None }),
+            features: None,
+        }];
+        assert!(rules_allow(&Some(matching)));
+
+        let mismatching = vec![Rule {
+            action: "allow".to_string(),
+            os: Some(OsRule { name: Some("not-a-real-os".to_string()), arch: None }),
+            features: None,
+        }];
+        assert!(!rules_allow(&Some(mismatching)));
+    }
+
+    #[test]
+    fn rules_allow_last_matching_rule_wins() {
+        let rules = vec![
+            Rule { action: "allow".to_string(), os: None, features: None },
+            Rule { action: "disallow".to_string(), os: None, features: None },
+        ];
+        assert!(!rules_allow(&Some(rules)));
+    }
+
+    #[test]
+    fn rules_allow_rejects_rules_requiring_an_opted_out_feature() {
+        let mut features = HashMap::new();
+        features.insert("is_demo_user".to_string(), true);
+        let rules = vec![Rule { action: "allow".to_string(), os: None, features: Some(features) }];
+        assert!(!rules_allow(&Some(rules)));
+    }
+
+    #[test]
+    fn flatten_args_expands_plain_and_conditional_entries() {
+        let entries = vec![
+            ArgEntry::Plain("--foo".to_string()),
+            ArgEntry::Conditional {
+                rules: vec![Rule { action: "allow".to_string(), os: None, features: None }],
+                value: ArgValue::Multi(vec!["--bar".to_string(), "--baz".to_string()]),
+            },
+            ArgEntry::Conditional {
+                rules: vec![Rule {
+                    action: "allow".to_string(),
+                    os: Some(OsRule { name: Some("not-a-real-os".to_string()), arch: None }),
+                    features: None,
+                }],
+                value: ArgValue::Single("--excluded".to_string()),
+            },
+        ];
+        assert_eq!(flatten_args(&entries), vec!["--foo", "--bar", "--baz"]);
+    }
+}

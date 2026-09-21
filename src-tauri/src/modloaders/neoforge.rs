@@ -105,3 +105,45 @@ impl LoaderInstaller for NeoForgeInstaller {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_prefix_drops_leading_1_and_keeps_minor_patch() {
+        assert_eq!(NeoForgeInstaller::version_prefix("1.20.4"), Some("20.4.".to_string()));
+        assert_eq!(NeoForgeInstaller::version_prefix("1.21"), Some("21.0.".to_string()));
+    }
+
+    #[test]
+    fn version_prefix_rejects_versions_not_starting_with_1_dot() {
+        assert_eq!(NeoForgeInstaller::version_prefix("2.0"), None);
+        assert_eq!(NeoForgeInstaller::version_prefix(""), None);
+    }
+
+    #[test]
+    fn extract_versions_parses_maven_metadata_xml() {
+        let xml = "<metadata><versioning><versions>\
+                     <version>20.4.190</version>\
+                     <version>20.4.191</version>\
+                   </versions></versioning></metadata>";
+        assert_eq!(
+            NeoForgeInstaller::extract_versions(xml),
+            vec!["20.4.190".to_string(), "20.4.191".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_versions_returns_empty_for_no_matches() {
+        assert!(NeoForgeInstaller::extract_versions("<metadata></metadata>").is_empty());
+    }
+
+    #[test]
+    fn installer_url_matches_neoforged_maven_layout() {
+        assert_eq!(
+            NeoForgeInstaller::installer_url("20.4.190"),
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/20.4.190/neoforge-20.4.190-installer.jar"
+        );
+    }
+}
