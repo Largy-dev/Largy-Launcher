@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, NavLink, Route, Routes } from "react-router";
-import { Blocks, ChevronDown, CircleUserRound, LayoutGrid, LogOut, Settings } from "lucide-react";
-import { Toaster } from "sonner";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Blocks, ChevronDown, LayoutGrid, LogIn, LogOut, Settings } from "lucide-react";
+import { toast, Toaster } from "sonner";
 
 import { cn } from "@/lib/utils";
-import { useAppVersion } from "@/hooks/useAppVersion";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +20,7 @@ import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScr
 import { InstanceSettingsScreen } from "@/screens/InstanceSettings/InstanceSettingsScreen";
 import { LaunchProgressScreen } from "@/screens/LaunchProgress/LaunchProgressScreen";
 import { LoginDialog } from "@/screens/Login/LoginScreen";
-import { auth, onDownloadProgress, onInstanceExit, onInstanceLog } from "@/services/tauri";
+import { auth, checkForUpdate, onDownloadProgress, onInstanceExit, onInstanceLog } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
 const queryClient = new QueryClient();
@@ -43,13 +44,10 @@ function AccountArea() {
   if (!account) {
     return (
       <>
-        <button
-          onClick={() => setLoginOpen(true)}
-          className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-sidebar-accent/60"
-        >
-          <CircleUserRound className="size-5 text-sidebar-foreground/50" aria-hidden="true" />
-          <p className="truncate text-xs text-sidebar-foreground/70">Se connecter</p>
-        </button>
+        <Button onClick={() => setLoginOpen(true)} className="w-full justify-start gap-2">
+          <LogIn className="size-4" aria-hidden="true" />
+          Se connecter
+        </Button>
         <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
       </>
     );
@@ -81,7 +79,6 @@ function AccountArea() {
 }
 
 function AppShell() {
-  const version = useAppVersion();
   const setAccount = useAppStore((s) => s.setAccount);
   const setDownloadProgress = useAppStore((s) => s.setDownloadProgress);
   const appendLog = useAppStore((s) => s.appendLog);
@@ -90,6 +87,20 @@ function AppShell() {
   useEffect(() => {
     auth.trySilentLogin().then(setAccount).catch(() => setAccount(null));
   }, [setAccount]);
+
+  useEffect(() => {
+    checkForUpdate()
+      .then((result) => {
+        if (!result.update_available) return;
+        toast.info(`Nouvelle version disponible : v${result.latest_version}`, {
+          duration: 15000,
+          action: { label: "Télécharger", onClick: () => openUrl(result.release_url) },
+        });
+      })
+      .catch(() => {
+        // Pas de connexion, GitHub indisponible, etc. — on ne bloque jamais le démarrage pour ça.
+      });
+  }, []);
 
   useEffect(() => {
     const unlisten = [
@@ -131,16 +142,11 @@ function AppShell() {
               {label}
             </NavLink>
           ))}
+          <ThemeSwitcher />
         </nav>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border px-3 py-3">
+        <div className="mt-auto border-t border-sidebar-border px-3 py-3">
           <AccountArea />
-          <div className="flex items-center justify-between">
-            {version && (
-              <p className="px-1 font-mono text-[0.65rem] text-sidebar-foreground/40">v{version}</p>
-            )}
-            <ThemeSwitcher />
-          </div>
         </div>
       </aside>
 

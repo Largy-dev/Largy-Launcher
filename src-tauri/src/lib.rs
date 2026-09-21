@@ -8,9 +8,11 @@ pub mod launch;
 pub mod minecraft;
 pub mod modloaders;
 pub mod paths;
+pub mod process_ext;
 pub mod providers;
 pub mod settings;
 pub mod state;
+pub mod update;
 
 use tauri::Manager;
 
@@ -35,6 +37,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
+            commands::check_for_update,
             commands::loaders_list_versions,
             commands::auth::auth_begin_login,
             commands::auth::auth_complete_login,

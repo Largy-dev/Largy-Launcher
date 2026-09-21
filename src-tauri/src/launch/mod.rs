@@ -42,13 +42,14 @@ pub fn spawn(instance_id: &str, ctx: &LaunchContext) -> AppResult<Child> {
     let args = build_command_args(ctx);
     tracing::info!("launching instance {instance_id}: {} {:?}", ctx.java_path.display(), args);
 
-    Command::new(&ctx.java_path)
-        .args(&args)
+    let mut cmd = Command::new(&ctx.java_path);
+    cmd.args(&args)
         .current_dir(&ctx.game_directory)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| AppError::Launch(format!("échec du lancement de java: {e}")))
+        .stderr(Stdio::piped());
+    crate::process_ext::hide_console_window(&mut cmd);
+
+    cmd.spawn().map_err(|e| AppError::Launch(format!("échec du lancement de java: {e}")))
 }
 
 pub fn stream_output(app: &AppHandle, instance_id: &str, child: &mut Child) {

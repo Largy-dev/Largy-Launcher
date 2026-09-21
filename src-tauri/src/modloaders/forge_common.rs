@@ -226,13 +226,10 @@ async fn run_processor(jar: &str, classpath: &[String], args: &[String], librari
     full_classpath.extend(classpath.iter().cloned());
     let separator = if cfg!(windows) { ";" } else { ":" };
 
-    let output = tokio::process::Command::new(java_path)
-        .arg("-cp")
-        .arg(full_classpath.join(separator))
-        .arg(&main_class)
-        .args(args)
-        .output()
-        .await?;
+    let mut cmd = tokio::process::Command::new(java_path);
+    cmd.arg("-cp").arg(full_classpath.join(separator)).arg(&main_class).args(args);
+    crate::process_ext::hide_console_window(&mut cmd);
+    let output = cmd.output().await?;
 
     if !output.status.success() {
         return Err(LoaderError::Other(format!(

@@ -1,6 +1,6 @@
 [package]
 name = "largy-launcher"
-version = "0.1.0"
+version = "0.1.2"
 description = "Largy Launcher — a custom Minecraft launcher"
 authors = ["larar"]
 edition = "2021"

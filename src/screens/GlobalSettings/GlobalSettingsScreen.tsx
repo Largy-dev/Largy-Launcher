@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppVersion } from "@/hooks/useAppVersion";
-import { errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
+import { checkForUpdate, errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
 
 interface SettingRowProps {
   label: string;
@@ -55,6 +56,11 @@ export function GlobalSettingsScreen() {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Paramètres enregistrés");
     },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: checkForUpdate,
     onError: (e) => toast.error(errorMessage(e)),
   });
 
@@ -182,9 +188,40 @@ export function GlobalSettingsScreen() {
           label="Version"
           description="Largy Launcher"
           control={
-            <span className="font-mono text-sm text-muted-foreground">{version ? `v${version}` : "—"}</span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-sm text-muted-foreground">{version ? `v${version}` : "—"}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => updateMutation.mutate()}
+                disabled={updateMutation.isPending}
+                className="gap-1.5"
+              >
+                {updateMutation.isPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+                Vérifier les mises à jour
+              </Button>
+            </div>
           }
         />
+        {updateMutation.data && (
+          <SettingRow
+            label="Statut"
+            description={
+              updateMutation.data.update_available
+                ? `Nouvelle version disponible : v${updateMutation.data.latest_version}`
+                : "Tu utilises la dernière version."
+            }
+            control={
+              updateMutation.data.update_available ? (
+                <Button size="sm" onClick={() => openUrl(updateMutation.data!.release_url)}>
+                  Télécharger
+                </Button>
+              ) : (
+                <CheckCircle2 className="size-5 text-primary" aria-hidden="true" />
+              )
+            }
+          />
+        )}
       </SettingSection>
     </div>
   );

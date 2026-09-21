@@ -36,5 +36,5 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Largy Launcher ${{ github.ref_name }}"
           releaseBody: "Installe `Largy Launcher_*_x64-setup.exe` et lance-le — aucune configuration requise."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false

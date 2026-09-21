@@ -14,10 +14,16 @@ use tauri::State;
 use crate::error::{AppError, AppResult};
 use crate::providers::LoaderKind;
 use crate::state::AppState;
+use crate::update::{self, UpdateCheck};
 
 #[tauri::command]
 pub fn app_version() -> AppResult<String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
+}
+
+#[tauri::command]
+pub async fn check_for_update(state: State<'_, AppState>) -> AppResult<UpdateCheck> {
+    update::fetch_latest(&state.client).await
 }
 
 #[tauri::command]
