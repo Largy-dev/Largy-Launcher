@@ -20,6 +20,14 @@ pub fn app_version() -> AppResult<String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
 }
 
+/// Total physical RAM in MB, used to bound the memory-allocation sliders.
+#[tauri::command]
+pub fn system_memory_mb() -> u64 {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    sys.total_memory() / 1024 / 1024
+}
+
 #[tauri::command]
 pub async fn loaders_list_versions(
     state: State<'_, AppState>,

@@ -1,14 +1,24 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useBlocker } from "react-router";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { MemorySlider } from "@/components/MemorySlider";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppVersion } from "@/hooks/useAppVersion";
-import { errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
+import { errorMessage, getSystemMemoryMb, settingsApi, type GlobalSettings } from "@/services/tauri";
 import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
 
 interface SettingRowProps {
@@ -44,11 +54,17 @@ export function GlobalSettingsScreen() {
   const version = useAppVersion();
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+  const { data: systemMemoryMb } = useQuery({ queryKey: ["system-memory"], queryFn: getSystemMemoryMb });
   const [form, setForm] = useState<GlobalSettings | null>(null);
 
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
+
+  const isDirty = !!form && !!settings && JSON.stringify(form) !== JSON.stringify(settings);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) => isDirty && currentLocation.pathname !== nextLocation.pathname,
+  );
 
   const saveMutation = useMutation({
     mutationFn: (next: GlobalSettings) => settingsApi.update(next),
@@ -58,6 +74,16 @@ export function GlobalSettingsScreen() {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+
+  async function saveAndLeave() {
+    if (!form) return;
+    try {
+      await saveMutation.mutateAsync(form);
+      blocker.proceed?.();
+    } catch {
+      // saveMutation.onError already toasted — stay on the page.
+    }
+  }
 
   const updateMutation = useMutation({
     mutationFn: checkForAppUpdate,
@@ -161,13 +187,14 @@ export function GlobalSettingsScreen() {
         />
         <SettingRow
           label="Mémoire max. par défaut"
-          description="Utilisée si une instance n'a pas de réglage propre (Mo)."
+          description={`Utilisée si une instance n'a pas de réglage propre. RAM détectée : ${
+            systemMemoryMb ? `${(systemMemoryMb / 1024).toFixed(0)} Go` : "—"
+          }.`}
           control={
-            <Input
-              type="number"
-              className="w-28"
-              value={form.default_max_memory_mb}
-              onChange={(e) => update("default_max_memory_mb", Number(e.target.value))}
+            <MemorySlider
+              valueMb={form.default_max_memory_mb}
+              onChangeMb={(v) => update("default_max_memory_mb", v)}
+              maxMb={systemMemoryMb ?? 16384}
             />
           }
         />
@@ -240,6 +267,29 @@ export function GlobalSettingsScreen() {
           />
         )}
       </SettingSection>
+
+      <Dialog open={blocker.state === "blocked"} onOpenChange={(open) => !open && blocker.reset?.()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifications non enregistrées</DialogTitle>
+            <DialogDescription>
+              Tu as des changements non enregistrés dans les Paramètres. Les enregistrer avant de continuer ?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => blocker.reset?.()}>
+              Annuler
+            </Button>
+            <Button variant="outline" onClick={() => blocker.proceed?.()}>
+              Ignorer les changements
+            </Button>
+            <Button onClick={saveAndLeave} disabled={saveMutation.isPending} className="gap-1.5">
+              {saveMutation.isPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+              Enregistrer et continuer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

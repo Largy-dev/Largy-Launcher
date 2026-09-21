@@ -150,6 +150,10 @@ export function getAppVersion(): Promise<string> {
   return invoke<string>("app_version");
 }
 
+export function getSystemMemoryMb(): Promise<number> {
+  return invoke<number>("system_memory_mb");
+}
+
 export function loadersListVersions(loader: LoaderKind, minecraftVersion: string): Promise<string[]> {
   return invoke<string[]>("loaders_list_versions", { loader, minecraftVersion });
 }

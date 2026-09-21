@@ -7,9 +7,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MemorySlider } from "@/components/MemorySlider";
 import { PageHeader } from "@/components/PageHeader";
 import { Textarea } from "@/components/ui/textarea";
-import { errorMessage, instancesApi, settingsApi } from "@/services/tauri";
+import { errorMessage, getSystemMemoryMb, instancesApi, settingsApi } from "@/services/tauri";
 
 export function InstanceSettingsScreen() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,7 @@ export function InstanceSettingsScreen() {
     enabled: instanceId !== "",
   });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+  const { data: systemMemoryMb } = useQuery({ queryKey: ["system-memory"], queryFn: getSystemMemoryMb });
 
   const [minMb, setMinMb] = useState("");
   const [maxMb, setMaxMb] = useState("");
@@ -85,13 +87,11 @@ export function InstanceSettingsScreen() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="max-mb">RAM max. (Mo)</Label>
-            <Input
-              id="max-mb"
-              type="number"
-              placeholder={String(settings?.default_max_memory_mb ?? 4096)}
-              value={maxMb}
-              onChange={(e) => setMaxMb(e.target.value)}
+            <Label>RAM max.</Label>
+            <MemorySlider
+              valueMb={Number(maxMb) || settings?.default_max_memory_mb || 4096}
+              onChangeMb={(v) => setMaxMb(String(v))}
+              maxMb={systemMemoryMb ?? 16384}
             />
           </div>
         </div>

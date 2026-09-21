@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { errorMessage, instancesApi, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
-import { useAppStore } from "@/store/appStore";
 
 interface ModpackDetailDialogProps {
   provider: ProviderId;
@@ -31,10 +30,17 @@ interface ModpackDetailDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface InstallVars {
+  packId: string;
+  versionId: string;
+  packName: string;
+  packIconUrl: string | null;
+  instanceName: string;
+}
+
 export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDetailDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const progress = useAppStore((s) => s.downloadProgress);
   const [versionId, setVersionId] = useState("");
   const [instanceName, setInstanceName] = useState("");
 
@@ -44,21 +50,15 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
     enabled: pack !== null,
   });
 
+  // Variables are captured explicitly (not read from `pack`/`versionId` at
+  // success time) since the dialog closes and navigates away immediately on
+  // submit — by the time this resolves, `pack` may already be null.
   const installMutation = useMutation({
-    mutationFn: () =>
-      instancesApi.installModpack(
-        provider,
-        pack!.id,
-        versionId,
-        pack!.name,
-        pack!.icon_url,
-        instanceName.trim() || pack!.name,
-      ),
-    onSuccess: () => {
+    mutationFn: (vars: InstallVars) =>
+      instancesApi.installModpack(provider, vars.packId, vars.versionId, vars.packName, vars.packIconUrl, vars.instanceName),
+    onSuccess: (_instance, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      toast.success(`${pack?.name} installé`);
-      close();
-      navigate("/");
+      toast.success(`${vars.packName} installé`);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -69,10 +69,18 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
     setInstanceName("");
   }
 
-  const percent =
-    installMutation.isPending && progress && progress.bytes_total > 0
-      ? Math.min(100, Math.round((progress.bytes_done / progress.bytes_total) * 100))
-      : null;
+  function submitInstall() {
+    if (!pack) return;
+    installMutation.mutate({
+      packId: pack.id,
+      versionId,
+      packName: pack.name,
+      packIconUrl: pack.icon_url,
+      instanceName: instanceName.trim() || pack.name,
+    });
+    close();
+    navigate("/");
+  }
 
   return (
     <Dialog open={pack !== null} onOpenChange={(next) => (next ? undefined : close())}>
@@ -116,24 +124,13 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
             )}
           </div>
 
-          {installMutation.isPending && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              Installation{percent !== null ? ` — ${percent}%` : "…"}
-            </p>
-          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={close} disabled={installMutation.isPending}>
+          <Button variant="outline" onClick={close}>
             Annuler
           </Button>
-          <Button
-            onClick={() => installMutation.mutate()}
-            disabled={!versionId || installMutation.isPending}
-            className="gap-1.5"
-          >
-            {installMutation.isPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+          <Button onClick={submitInstall} disabled={!versionId} className="gap-1.5">
             Installer
           </Button>
         </DialogFooter>

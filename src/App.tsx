@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter, NavLink, Route, Routes } from "react-router";
+import { createHashRouter, NavLink, Outlet, RouterProvider } from "react-router";
 import { Blocks, ChevronDown, LayoutGrid, LogIn, LogOut, Settings } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { RecentInstances } from "@/components/RecentInstances";
 import { InstanceListScreen } from "@/screens/InstanceList/InstanceListScreen";
 import { ModpackBrowserScreen } from "@/screens/ModpackBrowser/ModpackBrowserScreen";
 import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScreen";
@@ -153,30 +154,40 @@ function AppShell() {
           <ThemeSwitcher />
         </nav>
 
-        <div className="mt-auto border-t border-sidebar-border px-3 py-3">
+        <div className="flex-1 overflow-y-auto">
+          <RecentInstances />
+        </div>
+
+        <div className="border-t border-sidebar-border px-3 py-3">
           <AccountArea />
         </div>
       </aside>
 
       <main className="flex flex-1 flex-col overflow-y-auto p-6">
-        <Routes>
-          <Route path="/" element={<InstanceListScreen />} />
-          <Route path="/modpacks" element={<ModpackBrowserScreen />} />
-          <Route path="/settings" element={<GlobalSettingsScreen />} />
-          <Route path="/instances/:id" element={<InstanceSettingsScreen />} />
-          <Route path="/instances/:id/launch" element={<LaunchProgressScreen />} />
-        </Routes>
+        <Outlet />
       </main>
     </div>
   );
 }
 
+const router = createHashRouter([
+  {
+    path: "/",
+    element: <AppShell />,
+    children: [
+      { index: true, element: <InstanceListScreen /> },
+      { path: "modpacks", element: <ModpackBrowserScreen /> },
+      { path: "settings", element: <GlobalSettingsScreen /> },
+      { path: "instances/:id", element: <InstanceSettingsScreen /> },
+      { path: "instances/:id/launch", element: <LaunchProgressScreen /> },
+    ],
+  },
+]);
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <AppShell />
-      </HashRouter>
+      <RouterProvider router={router} />
       <Toaster richColors position="bottom-right" />
     </QueryClientProvider>
   );

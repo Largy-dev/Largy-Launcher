@@ -6,7 +6,9 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { MinecraftGrassIcon } from "@/components/MinecraftGrassIcon";
+import { cn } from "@/lib/utils";
 import { errorMessage, instancesApi, launchApi, settingsApi, type Instance } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
@@ -17,8 +19,18 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   const running = useAppStore((s) => s.runtime[instance.id]?.running ?? false);
   const setRunning = useAppStore((s) => s.setRunning);
   const clearLogs = useAppStore((s) => s.clearLogs);
+  const downloadProgress = useAppStore((s) => s.downloadProgress);
   const [busy, setBusy] = useState(false);
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+
+  const installing =
+    downloadProgress?.task_id === instance.id &&
+    downloadProgress.files_total > 0 &&
+    downloadProgress.files_done < downloadProgress.files_total;
+  const installPercent =
+    installing && downloadProgress && downloadProgress.bytes_total > 0
+      ? Math.round((downloadProgress.bytes_done / downloadProgress.bytes_total) * 100)
+      : 0;
 
   const deleteMutation = useMutation({
     mutationFn: () => instancesApi.delete(instance.id),
@@ -56,14 +68,19 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   const openDetail = () => navigate(running ? `/instances/${instance.id}/launch` : `/instances/${instance.id}`);
 
   return (
-    <Card>
+    <Card className={cn(installing && "opacity-60")}>
       <CardHeader
-        role="button"
-        tabIndex={0}
-        title={running ? "Voir les logs" : "Paramètres de l'instance"}
-        onClick={openDetail}
-        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openDetail())}
-        className="flex-row items-center gap-3 space-y-0 cursor-pointer rounded-t-xl transition-colors hover:bg-muted/50"
+        role={installing ? undefined : "button"}
+        tabIndex={installing ? undefined : 0}
+        title={installing ? undefined : running ? "Voir les logs" : "Paramètres de l'instance"}
+        onClick={installing ? undefined : openDetail}
+        onKeyDown={
+          installing ? undefined : (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openDetail())
+        }
+        className={cn(
+          "flex-row items-center gap-3 space-y-0 rounded-t-xl transition-colors",
+          !installing && "cursor-pointer hover:bg-muted/50",
+        )}
       >
         {instance.icon_url ? (
           <img src={instance.icon_url} alt="" className="size-10 rounded-md object-cover" />
@@ -76,11 +93,18 @@ export function InstanceCard({ instance }: { instance: Instance }) {
         )}
         <div className="min-w-0 flex-1">
           <CardTitle className="truncate">{instance.name}</CardTitle>
-          <CardDescription className="truncate">
-            {instance.minecraft_version}
-            {instance.loader !== "vanilla" &&
-              ` · ${instance.loader}${instance.loader_version ? ` ${instance.loader_version}` : ""}`}
-          </CardDescription>
+          {installing ? (
+            <div className="space-y-1 pt-0.5">
+              <p className="text-xs text-muted-foreground">Installation… {installPercent}%</p>
+              <Progress value={installPercent} className="h-1" />
+            </div>
+          ) : (
+            <CardDescription className="truncate">
+              {instance.minecraft_version}
+              {instance.loader !== "vanilla" &&
+                ` · ${instance.loader}${instance.loader_version ? ` ${instance.loader_version}` : ""}`}
+            </CardDescription>
+          )}
         </div>
       </CardHeader>
       <CardFooter className="justify-between gap-2">
@@ -89,6 +113,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
             variant="ghost"
             size="icon-sm"
             title="Paramètres de l'instance"
+            disabled={installing}
             onClick={() => navigate(`/instances/${instance.id}`)}
           >
             <Settings2 className="size-4" aria-hidden="true" />
@@ -97,6 +122,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
             variant="ghost"
             size="icon-sm"
             title="Ouvrir le dossier"
+            disabled={installing}
             onClick={() => instancesApi.openFolder(instance.id)}
           >
             <FolderOpen className="size-4" aria-hidden="true" />
@@ -105,7 +131,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
             variant="ghost"
             size="icon-sm"
             title="Supprimer"
-            disabled={running}
+            disabled={running || installing}
             onClick={() => deleteMutation.mutate()}
           >
             <Trash2 className="size-4" aria-hidden="true" />
@@ -118,7 +144,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
             Arrêter
           </Button>
         ) : (
-          <Button size="sm" onClick={play} disabled={busy} className="gap-1.5">
+          <Button size="sm" onClick={play} disabled={busy || installing} className="gap-1.5">
             {busy ? (
               <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
             ) : (

@@ -39,6 +39,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
+            commands::system_memory_mb,
             commands::loaders_list_versions,
             commands::auth::auth_begin_login,
             commands::auth::auth_complete_login,

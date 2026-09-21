@@ -136,9 +136,13 @@ pub async fn instances_install_modpack(
         }
     }
 
+    // task_id is the instance id itself, so the frontend can match a
+    // download-progress event back to the specific instance card that's
+    // currently installing (several installs could otherwise share the
+    // same generic task name and be indistinguishable in the UI).
     state
         .downloader
-        .run_batch(&app, "modpack-files", "Fichiers du modpack", items, 8)
+        .run_batch(&app, &instance.id, "Fichiers du modpack", items, 8)
         .await?;
 
     if let Some(overrides_dir) = &resolved.overrides_dir {

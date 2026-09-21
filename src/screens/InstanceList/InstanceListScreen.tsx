@@ -6,15 +6,23 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { instancesApi } from "@/services/tauri";
+import { useAppStore } from "@/store/appStore";
 
 import { CreateInstanceDialog } from "./CreateInstanceDialog";
 import { InstanceCard } from "./InstanceCard";
 
 export function InstanceListScreen() {
   const [createOpen, setCreateOpen] = useState(false);
+  const downloadProgress = useAppStore((s) => s.downloadProgress);
+  const downloadActive = !!downloadProgress && downloadProgress.files_done < downloadProgress.files_total;
   const { data: instances, isLoading } = useQuery({
     queryKey: ["instances"],
     queryFn: instancesApi.list,
+    // A modpack install writes its instance.json before its files finish
+    // downloading — poll while a download is active so the new (grey,
+    // in-progress) card shows up within a second instead of only once the
+    // whole install finishes.
+    refetchInterval: downloadActive ? 1000 : false,
   });
 
   return (
