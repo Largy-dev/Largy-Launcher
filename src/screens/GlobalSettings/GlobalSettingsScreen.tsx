@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
@@ -112,6 +113,29 @@ export function GlobalSettingsScreen() {
             />
           }
         />
+      </SettingSection>
+
+      <SettingSection title="Mode Hors-ligne">
+        <SettingRow
+          label="Jouer sans compte Microsoft"
+          description="Utilise un profil local à la place — fonctionne en solo ou sur un serveur configuré en mode hors-ligne uniquement, pas sur les serveurs officiels."
+          control={<Switch checked={form.offline_mode} onCheckedChange={(v) => update("offline_mode", v)} />}
+        />
+        {form.offline_mode && (
+          <SettingRow
+            label="Pseudo hors-ligne"
+            description="16 caractères maximum. Toujours le même UUID pour ce pseudo, comme sur un vrai serveur hors-ligne."
+            control={
+              <Input
+                className="w-64"
+                placeholder="Steve"
+                maxLength={16}
+                value={form.offline_username}
+                onChange={(e) => update("offline_username", e.target.value)}
+              />
+            }
+          />
+        )}
       </SettingSection>
 
       <SettingSection title="Java & performance">

@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { Blocks, FolderOpen, Loader2, Play, Settings2, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { errorMessage, instancesApi, launchApi, type Instance } from "@/services/tauri";
+import { MinecraftGrassIcon } from "@/components/MinecraftGrassIcon";
+import { errorMessage, instancesApi, launchApi, settingsApi, type Instance } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
 export function InstanceCard({ instance }: { instance: Instance }) {
@@ -17,6 +18,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   const setRunning = useAppStore((s) => s.setRunning);
   const clearLogs = useAppStore((s) => s.clearLogs);
   const [busy, setBusy] = useState(false);
+  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
 
   const deleteMutation = useMutation({
     mutationFn: () => instancesApi.delete(instance.id),
@@ -25,8 +27,8 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   });
 
   async function play() {
-    if (!account) {
-      toast.error("Connecte-toi avec ton compte Microsoft avant de jouer.");
+    if (!account && !settings?.offline_mode) {
+      toast.error("Connecte-toi avec ton compte Microsoft avant de jouer, ou active le Mode Hors-ligne dans Paramètres.");
       return;
     }
     setBusy(true);
@@ -56,6 +58,8 @@ export function InstanceCard({ instance }: { instance: Instance }) {
       <CardHeader className="flex-row items-center gap-3 space-y-0">
         {instance.icon_url ? (
           <img src={instance.icon_url} alt="" className="size-10 rounded-md object-cover" />
+        ) : instance.loader === "vanilla" ? (
+          <MinecraftGrassIcon className="size-10 shrink-0 rounded-md" />
         ) : (
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
             <Blocks className="size-5 text-muted-foreground" aria-hidden="true" />

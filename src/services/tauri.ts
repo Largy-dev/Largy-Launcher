@@ -59,6 +59,8 @@ export interface GlobalSettings {
   azure_client_id: string;
   curseforge_api_key: string;
   java_path_override: string | null;
+  offline_mode: boolean;
+  offline_username: string;
 }
 
 export interface MinecraftProfile {
@@ -195,6 +197,7 @@ export const instancesApi = {
     packId: string,
     versionId: string,
     packName: string,
+    packIconUrl: string | null,
     instanceName: string,
   ) =>
     invoke<Instance>("instances_install_modpack", {
@@ -202,6 +205,7 @@ export const instancesApi = {
       packId,
       versionId,
       packName,
+      packIconUrl,
       instanceName,
     }),
 };

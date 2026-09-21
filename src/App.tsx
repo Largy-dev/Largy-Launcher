@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { InstanceListScreen } from "@/screens/InstanceList/InstanceListScreen";
 import { ModpackBrowserScreen } from "@/screens/ModpackBrowser/ModpackBrowserScreen";
 import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScreen";
@@ -134,9 +135,12 @@ function AppShell() {
 
         <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border px-3 py-3">
           <AccountArea />
-          {version && (
-            <p className="px-1 font-mono text-[0.65rem] text-sidebar-foreground/40">v{version}</p>
-          )}
+          <div className="flex items-center justify-between">
+            {version && (
+              <p className="px-1 font-mono text-[0.65rem] text-sidebar-foreground/40">v{version}</p>
+            )}
+            <ThemeSwitcher />
+          </div>
         </div>
       </aside>
 

@@ -51,6 +51,7 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
         pack!.id,
         versionId,
         pack!.name,
+        pack!.icon_url,
         instanceName.trim() || pack!.name,
       ),
     onSuccess: () => {

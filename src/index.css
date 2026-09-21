@@ -108,6 +108,150 @@
     --sidebar-ring: #3fae67;
 }
 
+/*
+  Accent themes: swap just the brand-tinted tokens (primary, ring, brand,
+  sidebar-primary, accent) via [data-accent] on <html>, set by
+  src/lib/theme.ts. Neutral surface tokens (background, card, border, muted,
+  destructive, plain sidebar colors) stay the same across every accent.
+*/
+:root[data-accent="green"] {
+    --primary: #1b7a3e;
+    --primary-foreground: #ffffff;
+    --ring: #2f9e52;
+    --brand: #1b7a3e;
+    --accent: #eaf3ec;
+    --accent-foreground: #145c30;
+    --sidebar-primary: #1b7a3e;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-ring: #2f9e52;
+}
+.dark[data-accent="green"] {
+    --primary: #3fae67;
+    --primary-foreground: #0d1f13;
+    --ring: #3fae67;
+    --brand: #3fae67;
+    --accent: #1c2a1f;
+    --accent-foreground: #7fd39c;
+    --sidebar-primary: #3fae67;
+    --sidebar-primary-foreground: #0d1f13;
+    --sidebar-ring: #3fae67;
+}
+
+:root[data-accent="black"] {
+    --primary: #27272a;
+    --primary-foreground: #ffffff;
+    --ring: #3f3f46;
+    --brand: #27272a;
+    --accent: #f0f0f1;
+    --accent-foreground: #27272a;
+    --sidebar-primary: #27272a;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-ring: #3f3f46;
+}
+.dark[data-accent="black"] {
+    --primary: #a1a1aa;
+    --primary-foreground: #18181b;
+    --ring: #a1a1aa;
+    --brand: #a1a1aa;
+    --accent: #27272a;
+    --accent-foreground: #d4d4d8;
+    --sidebar-primary: #a1a1aa;
+    --sidebar-primary-foreground: #18181b;
+    --sidebar-ring: #a1a1aa;
+}
+
+:root[data-accent="white"] {
+    --primary: #e4e4e7;
+    --primary-foreground: #18181b;
+    --ring: #a1a1aa;
+    --brand: #e4e4e7;
+    --accent: #f4f4f5;
+    --accent-foreground: #3f3f46;
+    --sidebar-primary: #e4e4e7;
+    --sidebar-primary-foreground: #18181b;
+    --sidebar-ring: #a1a1aa;
+}
+.dark[data-accent="white"] {
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --ring: #fafafa;
+    --brand: #fafafa;
+    --accent: #3f3f46;
+    --accent-foreground: #fafafa;
+    --sidebar-primary: #fafafa;
+    --sidebar-primary-foreground: #18181b;
+    --sidebar-ring: #fafafa;
+}
+
+:root[data-accent="violet"] {
+    --primary: #7c3aed;
+    --primary-foreground: #ffffff;
+    --ring: #8b5cf6;
+    --brand: #7c3aed;
+    --accent: #f1e9fe;
+    --accent-foreground: #5b21b6;
+    --sidebar-primary: #7c3aed;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-ring: #8b5cf6;
+}
+.dark[data-accent="violet"] {
+    --primary: #a78bfa;
+    --primary-foreground: #1e1033;
+    --ring: #a78bfa;
+    --brand: #a78bfa;
+    --accent: #2c1f47;
+    --accent-foreground: #c4b5fd;
+    --sidebar-primary: #a78bfa;
+    --sidebar-primary-foreground: #1e1033;
+    --sidebar-ring: #a78bfa;
+}
+
+:root[data-accent="red"] {
+    --primary: #dc2626;
+    --primary-foreground: #ffffff;
+    --ring: #ef4444;
+    --brand: #dc2626;
+    --accent: #fde8e8;
+    --accent-foreground: #991b1b;
+    --sidebar-primary: #dc2626;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-ring: #ef4444;
+}
+.dark[data-accent="red"] {
+    --primary: #f87171;
+    --primary-foreground: #2a0e0e;
+    --ring: #f87171;
+    --brand: #f87171;
+    --accent: #3f1d1d;
+    --accent-foreground: #fca5a5;
+    --sidebar-primary: #f87171;
+    --sidebar-primary-foreground: #2a0e0e;
+    --sidebar-ring: #f87171;
+}
+
+:root[data-accent="blue"] {
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --ring: #3b82f6;
+    --brand: #2563eb;
+    --accent: #e6eefd;
+    --accent-foreground: #1e40af;
+    --sidebar-primary: #2563eb;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-ring: #3b82f6;
+}
+.dark[data-accent="blue"] {
+    --primary: #60a5fa;
+    --primary-foreground: #0d1b33;
+    --ring: #60a5fa;
+    --brand: #60a5fa;
+    --accent: #1e293f;
+    --accent-foreground: #93c5fd;
+    --sidebar-primary: #60a5fa;
+    --sidebar-primary-foreground: #0d1b33;
+    --sidebar-ring: #60a5fa;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
