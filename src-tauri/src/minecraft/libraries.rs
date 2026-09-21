@@ -2,6 +2,7 @@
 //! resolving Maven coordinates by hand for the entries (mostly Forge/NeoForge
 //! -generated) that omit an explicit `downloads` block.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::download::DownloadItem;
@@ -13,6 +14,23 @@ pub struct ResolvedLibraries {
     /// Native classifier jars (LWJGL, etc.) for the current OS; each must be
     /// unzipped into an instance's `natives/` directory before launch.
     pub native_jars: Vec<PathBuf>,
+    /// `group:artifact` -> resolved path, for every classpath entry with a
+    /// parseable coordinate. Lets a mod loader's own library set know which
+    /// vanilla-provided path to drop when it needs a different version of
+    /// the same library (see [`crate::launch::orchestrator`]) — mixing two
+    /// versions of one library (e.g. `asm-commons`) on the classpath/module
+    /// path crashes the JVM at launch.
+    pub library_index: HashMap<String, PathBuf>,
+}
+
+/// `group:artifact` identity from a full maven coordinate, ignoring
+/// version/classifier — two entries with the same key are the *same*
+/// library at (potentially) different versions.
+pub fn group_artifact(coord: &str) -> Option<String> {
+    let mut parts = coord.split(':');
+    let group = parts.next()?;
+    let artifact = parts.next()?;
+    Some(format!("{group}:{artifact}"))
 }
 
 /// `group:artifact:version[:classifier][@ext]` -> the Maven repository-relative path.
@@ -37,6 +55,7 @@ pub fn maven_path(coord: &str) -> Option<String> {
 pub fn resolve_libraries(libraries: &[RawLibrary], libraries_dir: &Path) -> ResolvedLibraries {
     let mut classpath_items = Vec::new();
     let mut native_jars = Vec::new();
+    let mut library_index = HashMap::new();
 
     for lib in libraries {
         if !rules_allow(&lib.rules) {
@@ -51,6 +70,9 @@ pub fn resolve_libraries(libraries: &[RawLibrary], libraries_dir: &Path) -> Reso
                     .or_else(|| maven_path(&lib.name))
                     .unwrap_or_else(|| lib.name.replace(':', "/"));
                 let dest = libraries_dir.join(&rel_path);
+                if let Some(key) = group_artifact(&lib.name) {
+                    library_index.insert(key, dest.clone());
+                }
                 classpath_items.push(DownloadItem {
                     url: artifact.url.clone(),
                     dest,
@@ -65,6 +87,9 @@ pub fn resolve_libraries(libraries: &[RawLibrary], libraries_dir: &Path) -> Reso
                 .unwrap_or_else(|| "https://libraries.minecraft.net/".to_string());
             let base = if base.ends_with('/') { base } else { format!("{base}/") };
             let dest = libraries_dir.join(&rel_path);
+            if let Some(key) = group_artifact(&lib.name) {
+                library_index.insert(key, dest.clone());
+            }
             classpath_items.push(DownloadItem {
                 url: format!("{base}{rel_path}"),
                 dest,
@@ -105,6 +130,7 @@ pub fn resolve_libraries(libraries: &[RawLibrary], libraries_dir: &Path) -> Reso
     ResolvedLibraries {
         classpath_items,
         native_jars,
+        library_index,
     }
 }
 
@@ -137,4 +163,59 @@ pub fn extract_natives(native_jars: &[PathBuf], target_dir: &Path) -> std::io::R
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::minecraft::manifest::{LibraryArtifact, LibraryDownloads};
+
+    #[test]
+    fn group_artifact_drops_version_and_classifier() {
+        assert_eq!(group_artifact("org.ow2.asm:asm-commons:9.10.1"), Some("org.ow2.asm:asm-commons".to_string()));
+        assert_eq!(
+            group_artifact("org.lwjgl:lwjgl:3.3.3:natives-windows"),
+            Some("org.lwjgl:lwjgl".to_string())
+        );
+    }
+
+    #[test]
+    fn group_artifact_rejects_malformed_coordinates() {
+        assert_eq!(group_artifact("just-a-name"), None);
+    }
+
+    fn lib_with_version(version: &str) -> RawLibrary {
+        RawLibrary {
+            name: format!("org.ow2.asm:asm-commons:{version}"),
+            downloads: Some(LibraryDownloads {
+                artifact: Some(LibraryArtifact {
+                    path: None,
+                    url: format!("https://example.com/asm-commons-{version}.jar"),
+                    sha1: None,
+                    size: None,
+                }),
+                classifiers: None,
+            }),
+            rules: None,
+            natives: None,
+            url: None,
+            sha1: None,
+            size: None,
+        }
+    }
+
+    #[test]
+    fn resolve_libraries_indexes_every_classpath_entry_by_group_artifact() {
+        let libs = vec![lib_with_version("9.3"), lib_with_version("9.10.1")];
+        let resolved = resolve_libraries(&libs, Path::new("/libs"));
+
+        // Both versions still get downloaded/placed on the classpath here —
+        // it's the orchestrator's job to drop the stale one when a mod
+        // loader supplies a different version of the same library.
+        assert_eq!(resolved.classpath_items.len(), 2);
+        // The index reflects the *last* occurrence for a given key, matching
+        // insertion order (later entries overwrite earlier ones).
+        let path = resolved.library_index.get("org.ow2.asm:asm-commons").unwrap();
+        assert!(path.to_string_lossy().contains("9.10.1"));
+    }
 }

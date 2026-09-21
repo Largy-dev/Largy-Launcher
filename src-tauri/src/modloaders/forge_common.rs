@@ -18,7 +18,7 @@ use tauri::AppHandle;
 
 use crate::download::{DownloadItem, DownloadManager};
 use crate::java::JavaManager;
-use crate::minecraft::libraries::maven_path;
+use crate::minecraft::libraries::{group_artifact, maven_path};
 use crate::minecraft::manifest::{self, RawLibrary, RawVersionJson};
 use crate::paths::AppPaths;
 
@@ -163,6 +163,29 @@ fn downloadable_items(libraries: &[RawLibrary], libraries_dir: &Path) -> Vec<Dow
             })
         })
         .collect()
+}
+
+/// Keeps only the last occurrence of each `group:artifact`. The install
+/// profile and the generated `version.json` can both declare the same
+/// library at different versions (the install profile's copy is often an
+/// install-time processor dependency, unrelated to what the patched client
+/// needs at runtime) — having two versions of one library on the classpath
+/// crashes the JVM at launch, so `version.json`'s copy (extended in last,
+/// see [`install_from_installer_jar`]) wins. Only affects the runtime
+/// classpath; both versions are still downloaded so processors that need
+/// the older one can find it on disk.
+fn dedupe_libraries(libraries: Vec<RawLibrary>) -> Vec<RawLibrary> {
+    let mut keyed: HashMap<String, RawLibrary> = HashMap::new();
+    let mut unkeyed: Vec<RawLibrary> = Vec::new();
+    for lib in libraries {
+        match group_artifact(&lib.name) {
+            Some(key) => {
+                keyed.insert(key, lib);
+            }
+            None => unkeyed.push(lib),
+        }
+    }
+    unkeyed.into_iter().chain(keyed.into_values()).collect()
 }
 
 /// Every library becomes a classpath entry regardless of how it got onto
@@ -341,7 +364,7 @@ pub async fn install_from_installer_jar(
         std::fs::write(&marker, "ok")?;
     }
 
-    let extra_libraries = library_entries(&all_libraries, &paths.libraries_dir());
+    let extra_libraries = library_entries(&dedupe_libraries(all_libraries), &paths.libraries_dir());
     let (extra_jvm_args, extra_game_args) = match &version_json.arguments {
         Some(args) => (manifest::flatten_args(&args.jvm), manifest::flatten_args(&args.game)),
         None => (Vec::new(), Vec::new()),
@@ -425,5 +448,23 @@ mod tests {
         ];
         let entries = library_entries(&libs, Path::new("/libs"));
         assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn dedupe_libraries_keeps_the_later_version_json_entry() {
+        // install_profile.libraries (install-time) ++ version_json.libraries
+        // (runtime) both declaring org.ow2.asm:asm-commons at different
+        // versions — the later (version.json) one must win.
+        let libs = vec![
+            lib_with_artifact("org.ow2.asm:asm-commons:9.3", "https://example.com/asm-9.3.jar"),
+            lib_with_artifact("net.minecraftforge:forge:1.0", "https://example.com/forge.jar"),
+            lib_with_artifact("org.ow2.asm:asm-commons:9.10.1", "https://example.com/asm-9.10.1.jar"),
+        ];
+
+        let deduped = dedupe_libraries(libs);
+
+        assert_eq!(deduped.len(), 2);
+        let asm = deduped.iter().find(|l| l.name.starts_with("org.ow2.asm:asm-commons")).unwrap();
+        assert_eq!(asm.name, "org.ow2.asm:asm-commons:9.10.1");
     }
 }

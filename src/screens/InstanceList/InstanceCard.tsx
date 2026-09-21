@@ -53,9 +53,18 @@ export function InstanceCard({ instance }: { instance: Instance }) {
     }
   }
 
+  const openDetail = () => navigate(running ? `/instances/${instance.id}/launch` : `/instances/${instance.id}`);
+
   return (
     <Card>
-      <CardHeader className="flex-row items-center gap-3 space-y-0">
+      <CardHeader
+        role="button"
+        tabIndex={0}
+        title={running ? "Voir les logs" : "Paramètres de l'instance"}
+        onClick={openDetail}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openDetail())}
+        className="flex-row items-center gap-3 space-y-0 cursor-pointer rounded-t-xl transition-colors hover:bg-muted/50"
+      >
         {instance.icon_url ? (
           <img src={instance.icon_url} alt="" className="size-10 rounded-md object-cover" />
         ) : instance.loader === "vanilla" ? (

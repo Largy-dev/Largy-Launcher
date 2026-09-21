@@ -53,6 +53,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     let mut raw_game_args = prepared.game_args.clone();
     let native_jars = prepared.native_jars.clone();
     let java_component = prepared.java_component.clone();
+    let mut library_index = prepared.library_index.clone();
 
     if instance.loader != LoaderKind::Vanilla {
         let loader_version = instance
@@ -69,7 +70,17 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
             .await
             .map_err(AppError::from)?;
 
+        // A mod loader frequently needs a different version of a library
+        // vanilla also ships (e.g. NeoForge's asm-commons vs. Minecraft's
+        // own older one) — having both on the classpath/module path at once
+        // crashes the JVM at launch, so the loader's version replaces
+        // vanilla's rather than sitting alongside it.
         for lib in &profile.extra_libraries {
+            if let Some(key) = mc_libraries::group_artifact(&lib.name) {
+                if let Some(old_path) = library_index.insert(key, lib.path.clone()) {
+                    classpath.retain(|p| p != &old_path);
+                }
+            }
             classpath.push(lib.path.clone());
         }
         if let Some(mc) = profile.main_class_override {

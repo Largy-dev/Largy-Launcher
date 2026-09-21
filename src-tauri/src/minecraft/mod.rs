@@ -27,6 +27,9 @@ pub struct PreparedVersion {
     pub native_jars: Vec<PathBuf>,
     pub java_component: String,
     pub asset_index_id: String,
+    /// `group:artifact` -> path for every vanilla classpath entry — see
+    /// [`libraries::group_artifact`].
+    pub library_index: std::collections::HashMap<String, PathBuf>,
 }
 
 fn strip_builtin_jvm_args(args: Vec<String>) -> Vec<String> {
@@ -115,5 +118,6 @@ pub async fn prepare_version(
         native_jars: resolved_libs.native_jars,
         java_component: crate::java::resolve_component(raw.java_version.as_ref()),
         asset_index_id: raw.assets.unwrap_or_else(|| "legacy".to_string()),
+        library_index: resolved_libs.library_index,
     })
 }
