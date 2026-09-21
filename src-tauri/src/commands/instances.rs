@@ -32,6 +32,7 @@ pub fn instances_create(
             loader,
             loader_version,
             modpack: None,
+            icon_url: None,
         },
     )
 }
@@ -81,6 +82,7 @@ pub fn instances_open_folder(state: State<'_, AppState>, id: String) -> AppResul
 /// Resolves a provider's modpack version, creates a fresh instance for it,
 /// downloads every mod file, and copies any bundled config/scripts overrides.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn instances_install_modpack(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -88,6 +90,7 @@ pub async fn instances_install_modpack(
     pack_id: String,
     version_id: String,
     pack_name: String,
+    pack_icon_url: Option<String>,
     instance_name: String,
 ) -> AppResult<Instance> {
     let provider_ref = state
@@ -110,6 +113,7 @@ pub async fn instances_install_modpack(
                 version_id: version_id.clone(),
                 pack_name,
             }),
+            icon_url: pack_icon_url,
         },
     )?;
 

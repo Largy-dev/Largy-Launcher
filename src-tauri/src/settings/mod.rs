@@ -22,6 +22,14 @@ pub struct GlobalSettings {
     pub curseforge_api_key: String,
     #[serde(default)]
     pub java_path_override: Option<String>,
+    /// Bypasses the Microsoft login requirement at launch, using a local
+    /// name-only profile instead (see `auth::offline_session`). Only usable
+    /// on singleplayer or servers explicitly running in offline mode — real
+    /// online-mode servers reject it.
+    #[serde(default)]
+    pub offline_mode: bool,
+    #[serde(default)]
+    pub offline_username: String,
 }
 
 impl Default for GlobalSettings {
@@ -33,6 +41,8 @@ impl Default for GlobalSettings {
             azure_client_id: String::new(),
             curseforge_api_key: String::new(),
             java_path_override: None,
+            offline_mode: false,
+            offline_username: String::new(),
         }
     }
 }

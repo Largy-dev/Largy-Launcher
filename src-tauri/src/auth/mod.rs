@@ -145,3 +145,77 @@ fn load_active_account(paths: &AppPaths) -> AppResult<Option<ActiveAccountMeta>>
     let bytes = std::fs::read(path)?;
     Ok(Some(serde_json::from_slice(&bytes)?))
 }
+
+/// The same deterministic UUID a vanilla server derives for an offline-mode
+/// player: MD5 of `OfflinePlayer:<username>` (UTF-8), with the version (3)
+/// and variant (RFC 4122) bits forced — Java's `UUID.nameUUIDFromBytes`.
+/// Deterministic per username so saves/whitelists stay consistent across
+/// launches, matching what any offline-mode server would compute itself.
+fn offline_uuid(username: &str) -> String {
+    use md5::{Digest, Md5};
+    let mut hasher = Md5::new();
+    hasher.update(format!("OfflinePlayer:{username}").as_bytes());
+    let mut bytes: [u8; 16] = hasher.finalize().into();
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes).simple().to_string()
+}
+
+/// Builds a local, network-free session for [`GlobalSettings::offline_mode`].
+/// Only valid on singleplayer or servers explicitly running in offline mode.
+pub fn offline_session(username: &str) -> AppResult<AccountSession> {
+    let name = username.trim();
+    if name.is_empty() {
+        return Err(AppError::Auth(
+            "Renseigne un pseudo hors-ligne dans Paramètres avant de lancer le jeu.".to_string(),
+        ));
+    }
+    if name.len() > 16 {
+        return Err(AppError::Auth(
+            "Le pseudo hors-ligne doit faire 16 caractères maximum.".to_string(),
+        ));
+    }
+
+    Ok(AccountSession {
+        profile: MinecraftProfile { id: offline_uuid(name), name: name.to_string() },
+        minecraft_access_token: "-".to_string(),
+        expires_at: i64::MAX,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn offline_uuid_is_deterministic_and_matches_java_algorithm() {
+        // Cross-checked against a standalone Python implementation of the
+        // same bit-twiddling over MD5(b"OfflinePlayer:Player") — the exact
+        // value every offline-mode Minecraft server derives for "Player".
+        assert_eq!(offline_uuid("Player"), "a01e3843e5213998958af459800e4d11");
+    }
+
+    #[test]
+    fn offline_uuid_differs_per_username_but_is_stable() {
+        let a1 = offline_uuid("Alice");
+        let a2 = offline_uuid("Alice");
+        let b = offline_uuid("Bob");
+        assert_eq!(a1, a2);
+        assert_ne!(a1, b);
+    }
+
+    #[test]
+    fn offline_session_rejects_blank_or_too_long_username() {
+        assert!(offline_session("").is_err());
+        assert!(offline_session("   ").is_err());
+        assert!(offline_session("ThisNameIsWayTooLong").is_err());
+    }
+
+    #[test]
+    fn offline_session_trims_and_builds_legacy_session() {
+        let session = offline_session("  Steve  ").unwrap();
+        assert_eq!(session.profile.name, "Steve");
+        assert_eq!(session.profile.id.len(), 32);
+        assert_eq!(session.minecraft_access_token, "-");
+    }
+}

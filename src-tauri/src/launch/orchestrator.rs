@@ -25,13 +25,18 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     }
 
     let instance = instances::get(&state.paths, instance_id)?;
-    let account = state
-        .active_account
-        .read()
-        .unwrap()
-        .clone()
-        .ok_or_else(|| AppError::Auth("Connecte-toi avec un compte Microsoft avant de lancer le jeu.".to_string()))?;
     let settings = state.settings.read().unwrap().clone();
+    let account = if settings.offline_mode {
+        crate::auth::offline_session(&settings.offline_username)?
+    } else {
+        state.active_account.read().unwrap().clone().ok_or_else(|| {
+            AppError::Auth(
+                "Connecte-toi avec un compte Microsoft avant de lancer le jeu, ou active le Mode \
+                 Hors-ligne dans Paramètres."
+                    .to_string(),
+            )
+        })?
+    };
 
     let prepared = minecraft::prepare_version(
         app,
@@ -87,7 +92,10 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     placeholders.insert("auth_uuid".to_string(), account.profile.id.clone());
     placeholders.insert("auth_access_token".to_string(), account.minecraft_access_token.clone());
     placeholders.insert("auth_xuid".to_string(), account.profile.id.clone());
-    placeholders.insert("user_type".to_string(), "msa".to_string());
+    placeholders.insert(
+        "user_type".to_string(),
+        (if settings.offline_mode { "legacy" } else { "msa" }).to_string(),
+    );
     placeholders.insert("version_name".to_string(), instance.minecraft_version.clone());
     placeholders.insert("game_directory".to_string(), instance.directory.display().to_string());
     placeholders.insert("assets_root".to_string(), state.paths.assets_dir().display().to_string());

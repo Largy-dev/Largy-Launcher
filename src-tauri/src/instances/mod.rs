@@ -68,7 +68,7 @@ pub fn list(paths: &AppPaths) -> AppResult<Vec<Instance>> {
             Err(e) => tracing::warn!("skipping unreadable instance {:?}: {e}", entry.path()),
         }
     }
-    instances.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    instances.sort_by_key(|i| std::cmp::Reverse(i.created_at));
     Ok(instances)
 }
 
@@ -94,6 +94,7 @@ pub struct CreateInstanceInput {
     pub loader: LoaderKind,
     pub loader_version: Option<String>,
     pub modpack: Option<ModpackRef>,
+    pub icon_url: Option<String>,
 }
 
 pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instance> {
@@ -110,7 +111,7 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         loader: input.loader,
         loader_version: input.loader_version,
         directory,
-        icon_url: None,
+        icon_url: input.icon_url,
         min_memory_mb: None,
         max_memory_mb: None,
         extra_jvm_args: Vec::new(),
