@@ -36,14 +36,14 @@ payant), clique sur **Informations complémentaires → Exécuter quand même**.
 - **Lancement** : logs (stdout/stderr) et progression de téléchargement diffusés en direct dans
   l'interface.
 - **Thème** : couleur d'accent personnalisable (vert/noir/blanc/violet/rouge/bleu).
-- **CI/CD** : tests + lint automatiques sur chaque push ; un tag `vX.Y.Z` déclenche un build et une
-  release GitHub automatiques (voir [Développement](#développement)).
+- **Mise à jour automatique** : vérification au démarrage (et à la demande dans Paramètres) ; la
+  nouvelle version se télécharge, s'installe et relance le launcher en un clic, via l'updater
+  officiel Tauri (artefacts signés, voir [Développement](#développement)).
+- **CI/CD** : tests + lint automatiques sur chaque push ; un tag `vX.Y.Z` déclenche un build, une
+  release GitHub et la publication de la mise à jour automatique (voir [Développement](#développement)).
 
 ## À faire / connu
 
-- **Mise à jour automatique du client** : pas encore implémentée — il faut retélécharger et
-  réinstaller manuellement une nouvelle version pour l'instant. (La release, elle, est déjà
-  automatisée côté CI — il manque le mécanisme d'auto-update *dans* l'application.)
 - **Mise à jour d'un modpack déjà installé** : installer une nouvelle version d'un modpack crée
   aujourd'hui une nouvelle instance à côté, plutôt que de mettre à jour l'instance existante en place.
 - **Approbation Microsoft en attente** : l'application Azure du launcher doit être validée par
@@ -53,7 +53,7 @@ payant), clique sur **Informations complémentaires → Exécuter quand même**.
   interdisent de distribuer une clé partagée), pas un bug.
 - **Windows uniquement** : pas testé/empaqueté pour macOS ou Linux à ce stade.
 - **Couverture de tests** : bonne sur la logique pure (parsing de manifestes, résolution de
-  versions, providers, auth hors-ligne — 52 tests), mais la chaîne réseau complète de
+  versions, providers, auth hors-ligne — 56 tests), mais la chaîne réseau complète de
   l'authentification Microsoft n'est pas testée automatiquement (nécessiterait de mocker
   plusieurs API externes).
 
@@ -127,17 +127,28 @@ npx tsc --noEmit
 ### Release automatisée
 
 Pousser un tag `vX.Y.Z` déclenche `.github/workflows/release.yml` : build complet sur un runner
-Windows, puis publication d'une **release GitHub en brouillon** avec les installeurs (`.exe`, `.msi`)
-attachés automatiquement. Il ne reste plus qu'à relire les notes et cliquer sur *Publish* :
+Windows, puis publication directe d'une **release GitHub** avec les installeurs (`.exe`, `.msi`)
+attachés, plus `latest.json` (manifeste + signature) pour l'auto-update :
 
 ```bash
 git tag -a v0.2.0 -m "v0.2.0"
 git push origin v0.2.0
 ```
 
+N'oublie pas de bumper la version dans `package.json`, `src-tauri/Cargo.toml` et
+`src-tauri/tauri.conf.json` avant de tagger — c'est cette version qui est comparée par l'updater.
+
 Chaque push sur `main` (et chaque pull request) déclenche aussi `.github/workflows/ci.yml`
 (`cargo test`, `cargo clippy -D warnings`, `tsc --noEmit`) pour attraper les régressions avant même
 de tagger une release.
+
+### Auto-update — détails
+
+Basé sur `tauri-plugin-updater` : chaque release signe ses artefacts avec une clé privée (secret
+GitHub Actions `TAURI_SIGNING_PRIVATE_KEY`, jamais dans le dépôt) et publie un `latest.json` que le
+launcher interroge via l'URL stable `github.com/.../releases/latest/download/latest.json`. La clé
+publique correspondante vit dans `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`) — normal
+qu'elle soit visible, une clé publique n'a rien à cacher.
 
 ## Structure
 

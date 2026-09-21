@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppVersion } from "@/hooks/useAppVersion";
-import { checkForUpdate, errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
+import { errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
+import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
 
 interface SettingRowProps {
   label: string;
@@ -60,9 +60,23 @@ export function GlobalSettingsScreen() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: checkForUpdate,
+    mutationFn: checkForAppUpdate,
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const [installing, setInstalling] = useState(false);
+  const [installPercent, setInstallPercent] = useState(0);
+
+  async function installUpdate() {
+    const update = updateMutation.data;
+    if (!update) return;
+    setInstalling(true);
+    try {
+      await installAppUpdate(update, setInstallPercent);
+    } catch (e) {
+      toast.error(errorMessage(e));
+      setInstalling(false);
+    }
+  }
 
   if (isLoading || !form) {
     return (
@@ -203,18 +217,21 @@ export function GlobalSettingsScreen() {
             </div>
           }
         />
-        {updateMutation.data && (
+        {updateMutation.isSuccess && (
           <SettingRow
             label="Statut"
             description={
-              updateMutation.data.update_available
-                ? `Nouvelle version disponible : v${updateMutation.data.latest_version}`
-                : "Tu utilises la dernière version."
+              !updateMutation.data
+                ? "Tu utilises la dernière version."
+                : installing
+                  ? `Téléchargement… ${installPercent}%`
+                  : `Nouvelle version disponible : v${updateMutation.data.version}`
             }
             control={
-              updateMutation.data.update_available ? (
-                <Button size="sm" onClick={() => openUrl(updateMutation.data!.release_url)}>
-                  Télécharger
+              updateMutation.data ? (
+                <Button size="sm" onClick={installUpdate} disabled={installing} className="gap-1.5">
+                  {installing && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+                  Mettre à jour
                 </Button>
               ) : (
                 <CheckCircle2 className="size-5 text-primary" aria-hidden="true" />

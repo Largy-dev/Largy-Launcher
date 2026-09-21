@@ -32,9 +32,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Largy Launcher ${{ github.ref_name }}"
           releaseBody: "Installe `Largy Launcher_*_x64-setup.exe` et lance-le — aucune configuration requise."
           releaseDraft: false
           prerelease: false
+          updaterJsonPreferNsis: true

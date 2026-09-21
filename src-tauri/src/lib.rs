@@ -12,7 +12,6 @@ pub mod process_ext;
 pub mod providers;
 pub mod settings;
 pub mod state;
-pub mod update;
 
 use tauri::Manager;
 
@@ -30,14 +29,16 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let state = AppState::new(app.handle())?;
             app.manage(state);
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
-            commands::check_for_update,
             commands::loaders_list_versions,
             commands::auth::auth_begin_login,
             commands::auth::auth_complete_login,

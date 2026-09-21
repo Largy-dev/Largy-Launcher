@@ -106,13 +106,6 @@ export interface ModpackVersionSummary {
 
 export type ProviderId = "ftb" | "curseforge";
 
-export interface UpdateCheck {
-  current_version: string;
-  latest_version: string;
-  update_available: boolean;
-  release_url: string;
-}
-
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
@@ -155,10 +148,6 @@ export function onInstanceExit(handler: (exit: InstanceExit) => void): Promise<U
 
 export function getAppVersion(): Promise<string> {
   return invoke<string>("app_version");
-}
-
-export function checkForUpdate(): Promise<UpdateCheck> {
-  return invoke<UpdateCheck>("check_for_update");
 }
 
 export function loadersListVersions(loader: LoaderKind, minecraftVersion: string): Promise<string[]> {

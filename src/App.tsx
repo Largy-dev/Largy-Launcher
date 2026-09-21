@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, NavLink, Route, Routes } from "react-router";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { Blocks, ChevronDown, LayoutGrid, LogIn, LogOut, Settings } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -20,7 +19,8 @@ import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScr
 import { InstanceSettingsScreen } from "@/screens/InstanceSettings/InstanceSettingsScreen";
 import { LaunchProgressScreen } from "@/screens/LaunchProgress/LaunchProgressScreen";
 import { LoginDialog } from "@/screens/Login/LoginScreen";
-import { auth, checkForUpdate, onDownloadProgress, onInstanceExit, onInstanceLog } from "@/services/tauri";
+import { auth, errorMessage, onDownloadProgress, onInstanceExit, onInstanceLog } from "@/services/tauri";
+import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
 import { useAppStore } from "@/store/appStore";
 
 const queryClient = new QueryClient();
@@ -89,12 +89,20 @@ function AppShell() {
   }, [setAccount]);
 
   useEffect(() => {
-    checkForUpdate()
-      .then((result) => {
-        if (!result.update_available) return;
-        toast.info(`Nouvelle version disponible : v${result.latest_version}`, {
-          duration: 15000,
-          action: { label: "Télécharger", onClick: () => openUrl(result.release_url) },
+    checkForAppUpdate()
+      .then((update) => {
+        if (!update) return;
+        toast.info(`Nouvelle version disponible : v${update.version}`, {
+          duration: Infinity,
+          action: {
+            label: "Mettre à jour",
+            onClick: () => {
+              const id = toast.loading("Téléchargement de la mise à jour…");
+              installAppUpdate(update, (percent) => toast.loading(`Téléchargement… ${percent}%`, { id })).catch(
+                (e) => toast.error(errorMessage(e), { id }),
+              );
+            },
+          },
         });
       })
       .catch(() => {
