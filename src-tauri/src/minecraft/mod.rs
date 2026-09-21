@@ -25,7 +25,7 @@ pub struct PreparedVersion {
     pub game_args: Vec<String>,
     pub classpath: Vec<PathBuf>,
     pub native_jars: Vec<PathBuf>,
-    pub java_major_version: u32,
+    pub java_component: String,
     pub asset_index_id: String,
 }
 
@@ -113,7 +113,7 @@ pub async fn prepare_version(
         game_args,
         classpath,
         native_jars: resolved_libs.native_jars,
-        java_major_version: raw.java_version.map(|j| j.major_version).unwrap_or(8),
+        java_component: crate::java::resolve_component(raw.java_version.as_ref()),
         asset_index_id: raw.assets.unwrap_or_else(|| "legacy".to_string()),
     })
 }

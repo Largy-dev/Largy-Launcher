@@ -47,7 +47,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     let mut raw_jvm_args = prepared.jvm_args.clone();
     let mut raw_game_args = prepared.game_args.clone();
     let native_jars = prepared.native_jars.clone();
-    let mut java_major = prepared.java_major_version;
+    let java_component = prepared.java_component.clone();
 
     if instance.loader != LoaderKind::Vanilla {
         let loader_version = instance
@@ -72,7 +72,6 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
         }
         raw_jvm_args.extend(profile.extra_jvm_args);
         raw_game_args.extend(profile.extra_game_args);
-        java_major = java_major.max(8);
     }
 
     let natives_directory = instance.directory.join("natives");
@@ -80,7 +79,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
 
     let java_path = match &settings.java_path_override {
         Some(path) if !path.trim().is_empty() => std::path::PathBuf::from(path),
-        _ => state.java.ensure_runtime(app, &state.paths, java_major).await?.path,
+        _ => state.java.ensure_runtime(app, &state.paths, &java_component).await?.path,
     };
 
     let mut placeholders = HashMap::new();

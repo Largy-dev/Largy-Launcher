@@ -83,10 +83,19 @@ fn extract_zip_entry(
     Ok(())
 }
 
-/// A `data` entry's value is either `[group:artifact:version]` (extract from
-/// this jar's `maven/` folder into the shared library cache) or
-/// `'/relative/path/in/jar'` (extract verbatim into a scratch folder).
-fn resolve_data_value(
+/// Resolves one `data`-map value, or one processor argument, against the
+/// installer jar. Forge's install profile mixes three conventions for the
+/// same string:
+/// - `[group:artifact:version]` — a Maven coordinate; extract from this
+///   jar's `maven/` folder into the shared library cache (or just compute
+///   the path if it's a processor *output* that doesn't exist yet) and
+///   substitute the resulting file path.
+/// - `'literal value'` — a literal string (a hash, a version string, ...)
+///   to use as-is, quotes stripped; never a path.
+/// - `/relative/path/in/jar` (no quotes) — a real embedded resource;
+///   extract into a scratch folder and substitute the resulting file path.
+/// Anything else is returned unchanged (e.g. plain task-name arguments).
+fn resolve_token(
     archive: &mut zip::ZipArchive<std::fs::File>,
     raw_value: &str,
     libraries_dir: &Path,
@@ -100,8 +109,12 @@ fn resolve_data_value(
         return Ok(dest.display().to_string());
     }
 
-    if let Some(inner) = raw_value.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
-        let zip_path = inner.trim_start_matches('/');
+    if let Some(literal) = raw_value.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
+        return Ok(literal.to_string());
+    }
+
+    if raw_value.starts_with('/') {
+        let zip_path = raw_value.trim_start_matches('/');
         let dest = scratch_dir.join(zip_path);
         extract_zip_entry(archive, zip_path, &dest)?;
         return Ok(dest.display().to_string());
@@ -178,40 +191,22 @@ fn library_entries(libraries: &[RawLibrary], libraries_dir: &Path) -> Vec<Librar
         .collect()
 }
 
-async fn run_processor(
-    processor: &ProcessorEntry,
-    placeholders: &HashMap<String, String>,
-    libraries_dir: &Path,
-    java_path: &Path,
-) -> Result<(), LoaderError> {
-    if !processor.sides.is_empty() && !processor.sides.iter().any(|s| s == "client") {
-        return Ok(());
-    }
-
-    let jar_rel = maven_path(&processor.jar)
-        .ok_or_else(|| LoaderError::Other(format!("coordonnée maven invalide: {}", processor.jar)))?;
+/// Runs one processor with already fully-resolved `args` (placeholders
+/// substituted and any embedded `[coord]`/`'literal'` tokens resolved).
+async fn run_processor(jar: &str, classpath: &[String], args: &[String], libraries_dir: &Path, java_path: &Path) -> Result<(), LoaderError> {
+    let jar_rel = maven_path(jar).ok_or_else(|| LoaderError::Other(format!("coordonnée maven invalide: {jar}")))?;
     let jar_path = libraries_dir.join(jar_rel);
     let main_class = read_main_class(&jar_path)?;
 
-    let mut classpath = vec![jar_path.display().to_string()];
-    for coord in &processor.classpath {
-        if let Some(rel) = maven_path(coord) {
-            classpath.push(libraries_dir.join(rel).display().to_string());
-        }
-    }
+    let mut full_classpath = vec![jar_path.display().to_string()];
+    full_classpath.extend(classpath.iter().cloned());
     let separator = if cfg!(windows) { ";" } else { ":" };
-
-    let args: Vec<String> = processor
-        .args
-        .iter()
-        .map(|arg| substitute_placeholders(arg, placeholders))
-        .collect();
 
     let output = tokio::process::Command::new(java_path)
         .arg("-cp")
-        .arg(classpath.join(separator))
+        .arg(full_classpath.join(separator))
         .arg(&main_class)
-        .args(&args)
+        .args(args)
         .output()
         .await?;
 
@@ -291,29 +286,51 @@ pub async fn install_from_installer_jar(
 
     if !marker.exists() {
         let scratch_dir = paths.installers_dir().join("extracted").join(cache_key);
+        let libraries_dir = paths.libraries_dir();
 
         let mut placeholders = HashMap::new();
-        for (key, entry) in &install_profile.data {
-            let resolved = resolve_data_value(&mut archive, &entry.client, &paths.libraries_dir(), &scratch_dir)?;
-            placeholders.insert(key.clone(), resolved);
-        }
-        drop(archive);
-
-        let vanilla_entry = manifest::find_version_entry(client, mc_version).await.map_err(to_loader_err)?;
-        let vanilla_raw = manifest::fetch_version_json(client, &vanilla_entry.url).await.map_err(to_loader_err)?;
-        let java_major = vanilla_raw.java_version.map(|j| j.major_version).unwrap_or(8);
-        let runtime = java.ensure_runtime(app, paths, java_major).await.map_err(to_loader_err)?;
-
         let minecraft_jar = paths.versions_dir().join(mc_version).join(format!("{mc_version}.jar"));
         placeholders.insert("SIDE".to_string(), "client".to_string());
         placeholders.insert("MINECRAFT_JAR".to_string(), minecraft_jar.display().to_string());
         placeholders.insert("MINECRAFT_VERSION".to_string(), mc_version.to_string());
         placeholders.insert("ROOT".to_string(), paths.installers_dir().display().to_string());
         placeholders.insert("INSTALLER".to_string(), installer_path.display().to_string());
-        placeholders.insert("LIBRARY_DIR".to_string(), paths.libraries_dir().display().to_string());
+        placeholders.insert("LIBRARY_DIR".to_string(), libraries_dir.display().to_string());
 
+        for (key, entry) in &install_profile.data {
+            let resolved = resolve_token(&mut archive, &entry.client, &libraries_dir, &scratch_dir)?;
+            placeholders.insert(key.clone(), resolved);
+        }
+
+        // Resolve every processor's classpath/args now, while the jar is
+        // still open — a `[coord]` can appear directly in `args` (not just
+        // via a `{TOKEN}`), which needs the same jar-extraction as `data`.
+        let mut runnable_processors = Vec::new();
         for processor in &install_profile.processors {
-            run_processor(processor, &placeholders, &paths.libraries_dir(), &runtime.path).await?;
+            if !processor.sides.is_empty() && !processor.sides.iter().any(|s| s == "client") {
+                continue;
+            }
+            let classpath = processor
+                .classpath
+                .iter()
+                .filter_map(|coord| maven_path(coord).map(|rel| libraries_dir.join(rel).display().to_string()))
+                .collect::<Vec<_>>();
+            let mut args = Vec::with_capacity(processor.args.len());
+            for raw_arg in &processor.args {
+                let substituted = substitute_placeholders(raw_arg, &placeholders);
+                args.push(resolve_token(&mut archive, &substituted, &libraries_dir, &scratch_dir)?);
+            }
+            runnable_processors.push((processor.jar.clone(), classpath, args));
+        }
+        drop(archive);
+
+        let vanilla_entry = manifest::find_version_entry(client, mc_version).await.map_err(to_loader_err)?;
+        let vanilla_raw = manifest::fetch_version_json(client, &vanilla_entry.url).await.map_err(to_loader_err)?;
+        let java_component = crate::java::resolve_component(vanilla_raw.java_version.as_ref());
+        let runtime = java.ensure_runtime(app, paths, &java_component).await.map_err(to_loader_err)?;
+
+        for (jar, classpath, args) in &runnable_processors {
+            run_processor(jar, classpath, args, &libraries_dir, &runtime.path).await?;
         }
 
         if let Some(parent) = marker.parent() {

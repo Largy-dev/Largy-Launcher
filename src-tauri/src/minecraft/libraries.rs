@@ -68,8 +68,8 @@ pub fn resolve_libraries(libraries: &[RawLibrary], libraries_dir: &Path) -> Reso
             classpath_items.push(DownloadItem {
                 url: format!("{base}{rel_path}"),
                 dest,
-                sha1: None,
-                size: None,
+                sha1: lib.sha1.clone(),
+                size: lib.size,
             });
         }
 

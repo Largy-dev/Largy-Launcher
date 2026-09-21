@@ -11,7 +11,6 @@ pub mod xbox;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
 
 use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
@@ -145,8 +144,4 @@ fn load_active_account(paths: &AppPaths) -> AppResult<Option<ActiveAccountMeta>>
     }
     let bytes = std::fs::read(path)?;
     Ok(Some(serde_json::from_slice(&bytes)?))
-}
-
-pub fn is_logged_in(app: &AppHandle) -> bool {
-    load_active_account(&AppPaths::new(app)).ok().flatten().is_some()
 }

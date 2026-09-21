@@ -12,7 +12,7 @@ use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
 
 const RUNTIME_INDEX_URL: &str =
-    "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39536781077231585/all.json";
+    "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JavaRuntime {
@@ -88,18 +88,34 @@ fn java_binary_name() -> &'static str {
     }
 }
 
-/// Mojang ships four runtime "flavors"; which one a given `javaVersion.majorVersion`
-/// from a version manifest maps to isn't published anywhere machine-readable, so
-/// this mirrors the mapping other open-source launchers (PrismLauncher, etc.) use.
+/// Fallback only: a version JSON's `javaVersion.component` should always be
+/// used directly when present (see [`resolve_component`]) — this major-version
+/// guess exists purely for the rare case where it's missing.
 pub fn component_for_major(major: u32) -> &'static str {
     if major <= 8 {
         "jre-legacy"
     } else if major <= 16 {
         "java-runtime-alpha"
     } else if major <= 17 {
-        "java-runtime-beta"
-    } else {
         "java-runtime-gamma"
+    } else if major <= 21 {
+        "java-runtime-delta"
+    } else {
+        "java-runtime-epsilon"
+    }
+}
+
+/// Resolves the runtime component to use for a version JSON's `javaVersion`
+/// field: Mojang's own `component` name when present (authoritative — e.g.
+/// Minecraft 1.21+ needs `java-runtime-delta`/Java 21, which
+/// [`component_for_major`] alone would get wrong), else a major-version guess.
+pub fn resolve_component(java_version: Option<&crate::minecraft::manifest::JavaVersionRef>) -> String {
+    match java_version {
+        Some(jv) => jv
+            .component
+            .clone()
+            .unwrap_or_else(|| component_for_major(jv.major_version).to_string()),
+        None => component_for_major(8).to_string(),
     }
 }
 
@@ -117,15 +133,15 @@ impl JavaManager {
         }
     }
 
-    /// Returns the path to a `java` executable satisfying `major_version`,
+    /// Returns the path to a `java` executable for the given runtime
+    /// `component` (e.g. `java-runtime-delta`, from [`resolve_component`]),
     /// downloading it into the shared runtime cache on first use.
     pub async fn ensure_runtime(
         &self,
         app: &AppHandle,
         paths: &AppPaths,
-        major_version: u32,
+        component: &str,
     ) -> AppResult<JavaRuntime> {
-        let component = component_for_major(major_version);
         let component_dir = paths.runtime_dir().join(component);
         let exe = component_dir.join(java_binary_name());
 

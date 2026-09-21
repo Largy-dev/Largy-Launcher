@@ -52,6 +52,8 @@ struct FtbAuthor {
 struct FtbVersionRef {
     id: u64,
     name: String,
+    #[serde(default)]
+    targets: Vec<FtbTarget>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,7 +90,7 @@ impl FtbPackResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct FtbTarget {
     name: String,
     version: String,
@@ -192,48 +194,37 @@ impl ModpackProvider for FtbProvider {
     }
 
     async fn get_versions(&self, pack_id: &str) -> Result<Vec<ModpackVersionSummary>, ProviderError> {
+        // The pack detail response already embeds each version's `targets`,
+        // so no per-version fetch is needed here (only `resolve_version`
+        // needs a dedicated request, for the file list).
         let pack = self.fetch_pack(pack_id).await?;
-        let pack_id_owned = pack_id.to_string();
 
-        let mut set = JoinSet::new();
-        for version in pack.versions {
-            let client = self.client.clone();
-            let pack_id = pack_id_owned.clone();
-            set.spawn(async move {
-                let detail: FtbVersionDetail = client
-                    .get(format!("{BASE}/modpack/{pack_id}/{}", version.id))
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
-                Ok::<_, reqwest::Error>((version, detail))
-            });
-        }
-
-        let mut versions = Vec::new();
-        while let Some(result) = set.join_next().await {
-            if let Ok(Ok((version, detail))) = result {
-                let minecraft_version = detail
+        let mut versions: Vec<ModpackVersionSummary> = pack
+            .versions
+            .into_iter()
+            .map(|version| {
+                let minecraft_version = version
                     .targets
                     .iter()
                     .find(|t| t.name == "minecraft")
                     .map(|t| t.version.clone())
                     .unwrap_or_default();
-                let loader_target = detail.targets.iter().find_map(|t| {
-                    loader_kind_from_name(&t.name).map(|kind| (kind, t.version.clone()))
-                });
-                let (loader, loader_version) =
-                    loader_target.unwrap_or((LoaderKind::Vanilla, String::new()));
+                let (loader, loader_version) = version
+                    .targets
+                    .iter()
+                    .find_map(|t| loader_kind_from_name(&t.name).map(|kind| (kind, t.version.clone())))
+                    .unwrap_or((LoaderKind::Vanilla, String::new()));
 
-                versions.push(ModpackVersionSummary {
+                ModpackVersionSummary {
                     id: version.id.to_string(),
                     name: version.name,
                     minecraft_version,
                     loader,
                     loader_version,
-                });
-            }
-        }
+                }
+            })
+            .collect();
+
         versions.sort_by(|a, b| b.id.cmp(&a.id));
         Ok(versions)
     }

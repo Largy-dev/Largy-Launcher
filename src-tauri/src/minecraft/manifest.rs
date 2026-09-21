@@ -177,8 +177,17 @@ pub struct RawLibrary {
     pub rules: Option<Vec<Rule>>,
     #[serde(default)]
     pub natives: Option<HashMap<String, String>>,
+    /// Maven repository base URL. Present on every schema variant: as the
+    /// artifact's own base repo (vanilla/Forge-style, alongside `downloads`)
+    /// or as the *only* location hint (Fabric/Quilt-style, no `downloads` block).
     #[serde(default)]
     pub url: Option<String>,
+    /// Only present on Fabric's flat library schema (no `downloads` block);
+    /// Quilt's doesn't even have this much.
+    #[serde(default)]
+    pub sha1: Option<String>,
+    #[serde(default)]
+    pub size: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
