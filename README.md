@@ -1,15 +1,21 @@
-# Largy Launcher
+<div align="center">
 
-![CI](https://github.com/Largy-dev/Largy-Launcher/actions/workflows/ci.yml/badge.svg)
-![Version](https://img.shields.io/github/v/release/Largy-dev/Largy-Launcher?label=version)
-![Windows](https://img.shields.io/badge/plateforme-Windows-0078d4)
+<img src="docs/banner.webp" alt="Largy Launcher — le launcher Minecraft qui s'occupe de tout" width="100%">
+
+<br>
+
+<a href="https://github.com/Largy-dev/Largy-Launcher/releases/latest/download/LargyLauncher-Setup.exe">
+  <img src="docs/download-button.png" alt="Télécharger Largy Launcher pour Windows" width="420">
+</a>
+
+<sub><a href="https://github.com/Largy-dev/Largy-Launcher/releases">Toutes les versions</a> · Windows 10 et 11</sub>
+
+</div>
+
+# Largy Launcher
 
 **Un launcher Minecraft pour Windows, beau et simple, qui s'occupe de tout** : Java, mod loaders,
 modpacks FTB et CurseForge, mémoire… Tu choisis ton instance, tu cliques sur **Jouer**.
-
-### [⬇️ Télécharger Largy Launcher (Windows)](https://github.com/Largy-dev/Largy-Launcher/releases/latest/download/LargyLauncher-Setup.exe)
-
-<sub>Toujours la dernière version · [toutes les versions](https://github.com/Largy-dev/Largy-Launcher/releases)</sub>
 
 ![Écran d'accueil de Largy Launcher](docs/screenshots/home.jpg)
 
@@ -17,7 +23,7 @@ modpacks FTB et CurseForge, mémoire… Tu choisis ton instance, tu cliques sur 
 
 ### Installer
 
-1. Télécharge **`LargyLauncher-Setup.exe`** avec le bouton ci-dessus.
+1. Télécharge **`LargyLauncher-Setup.exe`** avec le bouton vert en haut de la page.
 2. Lance-le et suis l'installateur (quelques secondes).
 3. Ouvre Largy Launcher et connecte-toi avec ton compte Microsoft — rien d'autre à configurer.
 
