@@ -1,0 +1,16 @@
+# Normalize line endings to LF in the repository and on checkout,
+# regardless of core.autocrlf on the machine (local Windows dev boxes,
+# or the windows-latest GitHub Actions runners) — otherwise Prettier's
+# default LF expectation mismatches whatever the checkout converted
+# text files to, and `format:check` fails on every file.
+* text=auto eol=lf
+
+*.ico binary
+*.icns binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
