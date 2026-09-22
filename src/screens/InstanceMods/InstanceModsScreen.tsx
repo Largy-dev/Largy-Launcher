@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { formatBytes } from "@/lib/format";
-import { fadeUp, stagger } from "@/lib/motion";
+import { listItem } from "@/lib/motion";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { errorMessage, instanceModsApi, instancesApi, type ModEntry } from "@/services/tauri";
@@ -193,7 +193,6 @@ export function InstanceModsScreen() {
 
           <motion.div
             key={filter}
-            variants={stagger}
             initial="hidden"
             animate="show"
             className="glass divide-y divide-border/60 overflow-hidden rounded-2xl"
@@ -201,10 +200,11 @@ export function InstanceModsScreen() {
             {visible.length === 0 && (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun mod ne correspond.</p>
             )}
-            {visible.map((mod) => (
+            {visible.map((mod, index) => (
               <motion.div
                 key={mod.file_name}
-                variants={fadeUp}
+                variants={listItem}
+                custom={index}
                 className={cn("flex items-center gap-3 px-4 py-2.5 transition-opacity", !mod.enabled && "opacity-55")}
               >
                 <div

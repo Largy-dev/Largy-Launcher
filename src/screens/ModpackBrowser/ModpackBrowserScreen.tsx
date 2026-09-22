@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/Skeleton";
 import { Input } from "@/components/ui/input";
 import { useSettings } from "@/hooks/useSettings";
-import { fadeUp, stagger } from "@/lib/motion";
+import { listItem } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { errorMessage, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
 
@@ -19,15 +19,19 @@ const PROVIDERS: { id: ProviderId; label: string; color: string }[] = [
   { id: "curseforge", label: "CurseForge", color: "#f16436" },
 ];
 
-function ModpackCard({ pack, onSelect }: { pack: ModpackSummary; onSelect: () => void }) {
+function ModpackCard({ pack, index, onSelect }: { pack: ModpackSummary; index: number; onSelect: () => void }) {
   return (
     <motion.button
-      variants={fadeUp}
+      variants={listItem}
+      custom={index}
       whileHover={{ y: -4 }}
       onClick={onSelect}
-      className="glass group relative flex flex-col overflow-hidden rounded-2xl text-left transition-shadow hover:shadow-xl"
+      className="glass group relative isolate flex transform-gpu flex-col overflow-hidden rounded-2xl text-left transition-shadow will-change-transform hover:shadow-xl"
     >
-      <div className="relative h-28 overflow-hidden">
+      <div
+        className="relative h-28 overflow-hidden"
+        style={{ maskImage: "linear-gradient(to bottom, black 45%, transparent)" }}
+      >
         {pack.icon_url ? (
           <img
             src={pack.icon_url}
@@ -38,7 +42,6 @@ function ModpackCard({ pack, onSelect }: { pack: ModpackSummary; onSelect: () =>
         ) : (
           <div className="bg-gradient-brand absolute inset-0 opacity-50" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-card/90" />
         <span className="bg-gradient-brand absolute top-2.5 right-2.5 flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.68rem] font-bold text-primary-foreground opacity-0 shadow-glow transition-opacity group-hover:opacity-100">
           <Download className="size-3" aria-hidden="true" />
           Installer
@@ -110,13 +113,12 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
       ) : (
         <motion.div
           key={query}
-          variants={stagger}
           initial="hidden"
           animate="show"
           className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
         >
-          {data.map((pack) => (
-            <ModpackCard key={pack.id} pack={pack} onSelect={() => onSelect(pack)} />
+          {data.map((pack, index) => (
+            <ModpackCard key={pack.id} pack={pack} index={index} onSelect={() => onSelect(pack)} />
           ))}
         </motion.div>
       )}

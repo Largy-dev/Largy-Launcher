@@ -206,14 +206,14 @@ export function UnsavedChanges({ dirty, saving, onSave, onReset }: UnsavedChange
       </AnimatePresence>
 
       <Dialog open={blocker.state === "blocked"} onOpenChange={(open) => !open && blocker.reset?.()}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Modifications non enregistrées</DialogTitle>
             <DialogDescription>
               Tu as des changements non enregistrés. Les enregistrer avant de continuer ?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="flex-wrap">
             <Button variant="outline" onClick={() => blocker.reset?.()}>
               Annuler
             </Button>

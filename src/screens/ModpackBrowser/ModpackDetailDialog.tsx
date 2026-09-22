@@ -108,6 +108,7 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
       ),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-mods", result.instance.id] });
       notifyResult(result, `${vars.packName} installé`, setInstallWarnings, () =>
         navigate(`/instances/${result.instance.id}`),
       );
@@ -121,6 +122,8 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["modpack-versions", provider, pack?.id] });
+      queryClient.invalidateQueries({ queryKey: ["instance-mods", result.instance.id] });
+      queryClient.invalidateQueries({ queryKey: ["instance", result.instance.id] });
       notifyResult(result, `${result.instance.name} mis à jour`, setInstallWarnings, () =>
         navigate(`/instances/${result.instance.id}`),
       );
@@ -170,7 +173,7 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
   return (
     <Dialog open={pack !== null} onOpenChange={(next) => (next ? undefined : close())}>
       <DialogContent className="overflow-hidden sm:max-w-lg">
-        <div className="relative -mx-6 -mt-6 mb-1 h-28 overflow-hidden" aria-hidden="true">
+        <div className="relative -mx-4 -mt-4 mb-1 h-28 overflow-hidden" aria-hidden="true">
           {pack?.icon_url && (
             <img
               src={pack.icon_url}

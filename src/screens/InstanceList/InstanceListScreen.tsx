@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDuration } from "@/lib/format";
-import { stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { instanceModsApi, instancesApi, type Instance, type LoaderKind } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
@@ -213,7 +212,6 @@ export function InstanceListScreen() {
           ) : (
             <motion.div
               key={`${density}-${loaderFilter}`}
-              variants={stagger}
               initial="hidden"
               animate="show"
               className={cn(
@@ -223,8 +221,8 @@ export function InstanceListScreen() {
                 density === "list" && "grid-cols-1",
               )}
             >
-              {visible.map((instance) => (
-                <InstanceCard key={instance.id} instance={instance} density={density} />
+              {visible.map((instance, index) => (
+                <InstanceCard key={instance.id} instance={instance} density={density} index={index} />
               ))}
             </motion.div>
           )}

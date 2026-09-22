@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLaunchInstance } from "@/hooks/useLaunchInstance";
 import { formatDuration, formatRelative } from "@/lib/format";
-import { fadeUp } from "@/lib/motion";
+import { listItem } from "@/lib/motion";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { errorMessage, instancesApi, providersApi, type Instance, type ProviderId } from "@/services/tauri";
@@ -57,7 +57,14 @@ function StatusChips({ running, updateAvailable }: { running: boolean; updateAva
   );
 }
 
-export function InstanceCard({ instance, density = "grid" }: { instance: Instance; density?: CardDensity }) {
+interface InstanceCardProps {
+  instance: Instance;
+  density?: CardDensity;
+  /** Position in the list, for the capped entrance cascade. */
+  index?: number;
+}
+
+export function InstanceCard({ instance, density = "grid", index = 0 }: InstanceCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { running, installing, installPercent } = useLaunchInstance(instance);
@@ -131,7 +138,13 @@ export function InstanceCard({ instance, density = "grid" }: { instance: Instanc
   };
 
   return (
-    <motion.div variants={fadeUp} layout whileHover={installing ? undefined : { y: -4 }} className="group">
+    <motion.div
+      variants={listItem}
+      custom={index}
+      layout
+      whileHover={installing ? undefined : { y: -4 }}
+      className="group"
+    >
       {density === "grid" ? (
         <div
           {...clickable}

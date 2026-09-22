@@ -20,6 +20,20 @@ export const stagger: Variants = {
   show: { transition: { staggerChildren: 0.045, delayChildren: 0.05 } },
 };
 
+/**
+ * List entry for long lists: pass the item's index as `custom`. Only the first
+ * dozen items cascade; everything after appears together, so a 300-mod list
+ * is on screen in well under a second.
+ */
+export const listItem: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  show: (index: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { ...easeOut, delay: Math.min(index, 12) * 0.035 },
+  }),
+};
+
 export const pageTransition: Variants = {
   initial: { opacity: 0, y: 10, filter: "blur(4px)" },
   enter: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } },
