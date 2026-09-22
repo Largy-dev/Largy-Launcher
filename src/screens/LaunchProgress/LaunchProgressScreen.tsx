@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useParams } from "react-router";
-import { Loader2, Square } from "lucide-react";
+import { AlertTriangle, Loader2, Square, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ export function LaunchProgressScreen() {
   const running = useAppStore((s) => s.runtime[instanceId]?.running ?? false);
   const logs = useAppStore((s) => s.runtime[instanceId]?.logs ?? []);
   const progress = useAppStore((s) => s.downloadProgress);
+  const crashAnalysis = useAppStore((s) => s.crashAnalysis[instanceId]);
+  const clearCrashAnalysis = useAppStore((s) => s.clearCrashAnalysis);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,6 +61,19 @@ export function LaunchProgressScreen() {
             </span>
           </div>
           <Progress value={percent} />
+        </div>
+      )}
+
+      {crashAnalysis && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+          <div className="flex-1 space-y-0.5">
+            <p className="font-medium text-destructive">{crashAnalysis.summary}</p>
+            {crashAnalysis.suggestion && <p className="text-muted-foreground">{crashAnalysis.suggestion}</p>}
+          </div>
+          <Button variant="ghost" size="icon-sm" title="Fermer" onClick={() => clearCrashAnalysis(instanceId)}>
+            <X className="size-4" aria-hidden="true" />
+          </Button>
         </div>
       )}
 

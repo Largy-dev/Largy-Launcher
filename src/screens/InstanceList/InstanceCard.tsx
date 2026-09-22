@@ -30,6 +30,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   const running = useAppStore((s) => s.runtime[instance.id]?.running ?? false);
   const setRunning = useAppStore((s) => s.setRunning);
   const clearLogs = useAppStore((s) => s.clearLogs);
+  const clearCrashAnalysis = useAppStore((s) => s.clearCrashAnalysis);
   const downloadProgress = useAppStore((s) => s.downloadProgress);
   const [busy, setBusy] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -79,6 +80,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
     }
     setBusy(true);
     clearLogs(instance.id);
+    clearCrashAnalysis(instance.id);
     setRunning(instance.id, true);
     navigate(`/instances/${instance.id}/launch`);
     try {

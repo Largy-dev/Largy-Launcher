@@ -171,7 +171,8 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     };
 
     let mut child = super::spawn(instance_id, &ctx)?;
-    super::stream_output(app, instance_id, &mut child);
+    let log_buffer = super::new_log_buffer();
+    super::stream_output(app, instance_id, &mut child, log_buffer.clone());
     instances::touch_last_played(&state.paths, instance_id)?;
 
     let pid = child.id();
@@ -185,11 +186,14 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     tokio::spawn(async move {
         let status = shared.lock().await.wait().await;
         state_running.lock().remove(&instance_id_owned);
+        let code = status.ok().and_then(|s| s.code());
+        let crash_analysis = crate::launch::crash_detect::analyze(&log_buffer.lock(), code);
         let _ = app_for_wait.emit(
             "instance-exit",
             InstanceExit {
                 instance_id: instance_id_owned,
-                code: status.ok().and_then(|s| s.code()),
+                code,
+                crash_analysis,
             },
         );
     });

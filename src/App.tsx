@@ -79,6 +79,7 @@ function AppShell() {
   const setDownloadProgress = useAppStore((s) => s.setDownloadProgress);
   const appendLog = useAppStore((s) => s.appendLog);
   const setRunning = useAppStore((s) => s.setRunning);
+  const setCrashAnalysis = useAppStore((s) => s.setCrashAnalysis);
 
   useEffect(() => {
     auth
@@ -113,12 +114,15 @@ function AppShell() {
     const unlisten = [
       onDownloadProgress((p) => setDownloadProgress(p)),
       onInstanceLog((l) => appendLog(l.instance_id, l.line)),
-      onInstanceExit((e) => setRunning(e.instance_id, false)),
+      onInstanceExit((e) => {
+        setRunning(e.instance_id, false);
+        setCrashAnalysis(e.instance_id, e.crash_analysis);
+      }),
     ];
     return () => {
       unlisten.forEach((p) => p.then((fn) => fn()));
     };
-  }, [appendLog, setDownloadProgress, setRunning]);
+  }, [appendLog, setCrashAnalysis, setDownloadProgress, setRunning]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">

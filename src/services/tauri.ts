@@ -131,9 +131,16 @@ export interface InstanceLogLine {
   stream: "stdout" | "stderr";
 }
 
+export interface CrashAnalysis {
+  summary: string;
+  suggestion: string | null;
+  matched_pattern: string;
+}
+
 export interface InstanceExit {
   instance_id: string;
   code: number | null;
+  crash_analysis: CrashAnalysis | null;
 }
 
 export function onDownloadProgress(handler: (p: DownloadProgress) => void): Promise<UnlistenFn> {

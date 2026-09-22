@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { AccountSession, DownloadProgress } from "@/services/tauri";
+import type { AccountSession, CrashAnalysis, DownloadProgress } from "@/services/tauri";
 
 interface InstanceRuntime {
   running: boolean;
@@ -24,6 +24,10 @@ interface AppStore {
   appendLog: (instanceId: string, line: string) => void;
   clearLogs: (instanceId: string) => void;
   runtimeFor: (instanceId: string) => InstanceRuntime;
+
+  crashAnalysis: Record<string, CrashAnalysis | null>;
+  setCrashAnalysis: (instanceId: string, analysis: CrashAnalysis | null) => void;
+  clearCrashAnalysis: (instanceId: string) => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -52,4 +56,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       runtime: { ...s.runtime, [instanceId]: { ...(s.runtime[instanceId] ?? emptyRuntime), logs: [] } },
     })),
   runtimeFor: (instanceId) => get().runtime[instanceId] ?? emptyRuntime,
+
+  crashAnalysis: {},
+  setCrashAnalysis: (instanceId, analysis) =>
+    set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: analysis } })),
+  clearCrashAnalysis: (instanceId) => set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: null } })),
 }));
