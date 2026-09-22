@@ -1,11 +1,13 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { auth, errorMessage, type DeviceCodeInfo } from "@/services/tauri";
+import { useSettings } from "@/hooks/useSettings";
+import { auth, errorMessage, settingsApi, type DeviceCodeInfo } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
 function MicrosoftMark() {
@@ -19,7 +21,7 @@ function MicrosoftMark() {
   );
 }
 
-type LoginStatus = "idle" | "waiting" | "polling" | "error";
+type LoginStatus = "idle" | "waiting" | "polling" | "confirm-offline" | "error";
 
 interface LoginDialogProps {
   open: boolean;
@@ -31,11 +33,29 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const [device, setDevice] = useState<DeviceCodeInfo | null>(null);
   const [status, setStatus] = useState<LoginStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const { data: settings } = useSettings();
+  const queryClient = useQueryClient();
+
+  const disableOfflineMutation = useMutation({
+    mutationFn: () => settingsApi.update({ ...settings!, offline_mode: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success("Mode hors-ligne désactivé");
+      onOpenChange(false);
+      reset();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
 
   function reset() {
     setDevice(null);
     setStatus("idle");
     setError(null);
+  }
+
+  function finishLogin() {
+    onOpenChange(false);
+    reset();
   }
 
   async function startLogin() {
@@ -48,8 +68,11 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       const session = await auth.completeLogin(info);
       setAccount(session);
       toast.success(`Connecté en tant que ${session.profile.name}`);
-      onOpenChange(false);
-      reset();
+      if (settings?.offline_mode) {
+        setStatus("confirm-offline");
+      } else {
+        finishLogin();
+      }
     } catch (e) {
       setError(errorMessage(e));
       setStatus("error");
@@ -106,6 +129,28 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               <Loader2 className="size-3 animate-spin" aria-hidden="true" />
               En attente de la validation…
             </p>
+          </div>
+        )}
+
+        {status === "confirm-offline" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Tu es connecté avec ton compte Microsoft, mais le Mode Hors-ligne est encore activé — tant qu'il l'est, le
+              jeu se lance avec le profil local, pas avec ce compte. Le désactiver ?
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={finishLogin}>
+                Garder le mode hors-ligne
+              </Button>
+              <Button
+                className="flex-1 gap-1.5"
+                onClick={() => disableOfflineMutation.mutate()}
+                disabled={disableOfflineMutation.isPending}
+              >
+                {disableOfflineMutation.isPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+                Désactiver
+              </Button>
+            </div>
           </div>
         )}
 
