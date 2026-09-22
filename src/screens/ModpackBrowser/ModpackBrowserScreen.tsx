@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { errorMessage, providersApi, settingsApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
+import { useSettings } from "@/hooks/useSettings";
+import { errorMessage, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
 
 import { ModpackDetailDialog } from "./ModpackDetailDialog";
 
@@ -87,7 +88,7 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
 export function ModpackBrowserScreen() {
   const [provider, setProvider] = useState<ProviderId>("ftb");
   const [selected, setSelected] = useState<ModpackSummary | null>(null);
-  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+  const { data: settings } = useSettings();
   const curseforgeEnabled = !!settings?.curseforge_api_key.trim();
 
   return (

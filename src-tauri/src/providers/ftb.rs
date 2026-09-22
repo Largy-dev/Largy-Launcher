@@ -6,8 +6,8 @@ use serde::Deserialize;
 use tokio::task::JoinSet;
 
 use super::{
-    FileDownloadInfo, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
-    ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
+    find_loader_target, FileDownloadInfo, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider,
+    ModpackSummary, ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
 };
 
 const BASE: &str = "https://api.modpacks.ch/public";
@@ -199,11 +199,9 @@ impl ModpackProvider for FtbProvider {
                     .find(|t| t.name == "minecraft")
                     .map(|t| t.version.clone())
                     .unwrap_or_default();
-                let (loader, loader_version) = version
-                    .targets
-                    .iter()
-                    .find_map(|t| LoaderKind::from_name(&t.name).map(|kind| (kind, t.version.clone())))
-                    .unwrap_or((LoaderKind::Vanilla, String::new()));
+                let (loader, loader_version) =
+                    find_loader_target(version.targets.iter().map(|t| (t.name.as_str(), t.version.as_str())))
+                        .unwrap_or((LoaderKind::Vanilla, String::new()));
 
                 ModpackVersionSummary {
                     id: version.id.to_string(),
@@ -240,11 +238,9 @@ impl ModpackProvider for FtbProvider {
             .map(|t| t.version.clone())
             .ok_or_else(|| ProviderError::Other("version FTB sans cible Minecraft".to_string()))?;
 
-        let (loader, loader_version) = detail
-            .targets
-            .iter()
-            .find_map(|t| LoaderKind::from_name(&t.name).map(|k| (k, t.version.clone())))
-            .unwrap_or((LoaderKind::Vanilla, String::new()));
+        let (loader, loader_version) =
+            find_loader_target(detail.targets.iter().map(|t| (t.name.as_str(), t.version.as_str())))
+                .unwrap_or((LoaderKind::Vanilla, String::new()));
 
         let files = detail
             .files
@@ -317,10 +313,7 @@ mod tests {
         let detail: FtbVersionDetail = serde_json::from_str(json).unwrap();
         let mc = detail.targets.iter().find(|t| t.name == "minecraft").map(|t| t.version.clone());
         assert_eq!(mc, Some("1.20.1".to_string()));
-        let loader = detail
-            .targets
-            .iter()
-            .find_map(|t| LoaderKind::from_name(&t.name).map(|k| (k, t.version.clone())));
+        let loader = find_loader_target(detail.targets.iter().map(|t| (t.name.as_str(), t.version.as_str())));
         assert_eq!(loader, Some((LoaderKind::NeoForge, "20.1.80".to_string())));
     }
 

@@ -18,6 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import { MemorySlider } from "@/components/MemorySlider";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppVersion } from "@/hooks/useAppVersion";
+import { useSettings } from "@/hooks/useSettings";
+import { parseJvmArgs } from "@/lib/jvmArgs";
 import { errorMessage, getSystemMemoryMb, settingsApi, type GlobalSettings } from "@/services/tauri";
 import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
 
@@ -53,7 +55,7 @@ function SettingSection({ title, children }: { title: string; children: ReactNod
 export function GlobalSettingsScreen() {
   const version = useAppVersion();
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+  const { data: settings, isLoading } = useSettings();
   const { data: systemMemoryMb } = useQuery({ queryKey: ["system-memory"], queryFn: getSystemMemoryMb });
   const [form, setForm] = useState<GlobalSettings | null>(null);
 
@@ -218,7 +220,7 @@ export function GlobalSettingsScreen() {
               className="w-64"
               placeholder="Aucun"
               value={form.default_jvm_args.join(" ")}
-              onChange={(e) => update("default_jvm_args", e.target.value.split(/\s+/).filter(Boolean))}
+              onChange={(e) => update("default_jvm_args", parseJvmArgs(e.target.value))}
             />
           }
         />

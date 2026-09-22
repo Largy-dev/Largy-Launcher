@@ -12,6 +12,7 @@ pub mod process_ext;
 pub mod providers;
 pub mod settings;
 pub mod state;
+pub mod util;
 
 use tauri::Manager;
 

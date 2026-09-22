@@ -139,6 +139,14 @@ pub struct SearchQuery {
     pub text: String,
 }
 
+/// Scans `(name, version)` pairs — e.g. FTB's `targets` array — and returns
+/// the first one whose name [`LoaderKind::from_name`] recognizes. Shared so
+/// callers with the same "list of named targets" shape don't each reimplement
+/// the same `find_map`.
+pub fn find_loader_target<'a>(mut items: impl Iterator<Item = (&'a str, &'a str)>) -> Option<(LoaderKind, String)> {
+    items.find_map(|(name, version)| LoaderKind::from_name(name).map(|kind| (kind, version.to_string())))
+}
+
 /// Holds every registered `ModpackProvider`; commands and the modpack-browser
 /// screen only ever talk to the registry, never to a concrete provider type.
 #[derive(Default)]
@@ -188,5 +196,18 @@ mod tests {
     fn registry_get_returns_none_for_unregistered_provider() {
         let registry = ProviderRegistry::new();
         assert!(registry.get("ftb").is_none());
+    }
+
+    #[test]
+    fn find_loader_target_returns_first_recognized_loader() {
+        let items = vec![("minecraft", "1.20.1"), ("neoforge", "20.1.80")];
+        let found = find_loader_target(items.into_iter());
+        assert_eq!(found, Some((LoaderKind::NeoForge, "20.1.80".to_string())));
+    }
+
+    #[test]
+    fn find_loader_target_returns_none_when_nothing_recognized() {
+        let items = vec![("minecraft", "1.20.1"), ("something-else", "1.0")];
+        assert_eq!(find_loader_target(items.into_iter()), None);
     }
 }

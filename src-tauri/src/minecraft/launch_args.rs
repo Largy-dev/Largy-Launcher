@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::modloaders::LoaderProfile;
+use crate::util::placeholders::substitute_dollar_braces;
 
 #[derive(Debug, Clone)]
 pub struct LaunchContext {
@@ -33,14 +34,6 @@ pub fn apply_loader_profile(ctx: &mut LaunchContext, profile: &LoaderProfile) {
     ctx.raw_game_args.extend(profile.extra_game_args.iter().cloned());
 }
 
-fn substitute(arg: &str, placeholders: &HashMap<String, String>) -> String {
-    let mut result = arg.to_string();
-    for (key, value) in placeholders {
-        result = result.replace(&format!("${{{key}}}"), value);
-    }
-    result
-}
-
 /// Produces the full argument list to pass to `Command::new(java_path).args(...)`.
 pub fn build_command_args(ctx: &LaunchContext) -> Vec<String> {
     let mut args = Vec::new();
@@ -55,7 +48,7 @@ pub fn build_command_args(ctx: &LaunchContext) -> Vec<String> {
     args.push("-Dminecraft.launcher.brand=LargyLauncher".to_string());
 
     for raw in &ctx.raw_jvm_args {
-        args.push(substitute(raw, &ctx.placeholders));
+        args.push(substitute_dollar_braces(raw, &ctx.placeholders));
     }
 
     let classpath = ctx
@@ -70,7 +63,7 @@ pub fn build_command_args(ctx: &LaunchContext) -> Vec<String> {
     args.push(ctx.main_class.clone());
 
     for raw in &ctx.raw_game_args {
-        args.push(substitute(raw, &ctx.placeholders));
+        args.push(substitute_dollar_braces(raw, &ctx.placeholders));
     }
 
     args

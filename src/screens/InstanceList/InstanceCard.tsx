@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { Blocks, FolderOpen, Loader2, Play, Settings2, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MinecraftGrassIcon } from "@/components/MinecraftGrassIcon";
+import { useSettings } from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
-import { errorMessage, instancesApi, launchApi, settingsApi, type Instance } from "@/services/tauri";
+import { errorMessage, instancesApi, launchApi, type Instance } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
 export function InstanceCard({ instance }: { instance: Instance }) {
@@ -21,7 +22,7 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   const clearLogs = useAppStore((s) => s.clearLogs);
   const downloadProgress = useAppStore((s) => s.downloadProgress);
   const [busy, setBusy] = useState(false);
-  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
+  const { data: settings } = useSettings();
 
   const installing =
     downloadProgress?.task_id === instance.id &&
