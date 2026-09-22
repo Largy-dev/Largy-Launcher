@@ -56,9 +56,14 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
   const installMutation = useMutation({
     mutationFn: (vars: InstallVars) =>
       instancesApi.installModpack(provider, vars.packId, vars.versionId, vars.packName, vars.packIconUrl, vars.instanceName),
-    onSuccess: (_instance, vars) => {
+    onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success(`${vars.packName} installé`);
+      if (result.warnings.length > 0) {
+        toast.warning(`${result.warnings.length} avertissement(s) lors de l'installation`, {
+          description: result.warnings.slice(0, 3).join("\n"),
+        });
+      }
     },
     onError: (e) => toast.error(errorMessage(e)),
   });

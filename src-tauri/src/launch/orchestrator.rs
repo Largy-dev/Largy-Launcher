@@ -18,18 +18,18 @@ use super::{InstanceExit, RunningChild};
 
 pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &str) -> AppResult<()> {
     {
-        let running = state.running.lock().unwrap();
+        let running = state.running.lock();
         if running.contains_key(instance_id) {
             return Err(AppError::Launch("cette instance est déjà en cours d'exécution".to_string()));
         }
     }
 
     let instance = instances::get(&state.paths, instance_id)?;
-    let settings = state.settings.read().unwrap().clone();
+    let settings = state.settings.read().clone();
     let account = if settings.offline_mode {
         crate::auth::offline_session(&settings.offline_username)?
     } else {
-        state.active_account.read().unwrap().clone().ok_or_else(|| {
+        state.active_account.read().clone().ok_or_else(|| {
             AppError::Auth(
                 "Connecte-toi avec un compte Microsoft avant de lancer le jeu, ou active le Mode \
                  Hors-ligne dans Paramètres."
@@ -147,14 +147,14 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     let pid = child.id();
     let shared: RunningChild = Arc::new(AsyncMutex::new(child));
 
-    state.running.lock().unwrap().insert(instance_id.to_string(), shared.clone());
+    state.running.lock().insert(instance_id.to_string(), shared.clone());
 
     let app_for_wait = app.clone();
     let state_running = state.running.clone();
     let instance_id_owned = instance_id.to_string();
     tokio::spawn(async move {
         let status = shared.lock().await.wait().await;
-        state_running.lock().unwrap().remove(&instance_id_owned);
+        state_running.lock().remove(&instance_id_owned);
         let _ = app_for_wait.emit(
             "instance-exit",
             InstanceExit {
@@ -169,7 +169,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
 }
 
 pub async fn stop_instance(state: &AppState, instance_id: &str) -> AppResult<()> {
-    let child = state.running.lock().unwrap().get(instance_id).cloned();
+    let child = state.running.lock().get(instance_id).cloned();
     match child {
         Some(child) => {
             child
@@ -184,5 +184,5 @@ pub async fn stop_instance(state: &AppState, instance_id: &str) -> AppResult<()>
 }
 
 pub fn is_running(state: &AppState, instance_id: &str) -> bool {
-    state.running.lock().unwrap().contains_key(instance_id)
+    state.running.lock().contains_key(instance_id)
 }

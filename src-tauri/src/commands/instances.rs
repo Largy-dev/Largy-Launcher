@@ -1,3 +1,4 @@
+use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::download::DownloadItem;
@@ -5,6 +6,30 @@ use crate::error::{AppError, AppResult};
 use crate::instances::{self, CreateInstanceInput, Instance, ModpackRef};
 use crate::providers::{FileDownloadInfo, LoaderKind};
 use crate::state::AppState;
+
+/// Result of an instance install/update: the instance itself, plus any
+/// per-file problems that didn't stop the install but left it incomplete
+/// (manual-download-required mods, files whose download URL couldn't be
+/// resolved) — surfaced to the frontend instead of only logged.
+#[derive(Debug, Serialize)]
+pub struct InstanceInstallResult {
+    pub instance: Instance,
+    pub warnings: Vec<String>,
+}
+
+/// Runs a blocking, `'static`-owned closure on Tokio's blocking thread pool
+/// and flattens the `JoinError` into an `AppError` — used for filesystem
+/// work (recursive copies, zip reads) that would otherwise stall the async
+/// runtime for as long as it takes to walk a modpack's override tree.
+async fn spawn_blocking<T, F>(f: F) -> AppResult<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> AppResult<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))?
+}
 
 #[tauri::command]
 pub fn instances_list(state: State<'_, AppState>) -> AppResult<Vec<Instance>> {
@@ -92,7 +117,7 @@ pub async fn instances_install_modpack(
     pack_name: String,
     pack_icon_url: Option<String>,
     instance_name: String,
-) -> AppResult<Instance> {
+) -> AppResult<InstanceInstallResult> {
     let provider_ref = state
         .providers
         .get(&provider)
@@ -100,24 +125,24 @@ pub async fn instances_install_modpack(
 
     let resolved = provider_ref.resolve_version(&pack_id, &version_id).await?;
 
-    let instance = instances::create(
-        &state.paths,
-        CreateInstanceInput {
-            name: instance_name,
-            minecraft_version: resolved.minecraft_version.clone(),
-            loader: resolved.loader,
-            loader_version: (!resolved.loader_version.is_empty()).then(|| resolved.loader_version.clone()),
-            modpack: Some(ModpackRef {
-                provider: provider.clone(),
-                pack_id: pack_id.clone(),
-                version_id: version_id.clone(),
-                pack_name,
-            }),
-            icon_url: pack_icon_url,
-        },
-    )?;
+    let paths = state.paths.clone();
+    let create_input = CreateInstanceInput {
+        name: instance_name,
+        minecraft_version: resolved.minecraft_version.clone(),
+        loader: resolved.loader,
+        loader_version: (!resolved.loader_version.is_empty()).then(|| resolved.loader_version.clone()),
+        modpack: Some(ModpackRef {
+            provider: provider.clone(),
+            pack_id: pack_id.clone(),
+            version_id: version_id.clone(),
+            pack_name,
+        }),
+        icon_url: pack_icon_url,
+    };
+    let instance = spawn_blocking(move || instances::create(&paths, create_input)).await?;
 
     let mut items = Vec::new();
+    let mut warnings = Vec::new();
     for file in &resolved.files {
         match provider_ref.resolve_file_download(file).await {
             Ok(FileDownloadInfo::Direct { url }) => items.push(DownloadItem {
@@ -127,12 +152,18 @@ pub async fn instances_install_modpack(
                 size: (file.size > 0).then_some(file.size),
             }),
             Ok(FileDownloadInfo::ManualRequired { browser_url, expected_filename }) => {
-                tracing::warn!(
+                let message = format!(
                     "{}: téléchargement manuel requis ({browser_url}, attendu: {expected_filename})",
                     file.path.display()
                 );
+                tracing::warn!("{message}");
+                warnings.push(message);
             }
-            Err(e) => tracing::warn!("échec de résolution du fichier {}: {e}", file.path.display()),
+            Err(e) => {
+                let message = format!("échec de résolution du fichier {}: {e}", file.path.display());
+                tracing::warn!("{message}");
+                warnings.push(message);
+            }
         }
     }
 
@@ -143,13 +174,15 @@ pub async fn instances_install_modpack(
     state
         .downloader
         .run_batch(&app, &instance.id, "Fichiers du modpack", items, 8)
-        .await?;
+        .await
+        .map_err(|e| AppError::Download(format!("instance \"{}\": {e}", instance.name)))?;
 
-    if let Some(overrides_dir) = &resolved.overrides_dir {
-        copy_dir_recursive(overrides_dir, &instance.directory)?;
+    if let Some(overrides_dir) = resolved.overrides_dir.clone() {
+        let dest = instance.directory.clone();
+        spawn_blocking(move || copy_dir_recursive(&overrides_dir, &dest)).await?;
     }
 
-    Ok(instance)
+    Ok(InstanceInstallResult { instance, warnings })
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> AppResult<()> {

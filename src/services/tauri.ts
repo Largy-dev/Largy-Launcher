@@ -106,6 +106,11 @@ export interface ModpackVersionSummary {
 
 export type ProviderId = "ftb" | "curseforge";
 
+export interface InstanceInstallResult {
+  instance: Instance;
+  warnings: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
@@ -204,7 +209,7 @@ export const instancesApi = {
     packIconUrl: string | null,
     instanceName: string,
   ) =>
-    invoke<Instance>("instances_install_modpack", {
+    invoke<InstanceInstallResult>("instances_install_modpack", {
       provider,
       packId,
       versionId,

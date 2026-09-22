@@ -29,7 +29,6 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 async-trait = "0.1"
 thiserror = "2"
 sha1 = "0.10"
-sha2 = "0.10"
 md-5 = "0.10"
 zip = "2"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
@@ -40,9 +39,11 @@ hex = "0.4"
 tauri-plugin-updater = "2.12.0"
 tauri-plugin-process = "2.3.1"
 sysinfo = "0.39.6"
+parking_lot = "0.12"
 
 [dev-dependencies]
 tempfile = "3"
+wiremock = "0.6"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

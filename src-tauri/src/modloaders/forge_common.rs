@@ -249,6 +249,62 @@ fn to_loader_err(e: impl std::fmt::Display) -> LoaderError {
     LoaderError::Other(e.to_string())
 }
 
+type ProcessorPlan = Vec<(String, Vec<String>, Vec<String>)>;
+
+/// Resolves every `data` entry and processor argument against the still-open
+/// installer archive, extracting embedded resources as needed. Pure CPU/disk
+/// work (no network, no async) — run inside `spawn_blocking` so it doesn't
+/// stall the async runtime for as long as the archive takes to walk.
+fn resolve_processor_plan(
+    mut archive: zip::ZipArchive<std::fs::File>,
+    data: &HashMap<String, DataEntry>,
+    processors: &[ProcessorEntry],
+    paths: &AppPaths,
+    mc_version: &str,
+    installer_path: &Path,
+    cache_key: &str,
+) -> Result<(HashMap<String, String>, ProcessorPlan), LoaderError> {
+    let scratch_dir = paths.installers_dir().join("extracted").join(cache_key);
+    let libraries_dir = paths.libraries_dir();
+
+    let mut placeholders = HashMap::new();
+    let minecraft_jar = paths.versions_dir().join(mc_version).join(format!("{mc_version}.jar"));
+    placeholders.insert("SIDE".to_string(), "client".to_string());
+    placeholders.insert("MINECRAFT_JAR".to_string(), minecraft_jar.display().to_string());
+    placeholders.insert("MINECRAFT_VERSION".to_string(), mc_version.to_string());
+    placeholders.insert("ROOT".to_string(), paths.installers_dir().display().to_string());
+    placeholders.insert("INSTALLER".to_string(), installer_path.display().to_string());
+    placeholders.insert("LIBRARY_DIR".to_string(), libraries_dir.display().to_string());
+
+    for (key, entry) in data {
+        let resolved = resolve_token(&mut archive, &entry.client, &libraries_dir, &scratch_dir)?;
+        placeholders.insert(key.clone(), resolved);
+    }
+
+    // Resolve every processor's classpath/args now, while the jar is still
+    // open — a `[coord]` can appear directly in `args` (not just via a
+    // `{TOKEN}`), which needs the same jar-extraction as `data`.
+    let mut runnable_processors = Vec::new();
+    for processor in processors {
+        if !processor.sides.is_empty() && !processor.sides.iter().any(|s| s == "client") {
+            continue;
+        }
+        let classpath = processor
+            .classpath
+            .iter()
+            .filter_map(|coord| maven_path(coord).map(|rel| libraries_dir.join(rel).display().to_string()))
+            .collect::<Vec<_>>();
+        let mut args = Vec::with_capacity(processor.args.len());
+        for raw_arg in &processor.args {
+            let substituted = substitute_placeholders(raw_arg, &placeholders);
+            args.push(resolve_token(&mut archive, &substituted, &libraries_dir, &scratch_dir)?);
+        }
+        runnable_processors.push((processor.jar.clone(), classpath, args));
+    }
+
+    Ok((placeholders, runnable_processors))
+}
+
 /// Downloads `installer_url`, runs its install profile's processor chain
 /// (skipped if `cache_key` was already installed), and returns the resulting
 /// `LoaderProfile`. Shared by Forge and NeoForge.
@@ -303,50 +359,35 @@ pub async fn install_from_installer_jar(
     let marker = paths.libraries_dir().join(".installed").join(format!("{cache_key}.done"));
 
     if !marker.exists() {
-        let scratch_dir = paths.installers_dir().join("extracted").join(cache_key);
-        let libraries_dir = paths.libraries_dir();
+        let data = install_profile.data.clone();
+        let processors = install_profile.processors.clone();
+        let paths_owned = paths.clone();
+        let mc_version_owned = mc_version.to_string();
+        let installer_path_owned = installer_path.clone();
+        let cache_key_owned = cache_key.to_string();
 
-        let mut placeholders = HashMap::new();
-        let minecraft_jar = paths.versions_dir().join(mc_version).join(format!("{mc_version}.jar"));
-        placeholders.insert("SIDE".to_string(), "client".to_string());
-        placeholders.insert("MINECRAFT_JAR".to_string(), minecraft_jar.display().to_string());
-        placeholders.insert("MINECRAFT_VERSION".to_string(), mc_version.to_string());
-        placeholders.insert("ROOT".to_string(), paths.installers_dir().display().to_string());
-        placeholders.insert("INSTALLER".to_string(), installer_path.display().to_string());
-        placeholders.insert("LIBRARY_DIR".to_string(), libraries_dir.display().to_string());
-
-        for (key, entry) in &install_profile.data {
-            let resolved = resolve_token(&mut archive, &entry.client, &libraries_dir, &scratch_dir)?;
-            placeholders.insert(key.clone(), resolved);
-        }
-
-        // Resolve every processor's classpath/args now, while the jar is
-        // still open — a `[coord]` can appear directly in `args` (not just
-        // via a `{TOKEN}`), which needs the same jar-extraction as `data`.
-        let mut runnable_processors = Vec::new();
-        for processor in &install_profile.processors {
-            if !processor.sides.is_empty() && !processor.sides.iter().any(|s| s == "client") {
-                continue;
-            }
-            let classpath = processor
-                .classpath
-                .iter()
-                .filter_map(|coord| maven_path(coord).map(|rel| libraries_dir.join(rel).display().to_string()))
-                .collect::<Vec<_>>();
-            let mut args = Vec::with_capacity(processor.args.len());
-            for raw_arg in &processor.args {
-                let substituted = substitute_placeholders(raw_arg, &placeholders);
-                args.push(resolve_token(&mut archive, &substituted, &libraries_dir, &scratch_dir)?);
-            }
-            runnable_processors.push((processor.jar.clone(), classpath, args));
-        }
-        drop(archive);
+        // `placeholders` isn't needed here: `resolve_processor_plan` already
+        // baked every resolved value into `runnable_processors`' args.
+        let (_placeholders, runnable_processors) = tokio::task::spawn_blocking(move || {
+            resolve_processor_plan(
+                archive,
+                &data,
+                &processors,
+                &paths_owned,
+                &mc_version_owned,
+                &installer_path_owned,
+                &cache_key_owned,
+            )
+        })
+        .await
+        .map_err(|e| LoaderError::Other(format!("tâche de fond interrompue: {e}")))??;
 
         let vanilla_entry = manifest::find_version_entry(client, mc_version).await.map_err(to_loader_err)?;
         let vanilla_raw = manifest::fetch_version_json(client, &vanilla_entry.url).await.map_err(to_loader_err)?;
         let java_component = crate::java::resolve_component(vanilla_raw.java_version.as_ref());
         let runtime = java.ensure_runtime(app, paths, &java_component).await.map_err(to_loader_err)?;
 
+        let libraries_dir = paths.libraries_dir();
         for (jar, classpath, args) in &runnable_processors {
             run_processor(jar, classpath, args, &libraries_dir, &runtime.path).await?;
         }

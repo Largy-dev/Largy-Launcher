@@ -7,9 +7,10 @@
 //! which case we fall back to `FileDownloadInfo::ManualRequired`).
 
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use serde::Deserialize;
 use tokio::task::JoinSet;
 
@@ -34,7 +35,7 @@ impl CurseForgeProvider {
     }
 
     fn key(&self) -> Result<String, ProviderError> {
-        let key = self.api_key.read().unwrap().clone();
+        let key = self.api_key.read().clone();
         if key.trim().is_empty() {
             return Err(ProviderError::Other(
                 "Clé API CurseForge manquante. Ouvre Paramètres et renseigne ta clé depuis \
@@ -293,8 +294,14 @@ impl ModpackProvider for CurseForgeProvider {
         }
 
         let extract_dir = self.cache_dir.join(format!("{pack_id}-{version_id}-extracted"));
-        let manifest = extract_manifest_and_overrides(&pack_zip_path, &extract_dir)
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        let manifest = {
+            let zip_path = pack_zip_path.clone();
+            let extract_dir = extract_dir.clone();
+            tokio::task::spawn_blocking(move || extract_manifest_and_overrides(&zip_path, &extract_dir))
+                .await
+                .map_err(|e| ProviderError::Other(format!("tâche de fond interrompue: {e}")))?
+                .map_err(|e| ProviderError::Other(e.to_string()))?
+        };
 
         let (loader, loader_version) = manifest
             .minecraft

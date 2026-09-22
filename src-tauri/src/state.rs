@@ -3,8 +3,9 @@
 //! `AppHandle` to resolve the app data directory.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 
+use parking_lot::{Mutex, RwLock};
 use tauri::AppHandle;
 
 use crate::auth::AccountSession;
