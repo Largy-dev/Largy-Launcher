@@ -116,6 +116,21 @@ pub async fn try_silent_login(
     Ok(Some(session))
 }
 
+pub fn now_unix() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
+}
+
+/// True when `session`'s Minecraft access token has already expired or will
+/// within the next few minutes (relative to `now`). The launcher never
+/// checked this before handing the cached token to the game, which meant a
+/// session opened long enough before pressing Play could hand Minecraft a
+/// stale token — the game then refuses it with "invalid session, restart the
+/// game/launcher" even though the launcher itself still looked logged in.
+pub fn needs_refresh(session: &AccountSession, now: i64) -> bool {
+    const REFRESH_BUFFER_SECS: i64 = 300;
+    session.expires_at - now <= REFRESH_BUFFER_SECS
+}
+
 pub fn logout(paths: &AppPaths) -> AppResult<()> {
     if let Some(meta) = load_active_account(paths)? {
         TokenStore::delete_refresh_token(&meta.id)?;
@@ -209,6 +224,34 @@ mod tests {
         assert!(offline_session("").is_err());
         assert!(offline_session("   ").is_err());
         assert!(offline_session("ThisNameIsWayTooLong").is_err());
+    }
+
+    fn fixture_session(expires_at: i64) -> AccountSession {
+        AccountSession {
+            profile: MinecraftProfile { id: "uuid".to_string(), name: "Steve".to_string() },
+            minecraft_access_token: "token".to_string(),
+            expires_at,
+        }
+    }
+
+    #[test]
+    fn needs_refresh_is_false_well_before_expiry() {
+        assert!(!needs_refresh(&fixture_session(10_000), 1_000));
+    }
+
+    #[test]
+    fn needs_refresh_is_true_once_within_the_buffer_window() {
+        assert!(needs_refresh(&fixture_session(1_200), 1_000));
+    }
+
+    #[test]
+    fn needs_refresh_is_true_once_already_expired() {
+        assert!(needs_refresh(&fixture_session(500), 1_000));
+    }
+
+    #[test]
+    fn needs_refresh_is_false_for_an_offline_session() {
+        assert!(!needs_refresh(&offline_session("Steve").unwrap(), now_unix()));
     }
 
     #[test]

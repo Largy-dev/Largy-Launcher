@@ -74,13 +74,31 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     let account = if settings.offline_mode {
         crate::auth::offline_session(&settings.offline_username)?
     } else {
-        state.active_account.read().clone().ok_or_else(|| {
+        let current = state.active_account.read().clone().ok_or_else(|| {
             AppError::Auth(
                 "Connecte-toi avec un compte Microsoft avant de lancer le jeu, ou active le Mode \
                  Hors-ligne dans Paramètres."
                     .to_string(),
             )
-        })?
+        })?;
+
+        // A session opened long enough before pressing Play can hold a
+        // Minecraft access token that's since expired — refresh it now
+        // rather than handing the game a token it will reject mid-session
+        // with "invalid session, restart the game/launcher".
+        if crate::auth::needs_refresh(&current, crate::auth::now_unix()) {
+            let refreshed = crate::auth::try_silent_login(&state.paths, &state.client, &settings.azure_client_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::Auth(
+                        "Ta session Microsoft a expiré — reconnecte-toi avant de relancer le jeu.".to_string(),
+                    )
+                })?;
+            *state.active_account.write() = Some(refreshed.clone());
+            refreshed
+        } else {
+            current
+        }
     };
 
     let prepared = minecraft::prepare_version(
