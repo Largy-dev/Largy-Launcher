@@ -25,6 +25,12 @@ struct LoaderVersionInfo {
     version: String,
 }
 
+/// Split out from [`QuiltInstaller::list_versions`] so the response-to-version-list
+/// mapping is testable without a network round-trip.
+fn versions(entries: Vec<LoaderVersionEntry>) -> Vec<String> {
+    entries.into_iter().map(|e| e.loader.version).collect()
+}
+
 pub struct QuiltInstaller {
     client: reqwest::Client,
     downloader: DownloadManager,
@@ -55,7 +61,7 @@ impl LoaderInstaller for QuiltInstaller {
             .await?
             .json()
             .await?;
-        Ok(entries.into_iter().map(|e| e.loader.version).collect())
+        Ok(versions(entries))
     }
 
     async fn resolve(
@@ -76,5 +82,19 @@ impl LoaderInstaller for QuiltInstaller {
             .await?;
 
         loader_profile_from_delta_json(app, &self.downloader, &raw, &self.libraries_dir).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn versions_maps_every_entry_to_its_loader_version() {
+        let entries = vec![
+            LoaderVersionEntry { loader: LoaderVersionInfo { version: "0.24.0".to_string() } },
+            LoaderVersionEntry { loader: LoaderVersionInfo { version: "0.23.1".to_string() } },
+        ];
+        assert_eq!(versions(entries), vec!["0.24.0".to_string(), "0.23.1".to_string()]);
     }
 }

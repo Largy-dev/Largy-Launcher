@@ -3,18 +3,63 @@
 //! runtime, then hands the assembled command line to [`super::spawn`].
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex as AsyncMutex;
 
+use crate::auth::AccountSession;
 use crate::error::{AppError, AppResult};
-use crate::instances;
+use crate::instances::{self, Instance};
 use crate::minecraft::{self, launch_args::LaunchContext, libraries as mc_libraries};
 use crate::providers::LoaderKind;
+use crate::settings::GlobalSettings;
 use crate::state::AppState;
 
 use super::{InstanceExit, RunningChild};
+
+/// Builds the `${...}`-style substitution map for a launch's JVM/game
+/// arguments from the account, instance, resolved settings, and version
+/// metadata involved. Split out from [`launch_instance`] so this assembly —
+/// the most complex pure logic in the launch path — is testable without
+/// spawning a real java process.
+#[allow(clippy::too_many_arguments)]
+fn build_placeholders(
+    account: &AccountSession,
+    instance: &Instance,
+    settings: &GlobalSettings,
+    asset_index_id: &str,
+    natives_directory: &Path,
+    assets_dir: &Path,
+    libraries_dir: &Path,
+) -> HashMap<String, String> {
+    let mut placeholders = HashMap::new();
+    placeholders.insert("auth_player_name".to_string(), account.profile.name.clone());
+    placeholders.insert("auth_uuid".to_string(), account.profile.id.clone());
+    placeholders.insert("auth_access_token".to_string(), account.minecraft_access_token.clone());
+    placeholders.insert("auth_xuid".to_string(), account.profile.id.clone());
+    placeholders.insert(
+        "user_type".to_string(),
+        (if settings.offline_mode { "legacy" } else { "msa" }).to_string(),
+    );
+    placeholders.insert("version_name".to_string(), instance.minecraft_version.clone());
+    placeholders.insert("game_directory".to_string(), instance.directory.display().to_string());
+    placeholders.insert("assets_root".to_string(), assets_dir.display().to_string());
+    placeholders.insert("assets_index_name".to_string(), asset_index_id.to_string());
+    placeholders.insert("version_type".to_string(), "release".to_string());
+    placeholders.insert("user_properties".to_string(), "{}".to_string());
+    placeholders.insert("clientid".to_string(), "-".to_string());
+    placeholders.insert("launcher_name".to_string(), "LargyLauncher".to_string());
+    placeholders.insert("launcher_version".to_string(), env!("CARGO_PKG_VERSION").to_string());
+    placeholders.insert("natives_directory".to_string(), natives_directory.display().to_string());
+    placeholders.insert("library_directory".to_string(), libraries_dir.display().to_string());
+    placeholders.insert(
+        "classpath_separator".to_string(),
+        if cfg!(windows) { ";" } else { ":" }.to_string(),
+    );
+    placeholders
+}
 
 pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &str) -> AppResult<()> {
     {
@@ -98,29 +143,14 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
         _ => state.java.ensure_runtime(app, &state.paths, &java_component).await?.path,
     };
 
-    let mut placeholders = HashMap::new();
-    placeholders.insert("auth_player_name".to_string(), account.profile.name.clone());
-    placeholders.insert("auth_uuid".to_string(), account.profile.id.clone());
-    placeholders.insert("auth_access_token".to_string(), account.minecraft_access_token.clone());
-    placeholders.insert("auth_xuid".to_string(), account.profile.id.clone());
-    placeholders.insert(
-        "user_type".to_string(),
-        (if settings.offline_mode { "legacy" } else { "msa" }).to_string(),
-    );
-    placeholders.insert("version_name".to_string(), instance.minecraft_version.clone());
-    placeholders.insert("game_directory".to_string(), instance.directory.display().to_string());
-    placeholders.insert("assets_root".to_string(), state.paths.assets_dir().display().to_string());
-    placeholders.insert("assets_index_name".to_string(), prepared.asset_index_id.clone());
-    placeholders.insert("version_type".to_string(), "release".to_string());
-    placeholders.insert("user_properties".to_string(), "{}".to_string());
-    placeholders.insert("clientid".to_string(), "-".to_string());
-    placeholders.insert("launcher_name".to_string(), "LargyLauncher".to_string());
-    placeholders.insert("launcher_version".to_string(), env!("CARGO_PKG_VERSION").to_string());
-    placeholders.insert("natives_directory".to_string(), natives_directory.display().to_string());
-    placeholders.insert("library_directory".to_string(), state.paths.libraries_dir().display().to_string());
-    placeholders.insert(
-        "classpath_separator".to_string(),
-        if cfg!(windows) { ";" } else { ":" }.to_string(),
+    let placeholders = build_placeholders(
+        &account,
+        &instance,
+        &settings,
+        &prepared.asset_index_id,
+        &natives_directory,
+        &state.paths.assets_dir(),
+        &state.paths.libraries_dir(),
     );
 
     let mut extra_jvm_args = settings.default_jvm_args.clone();
@@ -185,4 +215,91 @@ pub async fn stop_instance(state: &AppState, instance_id: &str) -> AppResult<()>
 
 pub fn is_running(state: &AppState, instance_id: &str) -> bool {
     state.running.lock().contains_key(instance_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::MinecraftProfile;
+    use crate::providers::LoaderKind;
+    use std::path::PathBuf;
+
+    fn fixture_account() -> AccountSession {
+        AccountSession {
+            profile: MinecraftProfile { id: "uuid-1".to_string(), name: "Steve".to_string() },
+            minecraft_access_token: "token-abc".to_string(),
+            expires_at: 0,
+        }
+    }
+
+    fn fixture_instance() -> Instance {
+        Instance {
+            id: "instance-1".to_string(),
+            name: "Demo".to_string(),
+            minecraft_version: "1.20.1".to_string(),
+            loader: LoaderKind::Vanilla,
+            loader_version: None,
+            directory: PathBuf::from("/instances/instance-1"),
+            icon_url: None,
+            min_memory_mb: None,
+            max_memory_mb: None,
+            extra_jvm_args: Vec::new(),
+            modpack: None,
+            created_at: 0,
+            last_played_at: None,
+        }
+    }
+
+    #[test]
+    fn build_placeholders_fills_auth_and_version_fields_from_account_and_instance() {
+        let placeholders = build_placeholders(
+            &fixture_account(),
+            &fixture_instance(),
+            &GlobalSettings::default(),
+            "17",
+            Path::new("/instances/instance-1/natives"),
+            Path::new("/cache/assets"),
+            Path::new("/cache/libraries"),
+        );
+
+        assert_eq!(placeholders["auth_player_name"], "Steve");
+        assert_eq!(placeholders["auth_uuid"], "uuid-1");
+        assert_eq!(placeholders["auth_access_token"], "token-abc");
+        assert_eq!(placeholders["auth_xuid"], "uuid-1");
+        assert_eq!(placeholders["version_name"], "1.20.1");
+        assert_eq!(placeholders["assets_index_name"], "17");
+        assert_eq!(placeholders["user_type"], "msa");
+    }
+
+    #[test]
+    fn build_placeholders_uses_legacy_user_type_in_offline_mode() {
+        let settings = GlobalSettings { offline_mode: true, ..GlobalSettings::default() };
+        let placeholders = build_placeholders(
+            &fixture_account(),
+            &fixture_instance(),
+            &settings,
+            "17",
+            Path::new("/natives"),
+            Path::new("/assets"),
+            Path::new("/libraries"),
+        );
+
+        assert_eq!(placeholders["user_type"], "legacy");
+    }
+
+    #[test]
+    fn build_placeholders_uses_platform_classpath_separator() {
+        let placeholders = build_placeholders(
+            &fixture_account(),
+            &fixture_instance(),
+            &GlobalSettings::default(),
+            "17",
+            Path::new("/natives"),
+            Path::new("/assets"),
+            Path::new("/libraries"),
+        );
+
+        let expected = if cfg!(windows) { ";" } else { ":" };
+        assert_eq!(placeholders["classpath_separator"], expected);
+    }
 }

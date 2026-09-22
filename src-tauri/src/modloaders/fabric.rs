@@ -27,6 +27,13 @@ struct LoaderVersionInfo {
     stable: bool,
 }
 
+/// Keeps only stable loader releases. Split out from
+/// [`FabricInstaller::list_versions`] so this filter is testable without a
+/// network round-trip.
+fn stable_versions(entries: Vec<LoaderVersionEntry>) -> Vec<String> {
+    entries.into_iter().filter(|e| e.loader.stable).map(|e| e.loader.version).collect()
+}
+
 pub struct FabricInstaller {
     client: reqwest::Client,
     downloader: DownloadManager,
@@ -57,11 +64,7 @@ impl LoaderInstaller for FabricInstaller {
             .await?
             .json()
             .await?;
-        Ok(entries
-            .into_iter()
-            .filter(|e| e.loader.stable)
-            .map(|e| e.loader.version)
-            .collect())
+        Ok(stable_versions(entries))
     }
 
     async fn resolve(
@@ -82,5 +85,28 @@ impl LoaderInstaller for FabricInstaller {
             .await?;
 
         loader_profile_from_delta_json(app, &self.downloader, &raw, &self.libraries_dir).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(version: &str, stable: bool) -> LoaderVersionEntry {
+        LoaderVersionEntry {
+            loader: LoaderVersionInfo { version: version.to_string(), stable },
+        }
+    }
+
+    #[test]
+    fn stable_versions_keeps_only_stable_entries_in_order() {
+        let entries = vec![entry("0.16.0", true), entry("0.17.0-beta", false), entry("0.15.11", true)];
+        assert_eq!(stable_versions(entries), vec!["0.16.0".to_string(), "0.15.11".to_string()]);
+    }
+
+    #[test]
+    fn stable_versions_returns_empty_when_none_are_stable() {
+        let entries = vec![entry("0.17.0-beta", false)];
+        assert!(stable_versions(entries).is_empty());
     }
 }

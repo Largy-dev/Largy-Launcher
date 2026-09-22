@@ -1,10 +1,12 @@
+use std::path::Path;
+
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::download::DownloadItem;
 use crate::error::{AppError, AppResult};
 use crate::instances::{self, CreateInstanceInput, Instance, ModpackRef};
-use crate::providers::{FileDownloadInfo, LoaderKind};
+use crate::providers::{FileDownloadInfo, LoaderKind, ModpackFileRef, ModpackProvider};
 use crate::state::AppState;
 
 /// Result of an instance install/update: the instance itself, plus any
@@ -141,13 +143,43 @@ pub async fn instances_install_modpack(
     };
     let instance = spawn_blocking(move || instances::create(&paths, create_input)).await?;
 
+    let (items, warnings) = resolve_download_items(provider_ref, &resolved.files, &instance.directory).await;
+
+    // task_id is the instance id itself, so the frontend can match a
+    // download-progress event back to the specific instance card that's
+    // currently installing (several installs could otherwise share the
+    // same generic task name and be indistinguishable in the UI).
+    state
+        .downloader
+        .run_batch(&app, &instance.id, "Fichiers du modpack", items, 8)
+        .await
+        .map_err(|e| AppError::Download(format!("instance \"{}\": {e}", instance.name)))?;
+
+    if let Some(overrides_dir) = resolved.overrides_dir.clone() {
+        let dest = instance.directory.clone();
+        spawn_blocking(move || copy_dir_recursive(&overrides_dir, &dest)).await?;
+    }
+
+    Ok(InstanceInstallResult { instance, warnings })
+}
+
+/// Resolves every modpack file's real download URL against `provider`,
+/// splitting the results into ready-to-download items and human-readable
+/// warnings for files that need manual download or failed to resolve. Split
+/// out from [`instances_install_modpack`] so the warnings-aggregation logic
+/// is testable against a fake provider instead of a real network call.
+async fn resolve_download_items(
+    provider: &dyn ModpackProvider,
+    files: &[ModpackFileRef],
+    instance_dir: &Path,
+) -> (Vec<DownloadItem>, Vec<String>) {
     let mut items = Vec::new();
     let mut warnings = Vec::new();
-    for file in &resolved.files {
-        match provider_ref.resolve_file_download(file).await {
+    for file in files {
+        match provider.resolve_file_download(file).await {
             Ok(FileDownloadInfo::Direct { url }) => items.push(DownloadItem {
                 url,
-                dest: instance.directory.join(&file.path),
+                dest: instance_dir.join(&file.path),
                 sha1: file.sha1.clone(),
                 size: (file.size > 0).then_some(file.size),
             }),
@@ -166,23 +198,7 @@ pub async fn instances_install_modpack(
             }
         }
     }
-
-    // task_id is the instance id itself, so the frontend can match a
-    // download-progress event back to the specific instance card that's
-    // currently installing (several installs could otherwise share the
-    // same generic task name and be indistinguishable in the UI).
-    state
-        .downloader
-        .run_batch(&app, &instance.id, "Fichiers du modpack", items, 8)
-        .await
-        .map_err(|e| AppError::Download(format!("instance \"{}\": {e}", instance.name)))?;
-
-    if let Some(overrides_dir) = resolved.overrides_dir.clone() {
-        let dest = instance.directory.clone();
-        spawn_blocking(move || copy_dir_recursive(&overrides_dir, &dest)).await?;
-    }
-
-    Ok(InstanceInstallResult { instance, warnings })
+    (items, warnings)
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> AppResult<()> {
@@ -203,4 +219,114 @@ fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> AppResul
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::{ModpackDetails, ModpackSummary, ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery};
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+
+    #[derive(Clone)]
+    enum MockOutcome {
+        Direct(String),
+        ManualRequired { browser_url: String, expected_filename: String },
+        Failed(String),
+    }
+
+    struct MockProvider {
+        outcomes: HashMap<String, MockOutcome>,
+    }
+
+    #[async_trait]
+    impl ModpackProvider for MockProvider {
+        fn id(&self) -> &'static str {
+            "mock"
+        }
+        fn display_name(&self) -> &'static str {
+            "Mock"
+        }
+        async fn search(&self, _query: SearchQuery) -> Result<Vec<ModpackSummary>, ProviderError> {
+            unimplemented!("not exercised by these tests")
+        }
+        async fn get_modpack(&self, _pack_id: &str) -> Result<ModpackDetails, ProviderError> {
+            unimplemented!("not exercised by these tests")
+        }
+        async fn get_versions(&self, _pack_id: &str) -> Result<Vec<ModpackVersionSummary>, ProviderError> {
+            unimplemented!("not exercised by these tests")
+        }
+        async fn resolve_version(
+            &self,
+            _pack_id: &str,
+            _version_id: &str,
+        ) -> Result<ResolvedModpackVersion, ProviderError> {
+            unimplemented!("not exercised by these tests")
+        }
+        async fn resolve_file_download(&self, file: &ModpackFileRef) -> Result<FileDownloadInfo, ProviderError> {
+            match self.outcomes.get(&file.file_id) {
+                Some(MockOutcome::Direct(url)) => Ok(FileDownloadInfo::Direct { url: url.clone() }),
+                Some(MockOutcome::ManualRequired { browser_url, expected_filename }) => {
+                    Ok(FileDownloadInfo::ManualRequired {
+                        browser_url: browser_url.clone(),
+                        expected_filename: expected_filename.clone(),
+                    })
+                }
+                Some(MockOutcome::Failed(message)) => Err(ProviderError::Other(message.clone())),
+                None => panic!("unexpected file id in test: {}", file.file_id),
+            }
+        }
+    }
+
+    fn file_ref(file_id: &str, path: &str) -> ModpackFileRef {
+        ModpackFileRef {
+            project_id: "proj".to_string(),
+            file_id: file_id.to_string(),
+            path: std::path::PathBuf::from(path),
+            sha1: None,
+            size: 0,
+            direct_url: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_download_items_collects_direct_downloads_and_skips_the_rest() {
+        let provider = MockProvider {
+            outcomes: HashMap::from([
+                ("ok".to_string(), MockOutcome::Direct("https://example.com/a.jar".to_string())),
+                (
+                    "manual".to_string(),
+                    MockOutcome::ManualRequired {
+                        browser_url: "https://example.com/b".to_string(),
+                        expected_filename: "b.jar".to_string(),
+                    },
+                ),
+                ("broken".to_string(), MockOutcome::Failed("boom".to_string())),
+            ]),
+        };
+        let files = vec![file_ref("ok", "mods/a.jar"), file_ref("manual", "mods/b.jar"), file_ref("broken", "mods/c.jar")];
+
+        let (items, warnings) = resolve_download_items(&provider, &files, Path::new("/instance")).await;
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].url, "https://example.com/a.jar");
+        assert!(items[0].dest.ends_with("mods/a.jar"));
+
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings[0].contains("mods/b.jar") && warnings[0].contains("téléchargement manuel"));
+        assert!(warnings[1].contains("mods/c.jar") && warnings[1].contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn resolve_download_items_returns_no_warnings_when_everything_resolves() {
+        let provider = MockProvider {
+            outcomes: HashMap::from([("ok".to_string(), MockOutcome::Direct("https://example.com/a.jar".to_string()))]),
+        };
+        let files = vec![file_ref("ok", "mods/a.jar")];
+
+        let (items, warnings) = resolve_download_items(&provider, &files, Path::new("/instance")).await;
+
+        assert_eq!(items.len(), 1);
+        assert!(warnings.is_empty());
+    }
 }
