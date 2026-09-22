@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/lib/notify";
 import { auth, errorMessage, settingsApi, type DeviceCodeInfo } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
@@ -40,11 +40,11 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     mutationFn: () => settingsApi.update({ ...settings!, offline_mode: false }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
-      toast.success("Mode hors-ligne désactivé");
+      notify.success({ title: "Mode hors-ligne désactivé", history: false });
       onOpenChange(false);
       reset();
     },
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e) => notify.error({ title: "Impossible de modifier les paramètres", message: errorMessage(e) }),
   });
 
   function reset() {
@@ -67,7 +67,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       setStatus("polling");
       const session = await auth.completeLogin(info);
       setAccount(session);
-      toast.success(`Connecté en tant que ${session.profile.name}`);
+      notify.success({ title: `Bienvenue, ${session.profile.name} !`, message: "Compte Microsoft connecté." });
       if (settings?.offline_mode) {
         setStatus("confirm-offline");
       } else {

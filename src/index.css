@@ -10,6 +10,14 @@
   --font-sans: "Geist Variable", sans-serif;
   --font-mono: ui-monospace, "Geist Mono", "SF Mono", Consolas, monospace;
   --color-brand: var(--brand);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-loader-vanilla: var(--loader-vanilla);
+  --color-loader-forge: var(--loader-forge);
+  --color-loader-neoforge: var(--loader-neoforge);
+  --color-loader-fabric: var(--loader-fabric);
+  --color-loader-quilt: var(--loader-quilt);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -40,216 +48,182 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
 }
 
 /*
-  Palette: warm neutral surfaces + a single restrained moss-green accent
-  (a quiet nod to Minecraft without going neon/cartoon). No gradients,
-  no glow — flat surfaces, real borders, deliberate contrast.
+  Palette « gaming » : surfaces bleu-nuit profondes en sombre, gris-bleu clairs
+  en clair. Toutes les teintes d'accent dérivent d'une seule couleur de base
+  (--accent-base / --accent-fg) posée par [data-accent] — voir src/lib/theme.ts.
 */
 :root {
-  --background: #faf9f7;
-  --foreground: #1c1c1a;
+  --background: #f4f6fb;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #1c1c1a;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #1c1c1a;
-  --primary: #1b7a3e;
-  --primary-foreground: #ffffff;
-  --secondary: #f0efec;
-  --secondary-foreground: #1c1c1a;
-  --muted: #f0efec;
-  --muted-foreground: #6b6b64;
-  --accent: #eaf3ec;
-  --accent-foreground: #145c30;
-  --destructive: #c62828;
-  --border: #e4e2dd;
-  --input: #e4e2dd;
-  --ring: #2f9e52;
-  --radius: 0.5rem;
-  --brand: #1b7a3e;
-  --sidebar: #f2f1ed;
-  --sidebar-foreground: #1c1c1a;
-  --sidebar-primary: #1b7a3e;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e6e4de;
-  --sidebar-accent-foreground: #1c1c1a;
-  --sidebar-border: #e0ded8;
-  --sidebar-ring: #2f9e52;
+  --popover-foreground: #0f172a;
+  --secondary: #eaeef6;
+  --secondary-foreground: #0f172a;
+  --muted: #eaeef6;
+  --muted-foreground: #5b6479;
+  --destructive: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
+  --info: #2563eb;
+  --border: #dbe1ec;
+  --input: #dbe1ec;
+  --radius: 0.625rem;
+  --sidebar: #eaeef6;
+  --sidebar-foreground: #0f172a;
+  --sidebar-accent: #dde3ef;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #d5dbe8;
+  --surface-glass: color-mix(in oklab, #ffffff 72%, transparent);
+  --surface-glass-strong: color-mix(in oklab, #ffffff 88%, transparent);
+  --loader-vanilla: #4f9a36;
+  --loader-forge: #d9681c;
+  --loader-neoforge: #e5484d;
+  --loader-fabric: #b88a4a;
+  --loader-quilt: #9333ea;
+  --accent-base: #16a34a;
+  --accent-fg: #ffffff;
 }
 
 .dark {
-  --background: #131311;
-  --foreground: #ecebe6;
-  --card: #1a1a17;
-  --card-foreground: #ecebe6;
-  --popover: #1a1a17;
-  --popover-foreground: #ecebe6;
-  --primary: #3fae67;
-  --primary-foreground: #0d1f13;
-  --secondary: #232320;
-  --secondary-foreground: #ecebe6;
-  --muted: #201f1c;
-  --muted-foreground: #a3a199;
-  --accent: #1c2a1f;
-  --accent-foreground: #7fd39c;
-  --destructive: #e5484d;
-  --border: #2b2a26;
-  --input: #2b2a26;
-  --ring: #3fae67;
-  --brand: #3fae67;
-  --sidebar: #171714;
-  --sidebar-foreground: #ecebe6;
-  --sidebar-primary: #3fae67;
-  --sidebar-primary-foreground: #0d1f13;
-  --sidebar-accent: #1e1e1a;
-  --sidebar-accent-foreground: #ecebe6;
-  --sidebar-border: #262622;
-  --sidebar-ring: #3fae67;
+  --background: #0a0d16;
+  --foreground: #e7ebf5;
+  --card: #121827;
+  --card-foreground: #e7ebf5;
+  --popover: #141b2c;
+  --popover-foreground: #e7ebf5;
+  --secondary: #1a2236;
+  --secondary-foreground: #e7ebf5;
+  --muted: #182033;
+  --muted-foreground: #8d97ae;
+  --destructive: #f25f5c;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+  --border: #222c43;
+  --input: #26304a;
+  --sidebar: #0d1220;
+  --sidebar-foreground: #e7ebf5;
+  --sidebar-accent: #182033;
+  --sidebar-accent-foreground: #e7ebf5;
+  --sidebar-border: #1b2438;
+  --surface-glass: color-mix(in oklab, #121827 62%, transparent);
+  --surface-glass-strong: color-mix(in oklab, #121827 84%, transparent);
+  --loader-vanilla: #6cc24a;
+  --loader-forge: #f28c38;
+  --loader-neoforge: #ff6b6b;
+  --loader-fabric: #dbb27a;
+  --loader-quilt: #b574ff;
+  --accent-base: #4ade80;
+  --accent-fg: #052e16;
 }
 
-/*
-  Accent themes: swap just the brand-tinted tokens (primary, ring, brand,
-  sidebar-primary, accent) via [data-accent] on <html>, set by
-  src/lib/theme.ts. Neutral surface tokens (background, card, border, muted,
-  destructive, plain sidebar colors) stay the same across every accent.
-*/
+/* Accent presets — only the base color and its readable foreground change. */
 :root[data-accent="green"] {
-  --primary: #1b7a3e;
-  --primary-foreground: #ffffff;
-  --ring: #2f9e52;
-  --brand: #1b7a3e;
-  --accent: #eaf3ec;
-  --accent-foreground: #145c30;
-  --sidebar-primary: #1b7a3e;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-ring: #2f9e52;
+  --accent-base: #16a34a;
+  --accent-fg: #ffffff;
 }
 .dark[data-accent="green"] {
-  --primary: #3fae67;
-  --primary-foreground: #0d1f13;
-  --ring: #3fae67;
-  --brand: #3fae67;
-  --accent: #1c2a1f;
-  --accent-foreground: #7fd39c;
-  --sidebar-primary: #3fae67;
-  --sidebar-primary-foreground: #0d1f13;
-  --sidebar-ring: #3fae67;
+  --accent-base: #4ade80;
+  --accent-fg: #052e16;
 }
-
-:root[data-accent="black"] {
-  --primary: #27272a;
-  --primary-foreground: #ffffff;
-  --ring: #3f3f46;
-  --brand: #27272a;
-  --accent: #f0f0f1;
-  --accent-foreground: #27272a;
-  --sidebar-primary: #27272a;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-ring: #3f3f46;
-}
-.dark[data-accent="black"] {
-  --primary: #a1a1aa;
-  --primary-foreground: #18181b;
-  --ring: #a1a1aa;
-  --brand: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #d4d4d8;
-  --sidebar-primary: #a1a1aa;
-  --sidebar-primary-foreground: #18181b;
-  --sidebar-ring: #a1a1aa;
-}
-
-:root[data-accent="white"] {
-  --primary: #e4e4e7;
-  --primary-foreground: #18181b;
-  --ring: #a1a1aa;
-  --brand: #e4e4e7;
-  --accent: #f4f4f5;
-  --accent-foreground: #3f3f46;
-  --sidebar-primary: #e4e4e7;
-  --sidebar-primary-foreground: #18181b;
-  --sidebar-ring: #a1a1aa;
-}
-.dark[data-accent="white"] {
-  --primary: #fafafa;
-  --primary-foreground: #18181b;
-  --ring: #fafafa;
-  --brand: #fafafa;
-  --accent: #3f3f46;
-  --accent-foreground: #fafafa;
-  --sidebar-primary: #fafafa;
-  --sidebar-primary-foreground: #18181b;
-  --sidebar-ring: #fafafa;
-}
-
-:root[data-accent="violet"] {
-  --primary: #7c3aed;
-  --primary-foreground: #ffffff;
-  --ring: #8b5cf6;
-  --brand: #7c3aed;
-  --accent: #f1e9fe;
-  --accent-foreground: #5b21b6;
-  --sidebar-primary: #7c3aed;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-ring: #8b5cf6;
-}
-.dark[data-accent="violet"] {
-  --primary: #a78bfa;
-  --primary-foreground: #1e1033;
-  --ring: #a78bfa;
-  --brand: #a78bfa;
-  --accent: #2c1f47;
-  --accent-foreground: #c4b5fd;
-  --sidebar-primary: #a78bfa;
-  --sidebar-primary-foreground: #1e1033;
-  --sidebar-ring: #a78bfa;
-}
-
-:root[data-accent="red"] {
-  --primary: #dc2626;
-  --primary-foreground: #ffffff;
-  --ring: #ef4444;
-  --brand: #dc2626;
-  --accent: #fde8e8;
-  --accent-foreground: #991b1b;
-  --sidebar-primary: #dc2626;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-ring: #ef4444;
-}
-.dark[data-accent="red"] {
-  --primary: #f87171;
-  --primary-foreground: #2a0e0e;
-  --ring: #f87171;
-  --brand: #f87171;
-  --accent: #3f1d1d;
-  --accent-foreground: #fca5a5;
-  --sidebar-primary: #f87171;
-  --sidebar-primary-foreground: #2a0e0e;
-  --sidebar-ring: #f87171;
-}
-
 :root[data-accent="blue"] {
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --ring: #3b82f6;
-  --brand: #2563eb;
-  --accent: #e6eefd;
-  --accent-foreground: #1e40af;
-  --sidebar-primary: #2563eb;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-ring: #3b82f6;
+  --accent-base: #2563eb;
+  --accent-fg: #ffffff;
 }
 .dark[data-accent="blue"] {
-  --primary: #60a5fa;
-  --primary-foreground: #0d1b33;
-  --ring: #60a5fa;
-  --brand: #60a5fa;
-  --accent: #1e293f;
-  --accent-foreground: #93c5fd;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #0d1b33;
-  --sidebar-ring: #60a5fa;
+  --accent-base: #60a5fa;
+  --accent-fg: #0b1a33;
+}
+:root[data-accent="violet"] {
+  --accent-base: #7c3aed;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="violet"] {
+  --accent-base: #a78bfa;
+  --accent-fg: #1e1033;
+}
+:root[data-accent="red"] {
+  --accent-base: #dc2626;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="red"] {
+  --accent-base: #f87171;
+  --accent-fg: #2a0e0e;
+}
+:root[data-accent="orange"] {
+  --accent-base: #ea580c;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="orange"] {
+  --accent-base: #fb923c;
+  --accent-fg: #2b1203;
+}
+:root[data-accent="cyan"] {
+  --accent-base: #0891b2;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="cyan"] {
+  --accent-base: #22d3ee;
+  --accent-fg: #042f36;
+}
+:root[data-accent="pink"] {
+  --accent-base: #db2777;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="pink"] {
+  --accent-base: #f472b6;
+  --accent-fg: #33061c;
+}
+:root[data-accent="black"] {
+  --accent-base: #27272a;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="black"] {
+  --accent-base: #a1a1aa;
+  --accent-fg: #18181b;
+}
+:root[data-accent="white"] {
+  --accent-base: #52525b;
+  --accent-fg: #ffffff;
+}
+.dark[data-accent="white"] {
+  --accent-base: #fafafa;
+  --accent-fg: #18181b;
+}
+/* Set inline on <html> by applyTheme() from the user's color picker. */
+:root[data-accent="custom"] {
+  --accent-base: var(--accent-custom);
+  --accent-fg: var(--accent-custom-fg);
+}
+
+/* Every accent-tinted token, derived from the base color. */
+:root {
+  --primary: var(--accent-base);
+  --primary-foreground: var(--accent-fg);
+  --ring: var(--accent-base);
+  --brand: var(--accent-base);
+  --accent: color-mix(in oklab, var(--accent-base) 14%, var(--background));
+  --accent-foreground: color-mix(in oklab, var(--accent-base) 70%, var(--foreground));
+  --sidebar-primary: var(--accent-base);
+  --sidebar-primary-foreground: var(--accent-fg);
+  --sidebar-ring: var(--accent-base);
+  --gradient-brand: linear-gradient(
+    135deg,
+    var(--accent-base) 0%,
+    color-mix(in oklab, var(--accent-base) 55%, #6d5dfc) 100%
+  );
+  --glow:
+    0 0 0 1px color-mix(in oklab, var(--accent-base) 35%, transparent),
+    0 8px 30px -6px color-mix(in oklab, var(--accent-base) 55%, transparent);
 }
 
 @layer base {
@@ -257,11 +231,86 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
   html {
     @apply font-sans;
   }
+}
+
+@utility glass {
+  background-color: var(--surface-glass);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+@utility glass-strong {
+  background-color: var(--surface-glass-strong);
+  backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+}
+
+@utility bg-gradient-brand {
+  background-image: var(--gradient-brand);
+}
+
+@utility text-gradient-brand {
+  background-image: var(--gradient-brand);
+  background-clip: text;
+  color: transparent;
+}
+
+@utility shadow-glow {
+  box-shadow: var(--glow);
+}
+
+/* Skeleton / in-progress sheen, used via `animate-shimmer`. */
+@utility shimmer-bg {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 9%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent-base) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent-base) 0%, transparent);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* « Aucune animation » : coupe aussi les animations CSS, pas seulement Motion. */
+:root[data-motion="none"] *,
+:root[data-motion="none"] *::before,
+:root[data-motion="none"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }
 
 /* Thin, themed scrollbar (WebView2/Chromium) instead of the default OS one. */

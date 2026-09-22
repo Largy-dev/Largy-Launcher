@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, MemoryStick, PackageSearch } from "lucide-react";
 
+import { LoaderBadge } from "@/components/instance/LoaderBadge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +16,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSystemMemory } from "@/hooks/useInstanceInfo";
+import { formatGb } from "@/lib/format";
+import { notify } from "@/lib/notify";
+import { adviseRam } from "@/lib/ramAdvice";
 import {
   errorMessage,
   instancesApi,
@@ -46,15 +50,30 @@ interface InstallVars {
 
 function notifyResult(
   result: InstanceInstallResult,
-  successMessage: string,
+  title: string,
   setInstallWarnings: (w: PendingInstallWarnings) => void,
+  openInstance: () => void,
 ) {
-  toast.success(successMessage);
+  const pending: PendingInstallWarnings = {
+    instanceId: result.instance.id,
+    instanceName: result.instance.name,
+    warnings: result.warnings,
+  };
   if (result.warnings.length > 0) {
-    setInstallWarnings({
-      instanceId: result.instance.id,
-      instanceName: result.instance.name,
-      warnings: result.warnings,
+    notify.warning({
+      title,
+      message: `${result.warnings.length} fichier(s) à télécharger à la main.`,
+      native: "installDone",
+      sticky: true,
+      action: { label: "Voir la liste", onClick: () => setInstallWarnings(pending) },
+    });
+    setInstallWarnings(pending);
+  } else {
+    notify.success({
+      title,
+      message: "Tout est prêt, bon jeu !",
+      native: "installDone",
+      action: { label: "Ouvrir", onClick: openInstance },
     });
   }
 }
@@ -66,6 +85,7 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
   const [versionId, setVersionId] = useState("");
   const [instanceName, setInstanceName] = useState("");
   const isUpdate = !!updateInstanceId;
+  const { data: memory } = useSystemMemory();
 
   const versionsQuery = useQuery({
     queryKey: ["modpack-versions", provider, pack?.id],
@@ -88,9 +108,12 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
       ),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      notifyResult(result, `${vars.packName} installé`, setInstallWarnings);
+      notifyResult(result, `${vars.packName} installé`, setInstallWarnings, () =>
+        navigate(`/instances/${result.instance.id}`),
+      );
     },
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e, vars) =>
+      notify.error({ title: `Échec de l'installation de ${vars.packName}`, message: errorMessage(e) }),
   });
 
   const updateMutation = useMutation({
@@ -98,12 +121,28 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["modpack-versions", provider, pack?.id] });
-      notifyResult(result, `${pack?.name ?? "Modpack"} mis à jour`, setInstallWarnings);
+      notifyResult(result, `${result.instance.name} mis à jour`, setInstallWarnings, () =>
+        navigate(`/instances/${result.instance.id}`),
+      );
     },
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e) => notify.error({ title: "Échec de la mise à jour", message: errorMessage(e) }),
   });
 
   const activeMutation = isUpdate ? updateMutation : installMutation;
+  const selected = versionsQuery.data?.find((v) => v.id === versionId);
+  const advice = useMemo(
+    () =>
+      selected
+        ? adviseRam({
+            loader: selected.loader,
+            modCount: null,
+            minecraftVersion: selected.minecraft_version,
+            isModpack: true,
+            systemTotalMb: memory?.total_mb ?? null,
+          })
+        : null,
+    [selected, memory?.total_mb],
+  );
 
   function close() {
     onOpenChange(false);
@@ -130,13 +169,34 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
 
   return (
     <Dialog open={pack !== null} onOpenChange={(next) => (next ? undefined : close())}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{pack?.name}</DialogTitle>
-          <DialogDescription>
-            {isUpdate ? "Choisis la version vers laquelle mettre à jour cette instance." : pack?.summary}
-          </DialogDescription>
+      <DialogContent className="overflow-hidden sm:max-w-lg">
+        <div className="relative -mx-6 -mt-6 mb-1 h-28 overflow-hidden" aria-hidden="true">
+          {pack?.icon_url && (
+            <img
+              src={pack.icon_url}
+              alt=""
+              className="absolute inset-0 size-full scale-125 object-cover opacity-50 blur-xl"
+            />
+          )}
+          <div className="bg-gradient-brand absolute inset-0 opacity-40 mix-blend-overlay" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+        </div>
+        <DialogHeader className="-mt-16 flex-row items-end gap-4 space-y-0">
+          {pack?.icon_url ? (
+            <img src={pack.icon_url} alt="" className="relative size-20 rounded-2xl shadow-xl ring-4 ring-background" />
+          ) : (
+            <div className="bg-gradient-brand relative flex size-20 items-center justify-center rounded-2xl ring-4 ring-background">
+              <PackageSearch className="size-8 text-primary-foreground" aria-hidden="true" />
+            </div>
+          )}
+          <div className="relative min-w-0 flex-1 pb-1 text-left">
+            <DialogTitle className="truncate text-xl">{pack?.name}</DialogTitle>
+            {pack?.author && <p className="text-xs text-muted-foreground">par {pack.author}</p>}
+          </div>
         </DialogHeader>
+        <DialogDescription className="line-clamp-3">
+          {isUpdate ? "Choisis la version vers laquelle mettre à jour cette instance." : pack?.summary}
+        </DialogDescription>
 
         <div className="space-y-4">
           {!isUpdate && (
@@ -172,6 +232,18 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
                 </SelectContent>
               </Select>
             )}
+            {selected && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                <LoaderBadge loader={selected.loader} version={selected.loader_version} />
+                <span>Minecraft {selected.minecraft_version}</span>
+                {advice && (
+                  <span className="flex items-center gap-1">
+                    <MemoryStick className="size-3.5" aria-hidden="true" />
+                    RAM conseillée : {formatGb(advice.recommendedMb)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -179,7 +251,11 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
           <Button variant="outline" onClick={close}>
             Annuler
           </Button>
-          <Button onClick={submitInstall} disabled={!versionId || activeMutation.isPending} className="gap-1.5">
+          <Button
+            onClick={submitInstall}
+            disabled={!versionId || activeMutation.isPending}
+            className="bg-gradient-brand shadow-glow gap-1.5"
+          >
             {activeMutation.isPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
             {isUpdate ? "Mettre à jour" : "Installer"}
           </Button>

@@ -1,6 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Copy, ExternalLink, FolderOpen } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { notify } from "@/lib/notify";
 import { instancesApi } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
@@ -25,9 +25,9 @@ export function InstallWarningsDialog() {
       .join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Liste copiée");
+      notify.success({ title: "Liste copiée", history: false });
     } catch {
-      toast.error("Impossible de copier dans le presse-papiers");
+      notify.error({ title: "Impossible de copier dans le presse-papiers", history: false });
     }
   }
 

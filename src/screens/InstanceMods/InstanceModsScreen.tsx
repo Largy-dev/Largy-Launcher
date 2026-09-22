@@ -1,25 +1,41 @@
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Blocks, Loader2, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { motion } from "motion/react";
+import { ArrowLeft, Blocks, FolderOpen, Loader2, Plus, Puzzle, Search, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { errorMessage, instanceModsApi, instancesApi } from "@/services/tauri";
+import { Skeleton } from "@/components/Skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { formatBytes } from "@/lib/format";
+import { fadeUp, stagger } from "@/lib/motion";
+import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
+import { errorMessage, instanceModsApi, instancesApi, type ModEntry } from "@/services/tauri";
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+/** "create-1.20.1-0.5.1f.jar" → "create 1.20.1 0.5.1f" — easier to scan than raw file names. */
+function prettyModName(fileName: string): string {
+  return fileName
+    .replace(/\.jar(\.disabled)?$/i, "")
+    .replace(/[-_+]/g, " ")
+    .trim();
 }
+
+type Filter = "all" | "enabled" | "disabled";
 
 export function InstanceModsScreen() {
   const { id } = useParams<{ id: string }>();
   const instanceId = id ?? "";
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [toDelete, setToDelete] = useState<ModEntry | null>(null);
 
   const { data: instance } = useQuery({
     queryKey: ["instance", instanceId],
@@ -37,23 +53,32 @@ export function InstanceModsScreen() {
     queryClient.invalidateQueries({ queryKey: ["instance-mods", instanceId] });
   }
 
+  const onError = (e: unknown) => notify.error({ title: "Action impossible sur ce mod", message: errorMessage(e) });
+
   const toggleMutation = useMutation({
     mutationFn: (vars: { fileName: string; enabled: boolean }) =>
       instanceModsApi.setEnabled(instanceId, vars.fileName, vars.enabled),
     onSuccess: invalidate,
-    onError: (e) => toast.error(errorMessage(e)),
+    onError,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (fileName: string) => instanceModsApi.delete(instanceId, fileName),
-    onSuccess: invalidate,
-    onError: (e) => toast.error(errorMessage(e)),
+    onSuccess: (_, fileName) => {
+      invalidate();
+      setToDelete(null);
+      notify.success({ title: "Mod supprimé", message: prettyModName(fileName), history: false });
+    },
+    onError,
   });
 
   const addMutation = useMutation({
     mutationFn: (sourcePath: string) => instanceModsApi.add(instanceId, sourcePath),
-    onSuccess: invalidate,
-    onError: (e) => toast.error(errorMessage(e)),
+    onSuccess: () => {
+      invalidate();
+      notify.success({ title: "Mod ajouté", history: false });
+    },
+    onError,
   });
 
   async function addMod() {
@@ -66,66 +91,160 @@ export function InstanceModsScreen() {
     }
   }
 
-  const mods = modsQuery.data ?? [];
+  const mods = useMemo(() => modsQuery.data ?? [], [modsQuery.data]);
+  const enabledCount = mods.filter((m) => m.enabled).length;
+  const totalSize = mods.reduce((n, m) => n + m.size, 0);
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return mods
+      .filter((m) => filter === "all" || (filter === "enabled") === m.enabled)
+      .filter((m) => !needle || m.file_name.toLowerCase().includes(needle));
+  }, [mods, filter, search]);
+
+  const filters: { value: Filter; label: string; count: number }[] = [
+    { value: "all", label: "Tous", count: mods.length },
+    { value: "enabled", label: "Actifs", count: enabledCount },
+    { value: "disabled", label: "Désactivés", count: mods.length - enabledCount },
+  ];
 
   return (
     <div className="flex flex-1 flex-col">
       <PageHeader
-        title={instance ? `Mods — ${instance.name}` : "Mods"}
-        description="Active, désactive, supprime ou ajoute des mods pour cette instance."
+        eyebrow={instance?.name ?? "Instance"}
+        title="Mods"
+        description={
+          mods.length > 0
+            ? `${enabledCount} actif${enabledCount > 1 ? "s" : ""} sur ${mods.length} · ${formatBytes(totalSize)}`
+            : "Active, désactive, supprime ou ajoute des mods."
+        }
         action={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/instances/${instanceId}`)}>
+          <>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => navigate(`/instances/${instanceId}`)}>
+              <ArrowLeft aria-hidden="true" />
               Retour
             </Button>
-            <Button size="sm" onClick={addMod} disabled={addMutation.isPending} className="gap-1.5">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => instancesApi.openFolder(instanceId)}>
+              <FolderOpen aria-hidden="true" />
+              Dossier
+            </Button>
+            <Button size="sm" onClick={addMod} disabled={addMutation.isPending} className="bg-gradient-brand gap-1.5">
               {addMutation.isPending ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                <Loader2 className="animate-spin" aria-hidden="true" />
               ) : (
-                <Plus className="size-3.5" aria-hidden="true" />
+                <Plus aria-hidden="true" />
               )}
               Ajouter un mod…
             </Button>
-          </div>
+          </>
         }
       />
 
       {modsQuery.isLoading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+        <div className="space-y-2">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-14 rounded-xl" />
+          ))}
         </div>
       ) : mods.length === 0 ? (
         <EmptyState
           icon={Blocks}
           title="Aucun mod"
           description="Ajoute un fichier .jar pour l'installer dans cette instance."
+          action={
+            <Button onClick={addMod} className="gap-1.5">
+              <Plus aria-hidden="true" />
+              Ajouter un mod
+            </Button>
+          }
         />
       ) : (
-        <div className="divide-y divide-border rounded-lg border border-border">
-          {mods.map((mod) => (
-            <div key={mod.file_name} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{mod.file_name}</p>
-                <p className="text-xs text-muted-foreground">{formatSize(mod.size)}</p>
-              </div>
-              <div className="flex items-center gap-3">
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="glass flex rounded-lg p-0.5">
+              {filters.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setFilter(f.value)}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                    filter === f.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {f.label} <span className="tabular-nums opacity-70">{f.count}</span>
+                </button>
+              ))}
+            </div>
+            <div className="relative ml-auto">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                placeholder="Rechercher un mod…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 w-56 pl-8!"
+              />
+            </div>
+          </div>
+
+          <motion.div
+            key={filter}
+            variants={stagger}
+            initial="hidden"
+            animate="show"
+            className="glass divide-y divide-border/60 overflow-hidden rounded-2xl"
+          >
+            {visible.length === 0 && (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun mod ne correspond.</p>
+            )}
+            {visible.map((mod) => (
+              <motion.div
+                key={mod.file_name}
+                variants={fadeUp}
+                className={cn("flex items-center gap-3 px-4 py-2.5 transition-opacity", !mod.enabled && "opacity-55")}
+              >
+                <div
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                    mod.enabled ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <Puzzle className="size-4" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium capitalize">{prettyModName(mod.file_name)}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {mod.file_name} · {formatBytes(mod.size)}
+                  </p>
+                </div>
                 <Switch
                   checked={mod.enabled}
+                  aria-label={mod.enabled ? "Désactiver" : "Activer"}
                   onCheckedChange={(enabled) => toggleMutation.mutate({ fileName: mod.file_name, enabled })}
                 />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Supprimer"
-                  onClick={() => deleteMutation.mutate(mod.file_name)}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
+                <Button variant="ghost" size="icon-sm" title="Supprimer" onClick={() => setToDelete(mod)}>
+                  <Trash2 aria-hidden="true" />
                 </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </>
       )}
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title="Supprimer ce mod ?"
+        description={toDelete ? `« ${toDelete.file_name} » sera supprimé du dossier mods.` : ""}
+        confirmLabel="Supprimer"
+        destructive
+        pending={deleteMutation.isPending}
+        onConfirm={() => toDelete && deleteMutation.mutate(toDelete.file_name)}
+      />
     </div>
   );
 }

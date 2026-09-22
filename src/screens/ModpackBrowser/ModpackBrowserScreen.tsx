@@ -1,16 +1,66 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, PackageSearch, Search } from "lucide-react";
+import { motion } from "motion/react";
+import { Download, PackageSearch, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/Skeleton";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/hooks/useSettings";
+import { fadeUp, stagger } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 import { errorMessage, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
 
 import { ModpackDetailDialog } from "./ModpackDetailDialog";
+
+const PROVIDERS: { id: ProviderId; label: string; color: string }[] = [
+  { id: "ftb", label: "FTB", color: "#e5484d" },
+  { id: "curseforge", label: "CurseForge", color: "#f16436" },
+];
+
+function ModpackCard({ pack, onSelect }: { pack: ModpackSummary; onSelect: () => void }) {
+  return (
+    <motion.button
+      variants={fadeUp}
+      whileHover={{ y: -4 }}
+      onClick={onSelect}
+      className="glass group relative flex flex-col overflow-hidden rounded-2xl text-left transition-shadow hover:shadow-xl"
+    >
+      <div className="relative h-28 overflow-hidden">
+        {pack.icon_url ? (
+          <img
+            src={pack.icon_url}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 size-full scale-125 object-cover opacity-60 blur-md transition-transform duration-500 group-hover:scale-150"
+          />
+        ) : (
+          <div className="bg-gradient-brand absolute inset-0 opacity-50" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-card/90" />
+        <span className="bg-gradient-brand absolute top-2.5 right-2.5 flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.68rem] font-bold text-primary-foreground opacity-0 shadow-glow transition-opacity group-hover:opacity-100">
+          <Download className="size-3" aria-hidden="true" />
+          Installer
+        </span>
+      </div>
+      <div className="relative -mt-10 flex flex-1 flex-col gap-2 px-4 pb-4">
+        {pack.icon_url ? (
+          <img src={pack.icon_url} alt="" className="size-16 rounded-xl object-cover shadow-lg ring-4 ring-card" />
+        ) : (
+          <div className="flex size-16 items-center justify-center rounded-xl bg-muted ring-4 ring-card">
+            <PackageSearch className="size-6 text-muted-foreground" aria-hidden="true" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <h3 className="truncate font-bold">{pack.name}</h3>
+          {pack.author && <p className="truncate text-xs text-muted-foreground">par {pack.author}</p>}
+        </div>
+        <p className="line-clamp-2 text-xs text-muted-foreground">{pack.summary}</p>
+      </div>
+    </motion.button>
+  );
+}
 
 function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (pack: ModpackSummary) => void }) {
   const [text, setText] = useState("");
@@ -24,29 +74,30 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
   return (
     <div className="flex flex-1 flex-col">
       <form
-        className="relative mb-4"
+        className="relative mb-5"
         onSubmit={(e) => {
           e.preventDefault();
           setQuery(text);
         }}
       >
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden="true"
         />
         <Input
           type="search"
-          placeholder="Rechercher un modpack…"
-          className="pl-9"
+          placeholder="Rechercher un modpack… (Entrée pour lancer la recherche)"
+          className="glass h-11 rounded-xl pl-11! text-base"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
       </form>
 
       {isLoading ? (
-        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          Chargement…
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-52 rounded-2xl" />
+          ))}
         </div>
       ) : isError ? (
         <EmptyState icon={PackageSearch} title="Erreur" description={errorMessage(error)} />
@@ -57,29 +108,17 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
           description="Essaie un autre terme de recherche."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <motion.div
+          key={query}
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+        >
           {data.map((pack) => (
-            <Card
-              key={pack.id}
-              onClick={() => onSelect(pack)}
-              className="cursor-pointer transition-colors hover:bg-muted/50"
-            >
-              <CardHeader className="flex-row items-center gap-3 space-y-0">
-                {pack.icon_url ? (
-                  <img src={pack.icon_url} alt="" className="size-10 rounded-md object-cover" />
-                ) : (
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <PackageSearch className="size-5 text-muted-foreground" aria-hidden="true" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <CardTitle className="truncate">{pack.name}</CardTitle>
-                  <CardDescription className="line-clamp-2">{pack.summary || pack.author}</CardDescription>
-                </div>
-              </CardHeader>
-            </Card>
+            <ModpackCard key={pack.id} pack={pack} onSelect={() => onSelect(pack)} />
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );
@@ -90,36 +129,49 @@ export function ModpackBrowserScreen() {
   const [selected, setSelected] = useState<ModpackSummary | null>(null);
   const { data: settings } = useSettings();
   const curseforgeEnabled = !!settings?.curseforge_api_key.trim();
+  const providers = curseforgeEnabled ? PROVIDERS : PROVIDERS.filter((p) => p.id === "ftb");
+  const active = curseforgeEnabled ? provider : "ftb";
 
   return (
     <div className="flex flex-1 flex-col">
       <PageHeader
+        eyebrow="Découvrir"
         title="Modpacks"
         description={
           curseforgeEnabled
-            ? "Parcours et installe des modpacks FTB ou CurseForge."
-            : "Parcours et installe des modpacks FTB."
+            ? "Des centaines d'aventures prêtes à jouer, installées en un clic."
+            : "Des modpacks FTB prêts à jouer. Ajoute une clé CurseForge dans Paramètres › Avancé pour en débloquer plus."
+        }
+        action={
+          providers.length > 1 && (
+            <div className="glass flex rounded-xl p-1">
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setProvider(p.id)}
+                  className={cn(
+                    "relative rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors",
+                    active === p.id ? "text-white" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {active === p.id && (
+                    <motion.span
+                      layoutId="provider-tab"
+                      className="absolute inset-0 rounded-lg"
+                      style={{ backgroundColor: p.color }}
+                    />
+                  )}
+                  <span className="relative">{p.label}</span>
+                </button>
+              ))}
+            </div>
+          )
         }
       />
 
-      {curseforgeEnabled ? (
-        <Tabs value={provider} onValueChange={(v) => setProvider(v as ProviderId)} className="flex flex-1 flex-col">
-          <TabsList>
-            <TabsTrigger value="ftb">FTB</TabsTrigger>
-            <TabsTrigger value="curseforge">CurseForge</TabsTrigger>
-          </TabsList>
-          <TabsContent value="ftb" className="flex flex-1 flex-col">
-            <ModpackGrid provider="ftb" onSelect={setSelected} />
-          </TabsContent>
-          <TabsContent value="curseforge" className="flex flex-1 flex-col">
-            <ModpackGrid provider="curseforge" onSelect={setSelected} />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <ModpackGrid provider="ftb" onSelect={setSelected} />
-      )}
+      <ModpackGrid key={active} provider={active} onSelect={setSelected} />
 
-      <ModpackDetailDialog provider={provider} pack={selected} onOpenChange={(open) => !open && setSelected(null)} />
+      <ModpackDetailDialog provider={active} pack={selected} onOpenChange={(open) => !open && setSelected(null)} />
     </div>
   );
 }

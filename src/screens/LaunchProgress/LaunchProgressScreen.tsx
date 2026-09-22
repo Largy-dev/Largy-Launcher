@@ -1,99 +1,99 @@
-import { useEffect, useRef } from "react";
-import { useParams } from "react-router";
-import { AlertTriangle, Loader2, Square, X } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router";
+import { AnimatePresence } from "motion/react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { InstanceIcon } from "@/components/instance/InstanceIcon";
+import { LoaderBadge } from "@/components/instance/LoaderBadge";
+import { PlayButton } from "@/components/instance/PlayButton";
+import { CrashCard, LiveStatsPanel, TransferPanel } from "@/components/launch/LaunchPanels";
+import { LaunchTimeline } from "@/components/launch/LaunchTimeline";
+import { LogConsole } from "@/components/console/LogConsole";
 import { PageHeader } from "@/components/PageHeader";
-import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { errorMessage, launchApi } from "@/services/tauri";
-import { useAppStore } from "@/store/appStore";
+import { Button } from "@/components/ui/button";
+import { useAllocatedRam } from "@/hooks/useInstanceInfo";
+import { useLaunchInstance } from "@/hooks/useLaunchInstance";
+import { instancesApi } from "@/services/tauri";
+import { runtimeOf, useAppStore } from "@/store/appStore";
 
 export function LaunchProgressScreen() {
   const { id } = useParams<{ id: string }>();
   const instanceId = id ?? "";
-  const running = useAppStore((s) => s.runtime[instanceId]?.running ?? false);
-  const logs = useAppStore((s) => s.runtime[instanceId]?.logs ?? []);
-  const progress = useAppStore((s) => s.downloadProgress);
+  const navigate = useNavigate();
+  const { data: instance } = useQuery({
+    queryKey: ["instance", instanceId],
+    queryFn: () => instancesApi.get(instanceId),
+    enabled: instanceId !== "",
+  });
+  const runtime = useAppStore((s) => runtimeOf(s.runtime, instanceId));
   const crashAnalysis = useAppStore((s) => s.crashAnalysis[instanceId]);
   const clearCrashAnalysis = useAppStore((s) => s.clearCrashAnalysis);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { play, running, preparing } = useLaunchInstance(instance);
+  const allocated = useAllocatedRam(instance);
 
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ block: "end" });
-  }, [logs]);
-
-  async function stop() {
-    try {
-      await launchApi.stop(instanceId);
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
+  if (!instance) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+      </div>
+    );
   }
 
-  const percent =
-    progress && progress.bytes_total > 0
-      ? Math.min(100, Math.round((progress.bytes_done / progress.bytes_total) * 100))
-      : null;
+  const openFolder = () => instancesApi.openFolder(instance.id);
+  const status = preparing
+    ? "Lancement en cours"
+    : running
+      ? "En jeu"
+      : crashAnalysis
+        ? "Crash"
+        : runtime.logs.length > 0
+          ? "Session terminée"
+          : "Journal";
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
-        title="Lancement en cours"
-        description={instanceId}
+        eyebrow={status}
+        title={
+          <span className="flex items-center gap-3">
+            <InstanceIcon instance={instance} className="size-10 rounded-xl" />
+            <span className="truncate">{instance.name}</span>
+          </span>
+        }
+        description={
+          <span className="flex items-center gap-2">
+            <LoaderBadge loader={instance.loader} version={instance.loader_version} />
+            Minecraft {instance.minecraft_version}
+          </span>
+        }
         action={
-          running ? (
-            <Button variant="destructive" size="sm" onClick={stop} className="gap-1.5">
-              <Square className="size-3.5" aria-hidden="true" />
-              Arrêter
+          <>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => navigate("/")}>
+              <ArrowLeft aria-hidden="true" />
+              Accueil
             </Button>
-          ) : undefined
+            <PlayButton instance={instance} size="lg" />
+          </>
         }
       />
 
-      {running && percent !== null && (
-        <div className="mb-4 space-y-1.5">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{progress?.label}</span>
-            <span>
-              {progress?.files_done}/{progress?.files_total} — {percent}%
-            </span>
-          </div>
-          <Progress value={percent} />
-        </div>
-      )}
+      <AnimatePresence>
+        {preparing && <LaunchTimeline key="timeline" loader={instance.loader} phase={runtime.phase} />}
+        {preparing && <TransferPanel key="transfer" />}
+        {running && !preparing && <LiveStatsPanel key="stats" instanceId={instance.id} allocatedMb={allocated} />}
+        {crashAnalysis && !running && (
+          <CrashCard
+            key="crash"
+            analysis={crashAnalysis}
+            logs={runtime.logs}
+            onDismiss={() => clearCrashAnalysis(instance.id)}
+            onOpenFolder={openFolder}
+            onRelaunch={play}
+          />
+        )}
+      </AnimatePresence>
 
-      {crashAnalysis && (
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-          <div className="flex-1 space-y-0.5">
-            <p className="font-medium text-destructive">{crashAnalysis.summary}</p>
-            {crashAnalysis.suggestion && <p className="text-muted-foreground">{crashAnalysis.suggestion}</p>}
-          </div>
-          <Button variant="ghost" size="icon-sm" title="Fermer" onClick={() => clearCrashAnalysis(instanceId)}>
-            <X className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-      )}
-
-      <ScrollArea className="flex-1 rounded-lg border border-border bg-card">
-        <div className="p-3 font-mono text-xs leading-relaxed">
-          {logs.length === 0 ? (
-            <p className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              En attente des premiers logs…
-            </p>
-          ) : (
-            logs.map((line, i) => (
-              <p key={i} className="whitespace-pre-wrap break-all text-foreground/80">
-                {line}
-              </p>
-            ))
-          )}
-          <div ref={scrollRef} />
-        </div>
-      </ScrollArea>
+      <LogConsole lines={runtime.logs} onOpenFolder={openFolder} className="min-h-72 flex-1" />
     </div>
   );
 }

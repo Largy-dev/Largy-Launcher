@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-import type { AccountSession, CrashAnalysis, DownloadProgress, InstallWarning } from "@/services/tauri";
+import type { RawLogLine } from "@/lib/logParse";
+import type { AccountSession, CrashAnalysis, DownloadProgress, InstallWarning, LaunchPhase } from "@/services/tauri";
 
 export interface PendingInstallWarnings {
   instanceId: string;
@@ -8,12 +9,21 @@ export interface PendingInstallWarnings {
   warnings: InstallWarning[];
 }
 
-interface InstanceRuntime {
+export interface InstanceRuntime {
   running: boolean;
-  logs: string[];
+  logs: RawLogLine[];
+  /** Current launch step, `running` once the game process is up, null when idle. */
+  phase: LaunchPhase | null;
+  /** Epoch ms when the game process started, for the session timer. */
+  startedAt: number | null;
+  /** The user asked to stop it — its non-zero exit code isn't a crash. */
+  stopping: boolean;
 }
 
-const emptyRuntime: InstanceRuntime = { running: false, logs: [] };
+const emptyRuntime: InstanceRuntime = { running: false, logs: [], phase: null, startedAt: null, stopping: false };
+
+/** Kept per launch — enough for a crash trace without growing forever over a long session. */
+const MAX_LOG_LINES = 2000;
 
 interface AppStore {
   activeInstanceId: string | null;
@@ -23,13 +33,17 @@ interface AppStore {
   setAccount: (account: AccountSession | null) => void;
 
   downloadProgress: DownloadProgress | null;
+  /** Smoothed transfer speed of the current download, in bytes/s. */
+  downloadRate: number;
+  downloadSample: { at: number; bytes: number };
   setDownloadProgress: (progress: DownloadProgress | null) => void;
 
   runtime: Record<string, InstanceRuntime>;
   setRunning: (instanceId: string, running: boolean) => void;
-  appendLog: (instanceId: string, line: string) => void;
+  markStopping: (instanceId: string) => void;
+  setPhase: (instanceId: string, phase: LaunchPhase) => void;
+  appendLog: (instanceId: string, line: string, stream: RawLogLine["stream"]) => void;
   clearLogs: (instanceId: string) => void;
-  runtimeFor: (instanceId: string) => InstanceRuntime;
 
   crashAnalysis: Record<string, CrashAnalysis | null>;
   setCrashAnalysis: (instanceId: string, analysis: CrashAnalysis | null) => void;
@@ -40,39 +54,72 @@ interface AppStore {
   clearInstallWarnings: () => void;
 }
 
-export const useAppStore = create<AppStore>((set, get) => ({
-  activeInstanceId: null,
-  setActiveInstanceId: (id) => set({ activeInstanceId: id }),
-
-  account: null,
-  setAccount: (account) => set({ account }),
-
-  downloadProgress: null,
-  setDownloadProgress: (progress) => set({ downloadProgress: progress }),
-
-  runtime: {},
-  setRunning: (instanceId, running) =>
-    set((s) => ({
-      runtime: { ...s.runtime, [instanceId]: { ...(s.runtime[instanceId] ?? emptyRuntime), running } },
-    })),
-  appendLog: (instanceId, line) =>
+export const useAppStore = create<AppStore>((set) => {
+  const patchRuntime = (instanceId: string, patch: (current: InstanceRuntime) => Partial<InstanceRuntime>) =>
     set((s) => {
       const current = s.runtime[instanceId] ?? emptyRuntime;
-      const logs = [...current.logs, line].slice(-1000);
-      return { runtime: { ...s.runtime, [instanceId]: { ...current, logs } } };
-    }),
-  clearLogs: (instanceId) =>
-    set((s) => ({
-      runtime: { ...s.runtime, [instanceId]: { ...(s.runtime[instanceId] ?? emptyRuntime), logs: [] } },
-    })),
-  runtimeFor: (instanceId) => get().runtime[instanceId] ?? emptyRuntime,
+      return { runtime: { ...s.runtime, [instanceId]: { ...current, ...patch(current) } } };
+    });
 
-  crashAnalysis: {},
-  setCrashAnalysis: (instanceId, analysis) =>
-    set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: analysis } })),
-  clearCrashAnalysis: (instanceId) => set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: null } })),
+  return {
+    activeInstanceId: null,
+    setActiveInstanceId: (id) => set({ activeInstanceId: id }),
 
-  installWarnings: null,
-  setInstallWarnings: (warnings) => set({ installWarnings: warnings }),
-  clearInstallWarnings: () => set({ installWarnings: null }),
-}));
+    account: null,
+    setAccount: (account) => set({ account }),
+
+    downloadProgress: null,
+    downloadRate: 0,
+    downloadSample: { at: 0, bytes: 0 },
+    setDownloadProgress: (progress) =>
+      set((s) => {
+        const now = Date.now();
+        const previous = s.downloadProgress;
+        const sameTask =
+          !!progress && !!previous && previous.task_id === progress.task_id && previous.label === progress.label;
+        if (!progress || !sameTask) {
+          return {
+            downloadProgress: progress,
+            downloadRate: 0,
+            downloadSample: { at: now, bytes: progress?.bytes_done ?? 0 },
+          };
+        }
+        const elapsed = (now - s.downloadSample.at) / 1000;
+        if (elapsed < 0.5) return { downloadProgress: progress };
+        const instant = Math.max(0, progress.bytes_done - s.downloadSample.bytes) / elapsed;
+        return {
+          downloadProgress: progress,
+          downloadRate: s.downloadRate === 0 ? instant : s.downloadRate * 0.6 + instant * 0.4,
+          downloadSample: { at: now, bytes: progress.bytes_done },
+        };
+      }),
+
+    runtime: {},
+    setRunning: (instanceId, running) =>
+      patchRuntime(instanceId, () =>
+        running ? { running, stopping: false } : { running, phase: null, startedAt: null, stopping: false },
+      ),
+    markStopping: (instanceId) => patchRuntime(instanceId, () => ({ stopping: true })),
+    setPhase: (instanceId, phase) =>
+      patchRuntime(instanceId, (current) => ({
+        phase,
+        startedAt: phase === "running" ? (current.startedAt ?? Date.now()) : current.startedAt,
+      })),
+    appendLog: (instanceId, line, stream) =>
+      patchRuntime(instanceId, (current) => ({ logs: [...current.logs, { line, stream }].slice(-MAX_LOG_LINES) })),
+    clearLogs: (instanceId) => patchRuntime(instanceId, () => ({ logs: [] })),
+
+    crashAnalysis: {},
+    setCrashAnalysis: (instanceId, analysis) =>
+      set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: analysis } })),
+    clearCrashAnalysis: (instanceId) => set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: null } })),
+
+    installWarnings: null,
+    setInstallWarnings: (warnings) => set({ installWarnings: warnings }),
+    clearInstallWarnings: () => set({ installWarnings: null }),
+  };
+});
+
+export function runtimeOf(runtime: Record<string, InstanceRuntime>, instanceId: string): InstanceRuntime {
+  return runtime[instanceId] ?? emptyRuntime;
+}
