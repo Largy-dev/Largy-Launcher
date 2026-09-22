@@ -2,13 +2,16 @@
 
 ![CI](https://github.com/Largy-dev/Largy-Launcher/actions/workflows/ci.yml/badge.svg)
 
+### [⬇️ Télécharger la dernière version](https://github.com/Largy-dev/Largy-Launcher/releases/latest)
+
 Un launcher Minecraft personnel pour Windows : authentification Microsoft, modpacks FTB/CurseForge,
 mod loaders Fabric/Quilt/Forge/NeoForge, gestion multi-instances. Construit avec Tauri (Rust) +
 React/TypeScript.
 
 ## Installer (pour jouer, pas pour développer)
 
-1. Va sur la [page Releases](https://github.com/Largy-dev/Largy-Launcher/releases/latest).
+1. Va sur la [page Releases](https://github.com/Largy-dev/Largy-Launcher/releases/latest) (lien
+   ci-dessus).
 2. Télécharge le fichier `Largy Launcher_x.y.z_x64-setup.exe`.
 3. Lance-le et suis l'installateur.
 4. Ouvre Largy Launcher, connecte-toi avec ton compte Microsoft (aucune configuration requise,
@@ -29,12 +32,20 @@ payant), clique sur **Informations complémentaires → Exécuter quand même**.
   processeurs des installeurs Forge/NeoForge).
 - **Instances multiples** : chaque instance est un dossier isolé (mods/saves/config/resourcepacks/
   natives), avec ses propres réglages mémoire/JVM.
+- **Mise à jour de modpack en place** : installer une nouvelle version d'un modpack déjà présent
+  met à jour l'instance existante (mods/overrides obsolètes supprimés, saves et ajouts manuels
+  jamais touchés) au lieu de créer une instance en double.
+- **Gestion des mods** : activer/désactiver, supprimer ou ajouter un `.jar` directement dans une
+  instance moddée, sans quitter le launcher.
 - **Téléchargements** : moteur concurrent avec vérification de checksum (sha1) et reprise
-  intelligente (ne retélécharge rien de déjà valide).
+  intelligente (ne retélécharge rien de déjà valide). Les fichiers qu'un modpack ne peut pas
+  fournir automatiquement (restriction posée par l'auteur sur CurseForge) sont listés dans une
+  fenêtre dédiée, avec lien direct de téléchargement et accès au dossier de l'instance.
 - **Java automatique** : détection du runtime requis par version de Minecraft et téléchargement
   du binaire Mojang correspondant (pas besoin d'installer Java soi-même).
 - **Lancement** : logs (stdout/stderr) et progression de téléchargement diffusés en direct dans
-  l'interface.
+  l'interface, avec détection des causes de crash les plus courantes (mémoire insuffisante,
+  incompatibilité de mods, version Java...) affichée directement à l'écran.
 - **Thème** : couleur d'accent personnalisable (vert/noir/blanc/violet/rouge/bleu).
 - **Mise à jour automatique** : vérification au démarrage (et à la demande dans Paramètres) ; la
   nouvelle version se télécharge, s'installe et relance le launcher en un clic, via l'updater
@@ -44,18 +55,21 @@ payant), clique sur **Informations complémentaires → Exécuter quand même**.
 
 ## À faire / connu
 
-- **Mise à jour d'un modpack déjà installé** : installer une nouvelle version d'un modpack crée
-  aujourd'hui une nouvelle instance à côté, plutôt que de mettre à jour l'instance existante en place.
 - **Approbation Microsoft en attente** : l'application Azure du launcher doit être validée par
   Microsoft pour l'API Minecraft Services (nouvelle exigence pour toute app tierce) ; en attendant,
   la connexion Microsoft peut échouer avec une erreur 403 — utiliser le Mode Hors-ligne.
 - **CurseForge nécessite une clé par utilisateur** : choix délibéré (leurs conditions d'utilisation
   interdisent de distribuer une clé partagée), pas un bug.
+- **Certains mods CurseForge restent à télécharger manuellement** : quand l'auteur désactive la
+  redistribution tierce, ce n'est pas qu'un champ d'API caché — CurseForge bloque aussi l'accès
+  direct côté CDN. Pas de contournement possible côté launcher ; la fenêtre d'avertissement donne
+  le lien direct pour le faire à la main.
 - **Windows uniquement** : pas testé/empaqueté pour macOS ou Linux à ce stade.
-- **Couverture de tests** : bonne sur la logique pure (parsing de manifestes, résolution de
-  versions, providers, auth hors-ligne — 56 tests), mais la chaîne réseau complète de
-  l'authentification Microsoft n'est pas testée automatiquement (nécessiterait de mocker
-  plusieurs API externes).
+- **Couverture de tests** : bonne sur la logique pure côté backend (parsing de manifestes,
+  résolution de versions, providers, auth hors-ligne, orchestration de lancement — 100 tests) et sur
+  les points d'intégration Tauri côté frontend (23 tests Vitest), mais la chaîne réseau complète de
+  l'authentification Microsoft n'est pas testée automatiquement (nécessiterait de mocker plusieurs
+  API externes).
 
 ## Stack technique
 
@@ -121,7 +135,7 @@ Produit `src-tauri/target/release/bundle/nsis/*.exe` et `bundle/msi/*.msi`.
 
 ```bash
 cd src-tauri && cargo test && cargo clippy --all-targets
-npx tsc --noEmit
+npx tsc --noEmit && npm run lint && npm run format:check && npm test
 ```
 
 ### Release automatisée
@@ -153,14 +167,17 @@ qu'elle soit visible, une clé publique n'a rien à cacher.
 ## Structure
 
 - `src-tauri/src/auth/` — authentification Microsoft → Xbox Live → XSTS → Minecraft Services
-- `src-tauri/src/instances/` — gestion des instances (dossiers isolés)
+- `src-tauri/src/instances/` — gestion des instances (dossiers isolés) et de leurs mods (`mods.rs`)
 - `src-tauri/src/minecraft/` — résolution de version, assets, bibliothèques, arguments de lancement
 - `src-tauri/src/modloaders/` — Fabric, Quilt, Forge, NeoForge
 - `src-tauri/src/providers/` — abstraction des sources de modpacks (FTB, CurseForge)
 - `src-tauri/src/java/` — gestion des runtimes Java
 - `src-tauri/src/download/` — moteur de téléchargement concurrent
-- `src-tauri/src/launch/` — assemblage de la commande et lancement du process
-- `src/screens/` — écrans de l'application (Login, Instances, Modpacks, Paramètres, Lancement...)
+- `src-tauri/src/launch/` — assemblage de la commande, lancement du process, détection de crash
+  (`crash_detect.rs`)
+- `src-tauri/src/util/` — petits utilitaires partagés (substitution de placeholders)
+- `src/screens/` — écrans de l'application (Login, Instances, Mods d'instance, Modpacks,
+  Paramètres, Lancement...)
 
 ## Authentification Microsoft — détails
 
