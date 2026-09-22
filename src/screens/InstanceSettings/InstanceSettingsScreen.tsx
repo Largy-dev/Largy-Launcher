@@ -103,9 +103,16 @@ export function InstanceSettingsScreen() {
             : ""
         }`}
         action={
-          <Button variant="outline" size="sm" onClick={() => navigate("/")}>
-            Retour
-          </Button>
+          <div className="flex gap-2">
+            {instance.loader !== "vanilla" && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/instances/${instanceId}/mods`)}>
+                Gérer les mods
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+              Retour
+            </Button>
+          </div>
         }
       />
 

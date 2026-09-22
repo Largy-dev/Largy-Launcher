@@ -6,6 +6,7 @@ pub mod auth;
 pub mod instances;
 pub mod launch;
 pub mod minecraft;
+pub mod mods;
 pub mod providers;
 pub mod settings;
 

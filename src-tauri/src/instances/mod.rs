@@ -3,6 +3,8 @@
 //! `instance.json` — no shared state between instances besides the
 //! libraries/assets/java caches in [`crate::paths::AppPaths`].
 
+pub mod mods;
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

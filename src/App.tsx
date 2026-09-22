@@ -18,6 +18,7 @@ import { InstanceListScreen } from "@/screens/InstanceList/InstanceListScreen";
 import { ModpackBrowserScreen } from "@/screens/ModpackBrowser/ModpackBrowserScreen";
 import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScreen";
 import { InstanceSettingsScreen } from "@/screens/InstanceSettings/InstanceSettingsScreen";
+import { InstanceModsScreen } from "@/screens/InstanceMods/InstanceModsScreen";
 import { LaunchProgressScreen } from "@/screens/LaunchProgress/LaunchProgressScreen";
 import { LoginDialog } from "@/screens/Login/LoginScreen";
 import { auth, errorMessage, onDownloadProgress, onInstanceExit, onInstanceLog } from "@/services/tauri";
@@ -176,6 +177,7 @@ const router = createHashRouter([
       { path: "modpacks", element: <ModpackBrowserScreen /> },
       { path: "settings", element: <GlobalSettingsScreen /> },
       { path: "instances/:id", element: <InstanceSettingsScreen /> },
+      { path: "instances/:id/mods", element: <InstanceModsScreen /> },
       { path: "instances/:id/launch", element: <LaunchProgressScreen /> },
     ],
   },

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Blocks, FolderOpen, Loader2, Play, RefreshCw, Settings2, Square, Trash2 } from "lucide-react";
+import { Blocks, FolderOpen, Loader2, Play, Puzzle, RefreshCw, Settings2, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -170,6 +170,17 @@ export function InstanceCard({ instance }: { instance: Instance }) {
           >
             <Trash2 className="size-4" aria-hidden="true" />
           </Button>
+          {instance.loader !== "vanilla" && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Gérer les mods"
+              disabled={installing}
+              onClick={() => navigate(`/instances/${instance.id}/mods`)}
+            >
+              <Puzzle className="size-4" aria-hidden="true" />
+            </Button>
+          )}
           {updateAvailable && (
             <Button
               variant="ghost"

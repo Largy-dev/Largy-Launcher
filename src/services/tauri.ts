@@ -223,3 +223,17 @@ export const launchApi = {
   stop: (instanceId: string) => invoke<void>("stop_instance", { instanceId }),
   isRunning: (instanceId: string) => invoke<boolean>("is_instance_running", { instanceId }),
 };
+
+export interface ModEntry {
+  file_name: string;
+  enabled: boolean;
+  size: number;
+}
+
+export const instanceModsApi = {
+  list: (instanceId: string) => invoke<ModEntry[]>("instance_mods_list", { instanceId }),
+  setEnabled: (instanceId: string, fileName: string, enabled: boolean) =>
+    invoke<void>("instance_mods_set_enabled", { instanceId, fileName, enabled }),
+  delete: (instanceId: string, fileName: string) => invoke<void>("instance_mods_delete", { instanceId, fileName }),
+  add: (instanceId: string, sourcePath: string) => invoke<void>("instance_mods_add", { instanceId, sourcePath }),
+};
