@@ -37,7 +37,18 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Largy Launcher ${{ github.ref_name }}"
-          releaseBody: "Installe `Largy Launcher_*_x64-setup.exe` et lance-le — aucune configuration requise."
+          releaseBody: "Installe `LargyLauncher-Setup.exe` et lance-le — aucune configuration requise."
           releaseDraft: false
           prerelease: false
           updaterJsonPreferNsis: true
+
+      # Same installer under a version-free name, so the README can link to
+      # releases/latest/download/LargyLauncher-Setup.exe and always get the newest one.
+      - name: Upload stable-named installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          Copy-Item $exe.FullName LargyLauncher-Setup.exe
+          gh release upload "${{ github.ref_name }}" LargyLauncher-Setup.exe --clobber
