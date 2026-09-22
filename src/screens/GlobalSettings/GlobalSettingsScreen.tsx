@@ -58,6 +58,9 @@ export function GlobalSettingsScreen() {
   const [form, setForm] = useState<GlobalSettings | null>(null);
 
   useEffect(() => {
+    // Seeds the local draft from the query once it loads; doesn't cascade
+    // since `settings` only changes on refetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (settings) setForm(settings);
   }, [settings]);
 

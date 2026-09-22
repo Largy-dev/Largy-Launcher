@@ -46,6 +46,9 @@ export function InstanceSettingsScreen() {
     const loadedMin = instance.min_memory_mb?.toString() ?? "";
     const loadedMax = instance.max_memory_mb?.toString() ?? "";
     const loadedJvmArgs = instance.extra_jvm_args.join(" ");
+    // Seeds the local draft from the query once it loads; doesn't cascade
+    // since `instance` only changes on refetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMinMb(loadedMin);
     setMaxMb(loadedMax);
     setJvmArgs(loadedJvmArgs);
