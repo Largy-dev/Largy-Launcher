@@ -58,14 +58,8 @@ function AccountArea() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-sidebar-accent/60">
-          <img
-            src={`https://mc-heads.net/avatar/${account.profile.id}/32`}
-            alt=""
-            className="size-5 rounded-sm"
-          />
-          <p className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">
-            {account.profile.name}
-          </p>
+          <img src={`https://mc-heads.net/avatar/${account.profile.id}/32`} alt="" className="size-5 rounded-sm" />
+          <p className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{account.profile.name}</p>
           <ChevronDown className="size-3.5 text-sidebar-foreground/40" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
@@ -86,7 +80,10 @@ function AppShell() {
   const setRunning = useAppStore((s) => s.setRunning);
 
   useEffect(() => {
-    auth.trySilentLogin().then(setAccount).catch(() => setAccount(null));
+    auth
+      .trySilentLogin()
+      .then(setAccount)
+      .catch(() => setAccount(null));
   }, [setAccount]);
 
   useEffect(() => {
@@ -99,8 +96,8 @@ function AppShell() {
             label: "Mettre à jour",
             onClick: () => {
               const id = toast.loading("Téléchargement de la mise à jour…");
-              installAppUpdate(update, (percent) => toast.loading(`Téléchargement… ${percent}%`, { id })).catch(
-                (e) => toast.error(errorMessage(e), { id }),
+              installAppUpdate(update, (percent) => toast.loading(`Téléchargement… ${percent}%`, { id })).catch((e) =>
+                toast.error(errorMessage(e), { id }),
               );
             },
           },

@@ -194,12 +194,8 @@ export const instancesApi = {
   create: (name: string, minecraftVersion: string, loader: LoaderKind, loaderVersion: string | null) =>
     invoke<Instance>("instances_create", { name, minecraftVersion, loader, loaderVersion }),
   delete: (id: string) => invoke<void>("instances_delete", { id }),
-  updateSettings: (
-    id: string,
-    minMemoryMb: number | null,
-    maxMemoryMb: number | null,
-    extraJvmArgs: string[],
-  ) => invoke<Instance>("instances_update_settings", { id, minMemoryMb, maxMemoryMb, extraJvmArgs }),
+  updateSettings: (id: string, minMemoryMb: number | null, maxMemoryMb: number | null, extraJvmArgs: string[]) =>
+    invoke<Instance>("instances_update_settings", { id, minMemoryMb, maxMemoryMb, extraJvmArgs }),
   openFolder: (id: string) => invoke<void>("instances_open_folder", { id }),
   installModpack: (
     provider: ProviderId,

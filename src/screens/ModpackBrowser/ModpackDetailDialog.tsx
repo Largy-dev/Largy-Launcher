@@ -15,13 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { errorMessage, instancesApi, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
 
 interface ModpackDetailDialogProps {
@@ -55,7 +49,14 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
   // submit — by the time this resolves, `pack` may already be null.
   const installMutation = useMutation({
     mutationFn: (vars: InstallVars) =>
-      instancesApi.installModpack(provider, vars.packId, vars.versionId, vars.packName, vars.packIconUrl, vars.instanceName),
+      instancesApi.installModpack(
+        provider,
+        vars.packId,
+        vars.versionId,
+        vars.packName,
+        vars.packIconUrl,
+        vars.instanceName,
+      ),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success(`${vars.packName} installé`);
@@ -128,7 +129,6 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
               </Select>
             )}
           </div>
-
         </div>
 
         <DialogFooter>

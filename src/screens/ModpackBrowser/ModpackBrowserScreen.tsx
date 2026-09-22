@@ -119,11 +119,7 @@ export function ModpackBrowserScreen() {
         <ModpackGrid provider="ftb" onSelect={setSelected} />
       )}
 
-      <ModpackDetailDialog
-        provider={provider}
-        pack={selected}
-        onOpenChange={(open) => !open && setSelected(null)}
-      />
+      <ModpackDetailDialog provider={provider} pack={selected} onOpenChange={(open) => !open && setSelected(null)} />
     </div>
   );
 }

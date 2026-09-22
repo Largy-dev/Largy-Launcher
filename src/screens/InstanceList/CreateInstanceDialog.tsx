@@ -14,20 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  errorMessage,
-  instancesApi,
-  loadersListVersions,
-  minecraftApi,
-  type LoaderKind,
-} from "@/services/tauri";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { errorMessage, instancesApi, loadersListVersions, minecraftApi, type LoaderKind } from "@/services/tauri";
 
 const LOADERS: { value: LoaderKind; label: string }[] = [
   { value: "vanilla", label: "Vanilla" },

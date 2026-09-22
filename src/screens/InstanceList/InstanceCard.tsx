@@ -41,7 +41,9 @@ export function InstanceCard({ instance }: { instance: Instance }) {
 
   async function play() {
     if (!account && !settings?.offline_mode) {
-      toast.error("Connecte-toi avec ton compte Microsoft avant de jouer, ou active le Mode Hors-ligne dans Paramètres.");
+      toast.error(
+        "Connecte-toi avec ton compte Microsoft avant de jouer, ou active le Mode Hors-ligne dans Paramètres.",
+      );
       return;
     }
     setBusy(true);

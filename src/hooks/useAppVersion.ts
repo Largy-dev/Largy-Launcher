@@ -6,7 +6,9 @@ export function useAppVersion(): string | null {
   const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    getAppVersion().then(setVersion).catch(() => setVersion(null));
+    getAppVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null));
   }, []);
 
   return version;

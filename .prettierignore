@@ -1,0 +1,7 @@
+dist
+node_modules
+src-tauri
+package-lock.json
+
+# Root docs/instructions aren't app source — out of scope for this pass.
+*.md

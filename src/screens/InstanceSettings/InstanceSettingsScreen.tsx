@@ -52,8 +52,7 @@ export function InstanceSettingsScreen() {
     setInitial({ minMb: loadedMin, maxMb: loadedMax, jvmArgs: loadedJvmArgs });
   }, [instance]);
 
-  const isDirty =
-    !!initial && (initial.minMb !== minMb || initial.maxMb !== maxMb || initial.jvmArgs !== jvmArgs);
+  const isDirty = !!initial && (initial.minMb !== minMb || initial.maxMb !== maxMb || initial.jvmArgs !== jvmArgs);
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) => isDirty && currentLocation.pathname !== nextLocation.pathname,
   );
@@ -96,7 +95,9 @@ export function InstanceSettingsScreen() {
       <PageHeader
         title={instance.name}
         description={`${instance.minecraft_version}${
-          instance.loader !== "vanilla" ? ` · ${instance.loader}${instance.loader_version ? ` ${instance.loader_version}` : ""}` : ""
+          instance.loader !== "vanilla"
+            ? ` · ${instance.loader}${instance.loader_version ? ` ${instance.loader_version}` : ""}`
+            : ""
         }`}
         action={
           <Button variant="outline" size="sm" onClick={() => navigate("/")}>

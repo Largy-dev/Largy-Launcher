@@ -44,9 +44,7 @@ function SettingRow({ label, description, control }: SettingRowProps) {
 function SettingSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mb-6">
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h3>
+      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
       <div className="divide-y divide-border rounded-lg border border-border">{children}</div>
     </section>
   );

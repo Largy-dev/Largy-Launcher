@@ -4,13 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { auth, errorMessage, type DeviceCodeInfo } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
@@ -95,9 +89,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
 
         {status === "polling" && device && (
           <div className="space-y-3 text-center">
-            <p className="text-sm text-muted-foreground">
-              Entre ce code sur la page qui va s'ouvrir :
-            </p>
+            <p className="text-sm text-muted-foreground">Entre ce code sur la page qui va s'ouvrir :</p>
             <p className="rounded-md bg-muted py-3 font-mono text-2xl font-semibold tracking-widest">
               {device.user_code}
             </p>
