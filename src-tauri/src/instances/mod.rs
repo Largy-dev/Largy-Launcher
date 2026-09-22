@@ -17,6 +17,15 @@ pub struct ModpackRef {
     pub pack_id: String,
     pub version_id: String,
     pub pack_name: String,
+    /// Paths (relative to the instance directory) of every file this
+    /// modpack version placed on disk — downloaded mod files and any
+    /// `overrides/` files alike. Used by `instances_update_modpack` to know
+    /// which files a newer version no longer ships and can safely remove;
+    /// anything not in this list (saves, manual additions) is never touched.
+    /// `#[serde(default)]` so instances installed before this field existed
+    /// just have an empty list (no retroactive pruning on their first update).
+    #[serde(default)]
+    pub installed_files: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

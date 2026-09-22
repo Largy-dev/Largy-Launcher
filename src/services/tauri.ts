@@ -34,6 +34,7 @@ export interface ModpackRef {
   pack_id: string;
   version_id: string;
   pack_name: string;
+  installed_files: string[];
 }
 
 export interface Instance {
@@ -213,6 +214,8 @@ export const instancesApi = {
       packIconUrl,
       instanceName,
     }),
+  updateModpack: (instanceId: string, versionId: string) =>
+    invoke<InstanceInstallResult>("instances_update_modpack", { instanceId, versionId }),
 };
 
 export const launchApi = {

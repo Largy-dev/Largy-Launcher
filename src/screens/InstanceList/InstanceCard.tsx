@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Blocks, FolderOpen, Loader2, Play, Settings2, Square, Trash2 } from "lucide-react";
+import { Blocks, FolderOpen, Loader2, Play, RefreshCw, Settings2, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,18 @@ import { Progress } from "@/components/ui/progress";
 import { MinecraftGrassIcon } from "@/components/MinecraftGrassIcon";
 import { useSettings } from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
-import { errorMessage, instancesApi, launchApi, type Instance } from "@/services/tauri";
+import {
+  errorMessage,
+  instancesApi,
+  launchApi,
+  providersApi,
+  type Instance,
+  type ModpackSummary,
+  type ProviderId,
+} from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
+
+import { ModpackDetailDialog } from "../ModpackBrowser/ModpackDetailDialog";
 
 export function InstanceCard({ instance }: { instance: Instance }) {
   const navigate = useNavigate();
@@ -22,7 +32,28 @@ export function InstanceCard({ instance }: { instance: Instance }) {
   const clearLogs = useAppStore((s) => s.clearLogs);
   const downloadProgress = useAppStore((s) => s.downloadProgress);
   const [busy, setBusy] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const { data: settings } = useSettings();
+
+  const modpack = instance.modpack;
+  const modpackVersionsQuery = useQuery({
+    queryKey: ["modpack-versions", modpack?.provider, modpack?.pack_id],
+    queryFn: () => providersApi.getVersions(modpack!.provider as ProviderId, modpack!.pack_id),
+    enabled: !!modpack,
+    staleTime: 5 * 60 * 1000,
+  });
+  const latestVersionId = modpackVersionsQuery.data?.[0]?.id;
+  const updateAvailable = !!modpack && !!latestVersionId && latestVersionId !== modpack.version_id;
+  const modpackSummary: ModpackSummary | null = modpack
+    ? {
+        id: modpack.pack_id,
+        provider: modpack.provider,
+        name: modpack.pack_name,
+        author: "",
+        icon_url: instance.icon_url,
+        summary: "",
+      }
+    : null;
 
   const installing =
     downloadProgress?.task_id === instance.id &&
@@ -139,6 +170,17 @@ export function InstanceCard({ instance }: { instance: Instance }) {
           >
             <Trash2 className="size-4" aria-hidden="true" />
           </Button>
+          {updateAvailable && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Mise à jour disponible"
+              disabled={running || installing}
+              onClick={() => setUpdating(true)}
+            >
+              <RefreshCw className="size-4 text-primary" aria-hidden="true" />
+            </Button>
+          )}
         </div>
 
         {running ? (
@@ -157,6 +199,15 @@ export function InstanceCard({ instance }: { instance: Instance }) {
           </Button>
         )}
       </CardFooter>
+
+      {modpack && (
+        <ModpackDetailDialog
+          provider={modpack.provider as ProviderId}
+          pack={updating ? modpackSummary : null}
+          onOpenChange={(open) => !open && setUpdating(false)}
+          updateInstanceId={instance.id}
+        />
+      )}
     </Card>
   );
 }

@@ -16,12 +16,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { errorMessage, instancesApi, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
+import {
+  errorMessage,
+  instancesApi,
+  providersApi,
+  type InstanceInstallResult,
+  type ModpackSummary,
+  type ProviderId,
+} from "@/services/tauri";
 
 interface ModpackDetailDialogProps {
   provider: ProviderId;
   pack: ModpackSummary | null;
   onOpenChange: (open: boolean) => void;
+  /** When set, the dialog installs the chosen version into this existing
+   * instance instead of creating a new one — used for the "update available"
+   * flow on an already-installed modpack. */
+  updateInstanceId?: string;
 }
 
 interface InstallVars {
@@ -32,11 +43,21 @@ interface InstallVars {
   instanceName: string;
 }
 
-export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDetailDialogProps) {
+function notifyResult(result: InstanceInstallResult, successMessage: string) {
+  toast.success(successMessage);
+  if (result.warnings.length > 0) {
+    toast.warning(`${result.warnings.length} avertissement(s) lors de l'installation`, {
+      description: result.warnings.slice(0, 3).join("\n"),
+    });
+  }
+}
+
+export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstanceId }: ModpackDetailDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [versionId, setVersionId] = useState("");
   const [instanceName, setInstanceName] = useState("");
+  const isUpdate = !!updateInstanceId;
 
   const versionsQuery = useQuery({
     queryKey: ["modpack-versions", provider, pack?.id],
@@ -59,15 +80,22 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
       ),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      toast.success(`${vars.packName} installé`);
-      if (result.warnings.length > 0) {
-        toast.warning(`${result.warnings.length} avertissement(s) lors de l'installation`, {
-          description: result.warnings.slice(0, 3).join("\n"),
-        });
-      }
+      notifyResult(result, `${vars.packName} installé`);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { versionId: string }) => instancesApi.updateModpack(updateInstanceId!, vars.versionId),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      queryClient.invalidateQueries({ queryKey: ["modpack-versions", provider, pack?.id] });
+      notifyResult(result, `${pack?.name ?? "Modpack"} mis à jour`);
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const activeMutation = isUpdate ? updateMutation : installMutation;
 
   function close() {
     onOpenChange(false);
@@ -77,15 +105,19 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
 
   function submitInstall() {
     if (!pack) return;
-    installMutation.mutate({
-      packId: pack.id,
-      versionId,
-      packName: pack.name,
-      packIconUrl: pack.icon_url,
-      instanceName: instanceName.trim() || pack.name,
-    });
+    if (isUpdate) {
+      updateMutation.mutate({ versionId });
+    } else {
+      installMutation.mutate({
+        packId: pack.id,
+        versionId,
+        packName: pack.name,
+        packIconUrl: pack.icon_url,
+        instanceName: instanceName.trim() || pack.name,
+      });
+    }
     close();
-    navigate("/");
+    if (!isUpdate) navigate("/");
   }
 
   return (
@@ -93,19 +125,23 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{pack?.name}</DialogTitle>
-          <DialogDescription>{pack?.summary}</DialogDescription>
+          <DialogDescription>
+            {isUpdate ? "Choisis la version vers laquelle mettre à jour cette instance." : pack?.summary}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="modpack-instance-name">Nom de l'instance</Label>
-            <Input
-              id="modpack-instance-name"
-              placeholder={pack?.name}
-              value={instanceName}
-              onChange={(e) => setInstanceName(e.target.value)}
-            />
-          </div>
+          {!isUpdate && (
+            <div className="space-y-1.5">
+              <Label htmlFor="modpack-instance-name">Nom de l'instance</Label>
+              <Input
+                id="modpack-instance-name"
+                placeholder={pack?.name}
+                value={instanceName}
+                onChange={(e) => setInstanceName(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Version</Label>
@@ -135,8 +171,9 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange }: ModpackDet
           <Button variant="outline" onClick={close}>
             Annuler
           </Button>
-          <Button onClick={submitInstall} disabled={!versionId} className="gap-1.5">
-            Installer
+          <Button onClick={submitInstall} disabled={!versionId || activeMutation.isPending} className="gap-1.5">
+            {activeMutation.isPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+            {isUpdate ? "Mettre à jour" : "Installer"}
           </Button>
         </DialogFooter>
       </DialogContent>

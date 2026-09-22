@@ -1,12 +1,13 @@
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::download::DownloadItem;
+use crate::download::{DownloadItem, DownloadManager};
 use crate::error::{AppError, AppResult};
 use crate::instances::{self, CreateInstanceInput, Instance, ModpackRef};
-use crate::providers::{FileDownloadInfo, LoaderKind, ModpackFileRef, ModpackProvider};
+use crate::providers::{FileDownloadInfo, LoaderKind, ModpackFileRef, ModpackProvider, ResolvedModpackVersion};
 use crate::state::AppState;
 
 /// Result of an instance install/update: the instance itself, plus any
@@ -106,6 +107,42 @@ pub fn instances_open_folder(state: State<'_, AppState>, id: String) -> AppResul
     Ok(())
 }
 
+/// Downloads every file a resolved modpack version references (mods first,
+/// then any `overrides/` tree) into `instance_dir`, returning every
+/// successfully-placed file's instance-relative path plus any per-file
+/// warnings. Shared by fresh installs and in-place updates so both track
+/// "what this version put on disk" the same way.
+async fn download_and_track_files(
+    app: &AppHandle,
+    downloader: &DownloadManager,
+    provider: &dyn ModpackProvider,
+    resolved: &ResolvedModpackVersion,
+    instance_id: &str,
+    instance_name: &str,
+    instance_dir: &Path,
+) -> AppResult<(Vec<PathBuf>, Vec<String>)> {
+    let (items, warnings) = resolve_download_items(provider, &resolved.files, instance_dir).await;
+    let mut installed_files: Vec<PathBuf> =
+        items.iter().filter_map(|i| i.dest.strip_prefix(instance_dir).ok().map(Path::to_path_buf)).collect();
+
+    // task_id is the instance id itself, so the frontend can match a
+    // download-progress event back to the specific instance card that's
+    // currently installing (several installs could otherwise share the
+    // same generic task name and be indistinguishable in the UI).
+    downloader
+        .run_batch(app, instance_id, "Fichiers du modpack", items, 8)
+        .await
+        .map_err(|e| AppError::Download(format!("instance \"{instance_name}\": {e}")))?;
+
+    if let Some(overrides_dir) = resolved.overrides_dir.clone() {
+        let dest = instance_dir.to_path_buf();
+        let copied = spawn_blocking(move || copy_dir_recursive(&overrides_dir, &dest)).await?;
+        installed_files.extend(copied);
+    }
+
+    Ok((installed_files, warnings))
+}
+
 /// Resolves a provider's modpack version, creates a fresh instance for it,
 /// downloads every mod file, and copies any bundled config/scripts overrides.
 #[tauri::command]
@@ -138,27 +175,94 @@ pub async fn instances_install_modpack(
             pack_id: pack_id.clone(),
             version_id: version_id.clone(),
             pack_name,
+            installed_files: Vec::new(),
         }),
         icon_url: pack_icon_url,
     };
-    let instance = spawn_blocking(move || instances::create(&paths, create_input)).await?;
+    let mut instance = spawn_blocking(move || instances::create(&paths, create_input)).await?;
 
-    let (items, warnings) = resolve_download_items(provider_ref, &resolved.files, &instance.directory).await;
+    let (installed_files, warnings) = download_and_track_files(
+        &app,
+        &state.downloader,
+        provider_ref,
+        &resolved,
+        &instance.id,
+        &instance.name,
+        &instance.directory,
+    )
+    .await?;
 
-    // task_id is the instance id itself, so the frontend can match a
-    // download-progress event back to the specific instance card that's
-    // currently installing (several installs could otherwise share the
-    // same generic task name and be indistinguishable in the UI).
-    state
-        .downloader
-        .run_batch(&app, &instance.id, "Fichiers du modpack", items, 8)
-        .await
-        .map_err(|e| AppError::Download(format!("instance \"{}\": {e}", instance.name)))?;
-
-    if let Some(overrides_dir) = resolved.overrides_dir.clone() {
-        let dest = instance.directory.clone();
-        spawn_blocking(move || copy_dir_recursive(&overrides_dir, &dest)).await?;
+    if let Some(modpack) = &mut instance.modpack {
+        modpack.installed_files = installed_files;
     }
+    let to_save = instance.clone();
+    spawn_blocking(move || instances::save(&to_save)).await?;
+
+    Ok(InstanceInstallResult { instance, warnings })
+}
+
+/// Installs a newer version of a modpack into an *existing* instance instead
+/// of creating a new one: preserves the instance's identity, name, icon, and
+/// per-instance RAM/JVM overrides, updates its Minecraft/loader version, and
+/// removes any previously-tracked file the new version no longer ships (mods
+/// and overrides alike). Files never tracked by a modpack install — saves,
+/// manually-added mods — are never touched, since they were never in
+/// `installed_files` to begin with.
+#[tauri::command]
+pub async fn instances_update_modpack(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    version_id: String,
+) -> AppResult<InstanceInstallResult> {
+    let paths = state.paths.clone();
+    let id_for_get = instance_id.clone();
+    let mut instance = spawn_blocking(move || instances::get(&paths, &id_for_get)).await?;
+
+    let modpack = instance
+        .modpack
+        .clone()
+        .ok_or_else(|| AppError::Instance("cette instance n'est pas un modpack installé".to_string()))?;
+
+    let provider_ref = state
+        .providers
+        .get(&modpack.provider)
+        .ok_or_else(|| AppError::Provider(format!("provider inconnu: {}", modpack.provider)))?;
+
+    let resolved = provider_ref.resolve_version(&modpack.pack_id, &version_id).await?;
+
+    let (new_installed_files, warnings) = download_and_track_files(
+        &app,
+        &state.downloader,
+        provider_ref,
+        &resolved,
+        &instance.id,
+        &instance.name,
+        &instance.directory,
+    )
+    .await?;
+
+    let stale = diff_stale_files(&modpack.installed_files, &new_installed_files);
+    let instance_dir = instance.directory.clone();
+    spawn_blocking(move || {
+        for rel in &stale {
+            let _ = std::fs::remove_file(instance_dir.join(rel));
+        }
+        Ok(())
+    })
+    .await?;
+
+    instance.minecraft_version = resolved.minecraft_version.clone();
+    instance.loader = resolved.loader;
+    instance.loader_version = (!resolved.loader_version.is_empty()).then(|| resolved.loader_version.clone());
+    instance.modpack = Some(ModpackRef {
+        version_id,
+        installed_files: new_installed_files,
+        ..modpack
+    });
+
+    let to_save = instance.clone();
+    spawn_blocking(move || instances::save(&to_save)).await?;
 
     Ok(InstanceInstallResult { instance, warnings })
 }
@@ -201,7 +305,32 @@ async fn resolve_download_items(
     (items, warnings)
 }
 
-fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> AppResult<()> {
+/// Files tracked by the *old* modpack version but absent from the *new*
+/// one's tracked file list — safe to delete since they're either a stale mod
+/// jar or a stale override/config file the new version no longer ships.
+/// Anything never tracked in the first place (saves, manual additions) can
+/// never appear here, since this only ever looks at the two tracked lists,
+/// never the instance directory itself.
+fn diff_stale_files(old_installed: &[PathBuf], new_installed: &[PathBuf]) -> Vec<PathBuf> {
+    let new_set: HashSet<&PathBuf> = new_installed.iter().collect();
+    old_installed.iter().filter(|p| !new_set.contains(p)).cloned().collect()
+}
+
+/// Copies `src`'s tree into `dest`, returning the destination-relative path
+/// of every file copied (used to track which files a modpack version placed
+/// on disk, for `instances_update_modpack`'s stale-file pruning).
+fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> AppResult<Vec<std::path::PathBuf>> {
+    let mut copied = Vec::new();
+    copy_dir_recursive_into(src, dest, dest, &mut copied)?;
+    Ok(copied)
+}
+
+fn copy_dir_recursive_into(
+    src: &std::path::Path,
+    dest: &std::path::Path,
+    root: &std::path::Path,
+    copied: &mut Vec<std::path::PathBuf>,
+) -> AppResult<()> {
     if !src.exists() {
         return Ok(());
     }
@@ -210,12 +339,15 @@ fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> AppResul
         let target = dest.join(entry.file_name());
         if entry.file_type()?.is_dir() {
             std::fs::create_dir_all(&target)?;
-            copy_dir_recursive(&entry.path(), &target)?;
+            copy_dir_recursive_into(&entry.path(), &target, root, copied)?;
         } else {
             if let Some(parent) = target.parent() {
                 std::fs::create_dir_all(parent)?;
             }
             std::fs::copy(entry.path(), &target)?;
+            if let Ok(rel) = target.strip_prefix(root) {
+                copied.push(rel.to_path_buf());
+            }
         }
     }
     Ok(())
@@ -328,5 +460,52 @@ mod tests {
 
         assert_eq!(items.len(), 1);
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn diff_stale_files_flags_files_dropped_from_the_new_version() {
+        let old = vec![PathBuf::from("mods/a.jar"), PathBuf::from("mods/b.jar"), PathBuf::from("config/x.toml")];
+        let new = vec![PathBuf::from("mods/a.jar"), PathBuf::from("config/x.toml")];
+
+        let stale = diff_stale_files(&old, &new);
+
+        assert_eq!(stale, vec![PathBuf::from("mods/b.jar")]);
+    }
+
+    #[test]
+    fn diff_stale_files_never_flags_a_path_that_was_never_tracked() {
+        // Nothing in `saves/` is ever added to `installed_files` in the first
+        // place, so it structurally can never show up as "stale" here —
+        // this is what keeps an update from ever touching player saves.
+        let old = vec![PathBuf::from("mods/a.jar")];
+        let new: Vec<PathBuf> = Vec::new();
+
+        let stale = diff_stale_files(&old, &new);
+
+        assert_eq!(stale, vec![PathBuf::from("mods/a.jar")]);
+        assert!(!stale.contains(&PathBuf::from("saves/world1/level.dat")));
+    }
+
+    #[test]
+    fn diff_stale_files_returns_nothing_when_everything_carries_over() {
+        let old = vec![PathBuf::from("mods/a.jar")];
+        let new = vec![PathBuf::from("mods/a.jar"), PathBuf::from("mods/b.jar")];
+
+        assert!(diff_stale_files(&old, &new).is_empty());
+    }
+
+    #[test]
+    fn copy_dir_recursive_returns_every_copied_files_relative_path() {
+        let src_dir = tempfile::tempdir().unwrap();
+        let dest_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(src_dir.path().join("config")).unwrap();
+        std::fs::write(src_dir.path().join("config/settings.toml"), b"x").unwrap();
+        std::fs::write(src_dir.path().join("readme.txt"), b"x").unwrap();
+
+        let mut copied = copy_dir_recursive(src_dir.path(), dest_dir.path()).unwrap();
+        copied.sort();
+
+        assert_eq!(copied, vec![PathBuf::from("config/settings.toml"), PathBuf::from("readme.txt")]);
+        assert!(dest_dir.path().join("config/settings.toml").exists());
     }
 }

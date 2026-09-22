@@ -60,6 +60,7 @@ pub fn run() {
             commands::instances::instances_update_settings,
             commands::instances::instances_open_folder,
             commands::instances::instances_install_modpack,
+            commands::instances::instances_update_modpack,
             commands::launch::launch_instance,
             commands::launch::stop_instance,
             commands::launch::is_instance_running,
