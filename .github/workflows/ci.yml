@@ -34,7 +34,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          shared-key: backend
+          add-rust-environment-hash-key: false
 
       - name: cargo test
         working-directory: src-tauri
