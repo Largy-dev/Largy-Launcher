@@ -31,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let state = AppState::new(app.handle())?;
             app.manage(state);
@@ -41,6 +42,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
             commands::system_memory_mb,
+            commands::system_memory_info,
             commands::loaders_list_versions,
             commands::auth::auth_begin_login,
             commands::auth::auth_complete_login,
@@ -57,6 +59,7 @@ pub fn run() {
             commands::instances::instances_get,
             commands::instances::instances_create,
             commands::instances::instances_delete,
+            commands::instances::instances_rename,
             commands::instances::instances_update_settings,
             commands::instances::instances_open_folder,
             commands::instances::instances_install_modpack,
@@ -68,6 +71,7 @@ pub fn run() {
             commands::launch::launch_instance,
             commands::launch::stop_instance,
             commands::launch::is_instance_running,
+            commands::launch::instance_process_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

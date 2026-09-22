@@ -35,6 +35,9 @@ pub struct AppState {
     pub active_account: RwLock<Option<AccountSession>>,
     pub curseforge_api_key: Arc<RwLock<String>>,
     pub running: Arc<Mutex<HashMap<String, RunningChild>>>,
+    /// Kept across calls so per-process CPU usage has a previous sample to
+    /// diff against (sysinfo computes it between two refreshes).
+    pub system: Mutex<sysinfo::System>,
 }
 
 impl AppState {
@@ -79,6 +82,7 @@ impl AppState {
             active_account: RwLock::new(None),
             curseforge_api_key,
             running: Arc::new(Mutex::new(HashMap::new())),
+            system: Mutex::new(sysinfo::System::new()),
         })
     }
 }

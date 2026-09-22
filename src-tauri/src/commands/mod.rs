@@ -29,6 +29,23 @@ pub fn system_memory_mb() -> u64 {
     sys.total_memory() / 1024 / 1024
 }
 
+#[derive(serde::Serialize)]
+pub struct SystemMemoryInfo {
+    pub total_mb: u64,
+    pub available_mb: u64,
+}
+
+/// Total and currently free physical RAM in MB, used by the RAM advice.
+#[tauri::command]
+pub fn system_memory_info() -> SystemMemoryInfo {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    SystemMemoryInfo {
+        total_mb: sys.total_memory() / 1024 / 1024,
+        available_mb: sys.available_memory() / 1024 / 1024,
+    }
+}
+
 #[tauri::command]
 pub async fn loaders_list_versions(
     state: State<'_, AppState>,

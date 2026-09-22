@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::Notify;
 
 use crate::auth::AccountSession;
 use crate::error::{AppError, AppResult};
@@ -17,7 +17,7 @@ use crate::providers::LoaderKind;
 use crate::settings::GlobalSettings;
 use crate::state::AppState;
 
-use super::{InstanceExit, RunningChild};
+use super::{emit_phase, InstanceExit, LaunchPhase, ProcessStats, RunningChild};
 
 /// Builds the `${...}`-style substitution map for a launch's JVM/game
 /// arguments from the account, instance, resolved settings, and version
@@ -71,6 +71,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
 
     let instance = instances::get(&state.paths, instance_id)?;
     let settings = state.settings.read().clone();
+    emit_phase(app, instance_id, LaunchPhase::Auth);
     let account = if settings.offline_mode {
         crate::auth::offline_session(&settings.offline_username)?
     } else {
@@ -101,6 +102,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
         }
     };
 
+    emit_phase(app, instance_id, LaunchPhase::Version);
     let prepared = minecraft::prepare_version(
         app,
         &state.paths,
@@ -119,6 +121,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     let mut library_index = prepared.library_index.clone();
 
     if instance.loader != LoaderKind::Vanilla {
+        emit_phase(app, instance_id, LaunchPhase::Loader);
         let loader_version = instance
             .loader_version
             .clone()
@@ -153,9 +156,11 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
         raw_game_args.extend(profile.extra_game_args);
     }
 
+    emit_phase(app, instance_id, LaunchPhase::Natives);
     let natives_directory = instance.directory.join("natives");
     mc_libraries::extract_natives(&native_jars, &natives_directory)?;
 
+    emit_phase(app, instance_id, LaunchPhase::Java);
     let java_path = match &settings.java_path_override {
         Some(path) if !path.trim().is_empty() => std::path::PathBuf::from(path),
         _ => state.java.ensure_runtime(app, &state.paths, &java_component).await?.path,
@@ -188,22 +193,39 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
         raw_game_args,
     };
 
+    emit_phase(app, instance_id, LaunchPhase::Starting);
     let mut child = super::spawn(instance_id, &ctx)?;
     let log_buffer = super::new_log_buffer();
     super::stream_output(app, instance_id, &mut child, log_buffer.clone());
     instances::touch_last_played(&state.paths, instance_id)?;
 
     let pid = child.id();
-    let shared: RunningChild = Arc::new(AsyncMutex::new(child));
-
-    state.running.lock().insert(instance_id.to_string(), shared.clone());
+    let kill = Arc::new(Notify::new());
+    state
+        .running
+        .lock()
+        .insert(instance_id.to_string(), RunningChild { pid, kill: kill.clone() });
+    emit_phase(app, instance_id, LaunchPhase::Running);
 
     let app_for_wait = app.clone();
     let state_running = state.running.clone();
+    let paths = state.paths.clone();
     let instance_id_owned = instance_id.to_string();
+    let started = std::time::Instant::now();
     tokio::spawn(async move {
-        let status = shared.lock().await.wait().await;
+        let status = tokio::select! {
+            status = child.wait() => status,
+            _ = kill.notified() => {
+                if let Err(e) = child.start_kill() {
+                    tracing::warn!("failed to kill instance {instance_id_owned}: {e}");
+                }
+                child.wait().await
+            }
+        };
         state_running.lock().remove(&instance_id_owned);
+        if let Err(e) = instances::add_play_time(&paths, &instance_id_owned, started.elapsed().as_secs()) {
+            tracing::warn!("failed to record play time for {instance_id_owned}: {e}");
+        }
         let code = status.ok().and_then(|s| s.code());
         let crash_analysis = crate::launch::crash_detect::analyze(&log_buffer.lock(), code);
         let _ = app_for_wait.emit(
@@ -224,15 +246,24 @@ pub async fn stop_instance(state: &AppState, instance_id: &str) -> AppResult<()>
     let child = state.running.lock().get(instance_id).cloned();
     match child {
         Some(child) => {
-            child
-                .lock()
-                .await
-                .start_kill()
-                .map_err(|e| AppError::Launch(format!("impossible d'arrêter le processus: {e}")))?;
+            child.kill.notify_one();
             Ok(())
         }
         None => Err(AppError::Launch("cette instance n'est pas en cours d'exécution".to_string())),
     }
+}
+
+pub fn process_stats(state: &AppState, instance_id: &str) -> Option<ProcessStats> {
+    let pid = state.running.lock().get(instance_id)?.pid?;
+    let pid = sysinfo::Pid::from_u32(pid);
+    let mut sys = state.system.lock();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+    let process = sys.process(pid)?;
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1) as f32;
+    Some(ProcessStats {
+        memory_mb: process.memory() / 1024 / 1024,
+        cpu_percent: process.cpu_usage() / cores,
+    })
 }
 
 pub fn is_running(state: &AppState, instance_id: &str) -> bool {
@@ -269,6 +300,7 @@ mod tests {
             modpack: None,
             created_at: 0,
             last_played_at: None,
+            play_time_seconds: 0,
         }
     }
 

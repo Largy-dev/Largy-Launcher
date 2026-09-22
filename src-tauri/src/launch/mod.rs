@@ -13,13 +13,57 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::Notify;
 
 use crate::error::{AppError, AppResult};
 use crate::minecraft::launch_args::{build_command_args, LaunchContext};
 use crash_detect::CrashAnalysis;
 
-pub type RunningChild = Arc<AsyncMutex<Child>>;
+/// A running game as seen from outside its waiter task: the waiter owns the
+/// `Child` itself (it has to hold it mutably for the whole `wait()`), so
+/// stopping goes through `kill` instead of locking the process.
+#[derive(Clone)]
+pub struct RunningChild {
+    pub pid: Option<u32>,
+    pub kill: Arc<Notify>,
+}
+
+/// Coarse launch steps, emitted as `launch-phase` events so the UI can show
+/// where a launch currently is (auth -> files -> loader -> Java -> game).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchPhase {
+    Auth,
+    Version,
+    Loader,
+    Natives,
+    Java,
+    Starting,
+    Running,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LaunchPhaseEvent {
+    pub instance_id: String,
+    pub phase: LaunchPhase,
+}
+
+pub fn emit_phase(app: &AppHandle, instance_id: &str, phase: LaunchPhase) {
+    let _ = app.emit(
+        "launch-phase",
+        LaunchPhaseEvent {
+            instance_id: instance_id.to_string(),
+            phase,
+        },
+    );
+}
+
+/// Memory/CPU usage of a running game's process, for the live stats panel.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessStats {
+    pub memory_mb: u64,
+    pub cpu_percent: f32,
+}
 
 /// How many of the most recent stdout/stderr lines are kept for crash
 /// analysis once the process exits — enough to catch a crash trace without

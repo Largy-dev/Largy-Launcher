@@ -52,6 +52,9 @@ pub struct Instance {
     pub created_at: i64,
     #[serde(default)]
     pub last_played_at: Option<i64>,
+    /// Cumulative time spent in-game across every session, in seconds.
+    #[serde(default)]
+    pub play_time_seconds: u64,
 }
 
 fn now_unix() -> i64 {
@@ -129,6 +132,7 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         modpack: input.modpack,
         created_at: now_unix(),
         last_played_at: None,
+        play_time_seconds: 0,
     };
 
     save(&instance)?;
@@ -147,6 +151,31 @@ pub fn touch_last_played(paths: &AppPaths, id: &str) -> AppResult<()> {
     let mut instance = get(paths, id)?;
     instance.last_played_at = Some(now_unix());
     save(&instance)
+}
+
+pub fn add_play_time(paths: &AppPaths, id: &str, seconds: u64) -> AppResult<()> {
+    let mut instance = get(paths, id)?;
+    instance.play_time_seconds = instance.play_time_seconds.saturating_add(seconds);
+    save(&instance)
+}
+
+/// Longest name accepted by [`rename`] — keeps cards and the sidebar readable.
+pub const MAX_NAME_LEN: usize = 64;
+
+pub fn rename(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Instance("le nom de l'instance ne peut pas être vide".to_string()));
+    }
+    if trimmed.chars().count() > MAX_NAME_LEN {
+        return Err(AppError::Instance(format!(
+            "le nom de l'instance ne peut pas dépasser {MAX_NAME_LEN} caractères"
+        )));
+    }
+    let mut instance = get(paths, id)?;
+    instance.name = trimmed.to_string();
+    save(&instance)?;
+    Ok(instance)
 }
 
 #[cfg(test)]
@@ -233,5 +262,49 @@ mod tests {
 
         let fetched = get(&paths, &created.id).unwrap();
         assert!(fetched.last_played_at.is_some());
+    }
+
+    #[test]
+    fn add_play_time_accumulates_across_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let created = create(&paths, test_input("Timed")).unwrap();
+        assert_eq!(created.play_time_seconds, 0);
+
+        add_play_time(&paths, &created.id, 90).unwrap();
+        add_play_time(&paths, &created.id, 30).unwrap();
+
+        assert_eq!(get(&paths, &created.id).unwrap().play_time_seconds, 120);
+    }
+
+    #[test]
+    fn instances_saved_before_play_time_existed_default_to_zero() {
+        let json = r#"{"id":"a","name":"Old","minecraft_version":"1.20.1","loader":"vanilla",
+            "loader_version":null,"directory":"x"}"#;
+        let instance: Instance = serde_json::from_str(json).unwrap();
+        assert_eq!(instance.play_time_seconds, 0);
+    }
+
+    #[test]
+    fn rename_trims_and_persists_the_new_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let created = create(&paths, test_input("Before")).unwrap();
+
+        let renamed = rename(&paths, &created.id, "  After  ").unwrap();
+
+        assert_eq!(renamed.name, "After");
+        assert_eq!(get(&paths, &created.id).unwrap().name, "After");
+    }
+
+    #[test]
+    fn rename_rejects_empty_and_too_long_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let created = create(&paths, test_input("Keep")).unwrap();
+
+        assert!(rename(&paths, &created.id, "   ").is_err());
+        assert!(rename(&paths, &created.id, &"x".repeat(MAX_NAME_LEN + 1)).is_err());
+        assert_eq!(get(&paths, &created.id).unwrap().name, "Keep");
     }
 }

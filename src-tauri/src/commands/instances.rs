@@ -82,6 +82,11 @@ pub fn instances_delete(state: State<'_, AppState>, id: String) -> AppResult<()>
 }
 
 #[tauri::command]
+pub fn instances_rename(state: State<'_, AppState>, id: String, name: String) -> AppResult<Instance> {
+    instances::rename(&state.paths, &id, &name)
+}
+
+#[tauri::command]
 pub fn instances_update_settings(
     state: State<'_, AppState>,
     id: String,

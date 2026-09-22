@@ -51,6 +51,7 @@ export interface Instance {
   modpack: ModpackRef | null;
   created_at: number;
   last_played_at: number | null;
+  play_time_seconds: number;
 }
 
 export interface GlobalSettings {
@@ -143,6 +144,23 @@ export interface CrashAnalysis {
   matched_pattern: string;
 }
 
+export type LaunchPhase = "auth" | "version" | "loader" | "natives" | "java" | "starting" | "running";
+
+export interface LaunchPhaseEvent {
+  instance_id: string;
+  phase: LaunchPhase;
+}
+
+export interface ProcessStats {
+  memory_mb: number;
+  cpu_percent: number;
+}
+
+export interface SystemMemoryInfo {
+  total_mb: number;
+  available_mb: number;
+}
+
 export interface InstanceExit {
   instance_id: string;
   code: number | null;
@@ -161,6 +179,10 @@ export function onInstanceExit(handler: (exit: InstanceExit) => void): Promise<U
   return listen<InstanceExit>("instance-exit", (e) => handler(e.payload));
 }
 
+export function onLaunchPhase(handler: (e: LaunchPhaseEvent) => void): Promise<UnlistenFn> {
+  return listen<LaunchPhaseEvent>("launch-phase", (e) => handler(e.payload));
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -171,6 +193,10 @@ export function getAppVersion(): Promise<string> {
 
 export function getSystemMemoryMb(): Promise<number> {
   return invoke<number>("system_memory_mb");
+}
+
+export function getSystemMemoryInfo(): Promise<SystemMemoryInfo> {
+  return invoke<SystemMemoryInfo>("system_memory_info");
 }
 
 export function loadersListVersions(loader: LoaderKind, minecraftVersion: string): Promise<string[]> {
@@ -208,6 +234,7 @@ export const instancesApi = {
   create: (name: string, minecraftVersion: string, loader: LoaderKind, loaderVersion: string | null) =>
     invoke<Instance>("instances_create", { name, minecraftVersion, loader, loaderVersion }),
   delete: (id: string) => invoke<void>("instances_delete", { id }),
+  rename: (id: string, name: string) => invoke<Instance>("instances_rename", { id, name }),
   updateSettings: (id: string, minMemoryMb: number | null, maxMemoryMb: number | null, extraJvmArgs: string[]) =>
     invoke<Instance>("instances_update_settings", { id, minMemoryMb, maxMemoryMb, extraJvmArgs }),
   openFolder: (id: string) => invoke<void>("instances_open_folder", { id }),
@@ -235,6 +262,7 @@ export const launchApi = {
   launch: (instanceId: string) => invoke<void>("launch_instance", { instanceId }),
   stop: (instanceId: string) => invoke<void>("stop_instance", { instanceId }),
   isRunning: (instanceId: string) => invoke<boolean>("is_instance_running", { instanceId }),
+  stats: (instanceId: string) => invoke<ProcessStats | null>("instance_process_stats", { instanceId }),
 };
 
 export interface ModEntry {

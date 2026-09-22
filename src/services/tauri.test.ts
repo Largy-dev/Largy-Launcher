@@ -84,6 +84,11 @@ describe("instancesApi", () => {
     });
   });
 
+  it("rename passes id and name", async () => {
+    await instancesApi.rename("abc", "New name");
+    expect(invokeMock).toHaveBeenCalledWith("instances_rename", { id: "abc", name: "New name" });
+  });
+
   it("updateSettings camelCases every argument", async () => {
     await instancesApi.updateSettings("abc", 1024, 4096, ["-Dfoo=bar"]);
     expect(invokeMock).toHaveBeenCalledWith("instances_update_settings", {
@@ -117,5 +122,10 @@ describe("launchApi", () => {
 
     await launchApi.isRunning("abc");
     expect(invokeMock).toHaveBeenCalledWith("is_instance_running", { instanceId: "abc" });
+  });
+
+  it("stats camelCases instanceId", async () => {
+    await launchApi.stats("abc");
+    expect(invokeMock).toHaveBeenCalledWith("instance_process_stats", { instanceId: "abc" });
   });
 });
