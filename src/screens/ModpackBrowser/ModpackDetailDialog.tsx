@@ -24,6 +24,7 @@ import {
   type ModpackSummary,
   type ProviderId,
 } from "@/services/tauri";
+import { useAppStore, type PendingInstallWarnings } from "@/store/appStore";
 
 interface ModpackDetailDialogProps {
   provider: ProviderId;
@@ -43,11 +44,17 @@ interface InstallVars {
   instanceName: string;
 }
 
-function notifyResult(result: InstanceInstallResult, successMessage: string) {
+function notifyResult(
+  result: InstanceInstallResult,
+  successMessage: string,
+  setInstallWarnings: (w: PendingInstallWarnings) => void,
+) {
   toast.success(successMessage);
   if (result.warnings.length > 0) {
-    toast.warning(`${result.warnings.length} avertissement(s) lors de l'installation`, {
-      description: result.warnings.slice(0, 3).join("\n"),
+    setInstallWarnings({
+      instanceId: result.instance.id,
+      instanceName: result.instance.name,
+      warnings: result.warnings,
     });
   }
 }
@@ -55,6 +62,7 @@ function notifyResult(result: InstanceInstallResult, successMessage: string) {
 export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstanceId }: ModpackDetailDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const setInstallWarnings = useAppStore((s) => s.setInstallWarnings);
   const [versionId, setVersionId] = useState("");
   const [instanceName, setInstanceName] = useState("");
   const isUpdate = !!updateInstanceId;
@@ -80,7 +88,7 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
       ),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      notifyResult(result, `${vars.packName} installé`);
+      notifyResult(result, `${vars.packName} installé`, setInstallWarnings);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -90,7 +98,7 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["modpack-versions", provider, pack?.id] });
-      notifyResult(result, `${pack?.name ?? "Modpack"} mis à jour`);
+      notifyResult(result, `${pack?.name ?? "Modpack"} mis à jour`, setInstallWarnings);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });

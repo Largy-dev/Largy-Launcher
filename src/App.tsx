@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { RecentInstances } from "@/components/RecentInstances";
+import { InstallWarningsDialog } from "@/components/InstallWarningsDialog";
 import { InstanceListScreen } from "@/screens/InstanceList/InstanceListScreen";
 import { ModpackBrowserScreen } from "@/screens/ModpackBrowser/ModpackBrowserScreen";
 import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScreen";
@@ -192,6 +193,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
       <Toaster richColors position="bottom-right" />
+      <InstallWarningsDialog />
     </QueryClientProvider>
   );
 }

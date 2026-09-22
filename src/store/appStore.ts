@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
-import type { AccountSession, CrashAnalysis, DownloadProgress } from "@/services/tauri";
+import type { AccountSession, CrashAnalysis, DownloadProgress, InstallWarning } from "@/services/tauri";
+
+export interface PendingInstallWarnings {
+  instanceId: string;
+  instanceName: string;
+  warnings: InstallWarning[];
+}
 
 interface InstanceRuntime {
   running: boolean;
@@ -28,6 +34,10 @@ interface AppStore {
   crashAnalysis: Record<string, CrashAnalysis | null>;
   setCrashAnalysis: (instanceId: string, analysis: CrashAnalysis | null) => void;
   clearCrashAnalysis: (instanceId: string) => void;
+
+  installWarnings: PendingInstallWarnings | null;
+  setInstallWarnings: (warnings: PendingInstallWarnings) => void;
+  clearInstallWarnings: () => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -61,4 +71,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setCrashAnalysis: (instanceId, analysis) =>
     set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: analysis } })),
   clearCrashAnalysis: (instanceId) => set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: null } })),
+
+  installWarnings: null,
+  setInstallWarnings: (warnings) => set({ installWarnings: warnings }),
+  clearInstallWarnings: () => set({ installWarnings: null }),
 }));

@@ -107,9 +107,15 @@ export interface ModpackVersionSummary {
 
 export type ProviderId = "ftb" | "curseforge";
 
+export interface InstallWarning {
+  file_name: string;
+  message: string;
+  browser_url: string | null;
+}
+
 export interface InstanceInstallResult {
   instance: Instance;
-  warnings: string[];
+  warnings: InstallWarning[];
 }
 
 // ---------------------------------------------------------------------------

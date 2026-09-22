@@ -10,6 +10,17 @@ use crate::instances::{self, CreateInstanceInput, Instance, ModpackRef};
 use crate::providers::{FileDownloadInfo, LoaderKind, ModpackFileRef, ModpackProvider, ResolvedModpackVersion};
 use crate::state::AppState;
 
+/// One file that didn't make it into the instance automatically. Structured
+/// (rather than a pre-formatted string) so the frontend can offer real
+/// actions — open the download page, open the instance's mods folder —
+/// instead of a one-shot toast the user loses once it's dismissed.
+#[derive(Debug, Clone, Serialize)]
+pub struct InstallWarning {
+    pub file_name: String,
+    pub message: String,
+    pub browser_url: Option<String>,
+}
+
 /// Result of an instance install/update: the instance itself, plus any
 /// per-file problems that didn't stop the install but left it incomplete
 /// (manual-download-required mods, files whose download URL couldn't be
@@ -17,7 +28,7 @@ use crate::state::AppState;
 #[derive(Debug, Serialize)]
 pub struct InstanceInstallResult {
     pub instance: Instance,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<InstallWarning>,
 }
 
 /// Runs a blocking, `'static`-owned closure on Tokio's blocking thread pool
@@ -120,7 +131,7 @@ async fn download_and_track_files(
     instance_id: &str,
     instance_name: &str,
     instance_dir: &Path,
-) -> AppResult<(Vec<PathBuf>, Vec<String>)> {
+) -> AppResult<(Vec<PathBuf>, Vec<InstallWarning>)> {
     let (items, warnings) = resolve_download_items(provider, &resolved.files, instance_dir).await;
     let mut installed_files: Vec<PathBuf> =
         items.iter().filter_map(|i| i.dest.strip_prefix(instance_dir).ok().map(Path::to_path_buf)).collect();
@@ -276,7 +287,7 @@ async fn resolve_download_items(
     provider: &dyn ModpackProvider,
     files: &[ModpackFileRef],
     instance_dir: &Path,
-) -> (Vec<DownloadItem>, Vec<String>) {
+) -> (Vec<DownloadItem>, Vec<InstallWarning>) {
     let mut items = Vec::new();
     let mut warnings = Vec::new();
     for file in files {
@@ -288,17 +299,24 @@ async fn resolve_download_items(
                 size: (file.size > 0).then_some(file.size),
             }),
             Ok(FileDownloadInfo::ManualRequired { browser_url, expected_filename }) => {
-                let message = format!(
+                tracing::warn!(
                     "{}: téléchargement manuel requis ({browser_url}, attendu: {expected_filename})",
                     file.path.display()
                 );
-                tracing::warn!("{message}");
-                warnings.push(message);
+                warnings.push(InstallWarning {
+                    file_name: expected_filename,
+                    message: "L'auteur a désactivé le téléchargement automatique pour ce fichier.".to_string(),
+                    browser_url: Some(browser_url),
+                });
             }
             Err(e) => {
-                let message = format!("échec de résolution du fichier {}: {e}", file.path.display());
-                tracing::warn!("{message}");
-                warnings.push(message);
+                let message = e.to_string();
+                tracing::warn!("échec de résolution du fichier {}: {message}", file.path.display());
+                warnings.push(InstallWarning {
+                    file_name: file.path.display().to_string(),
+                    message,
+                    browser_url: None,
+                });
             }
         }
     }
@@ -445,8 +463,11 @@ mod tests {
         assert!(items[0].dest.ends_with("mods/a.jar"));
 
         assert_eq!(warnings.len(), 2);
-        assert!(warnings[0].contains("mods/b.jar") && warnings[0].contains("téléchargement manuel"));
-        assert!(warnings[1].contains("mods/c.jar") && warnings[1].contains("boom"));
+        assert_eq!(warnings[0].file_name, "b.jar");
+        assert_eq!(warnings[0].browser_url, Some("https://example.com/b".to_string()));
+        assert_eq!(warnings[1].file_name, "mods/c.jar");
+        assert!(warnings[1].message.contains("boom"));
+        assert_eq!(warnings[1].browser_url, None);
     }
 
     #[tokio::test]
