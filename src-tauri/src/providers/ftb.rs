@@ -1,5 +1,9 @@
-//! FTB modpacks via the public `api.modpacks.ch` API (the same backend the
-//! official FTB App uses) — no API key required.
+//! FTB modpacks via the public `api.feed-the-beast.com` API (the same
+//! backend the current FTB website uses) — no API key required.
+//!
+//! The older `api.modpacks.ch/public` host has the same shape but stops
+//! returning versions published after mid-2024 for actively updated packs,
+//! so it silently hides most of a pack's version history.
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -10,7 +14,7 @@ use super::{
     ModpackSummary, ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
 };
 
-const BASE: &str = "https://api.modpacks.ch/public";
+const BASE: &str = "https://api.feed-the-beast.com/v1/modpacks/public";
 
 pub struct FtbProvider {
     client: reqwest::Client,
