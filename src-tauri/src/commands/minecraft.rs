@@ -6,6 +6,6 @@ use crate::state::AppState;
 
 #[tauri::command]
 pub async fn minecraft_list_versions(state: State<'_, AppState>) -> AppResult<Vec<VersionManifestEntry>> {
-    let manifest = manifest::fetch_version_manifest(&state.client).await?;
+    let manifest = manifest::fetch_version_manifest(&state.meta).await?;
     Ok(manifest.versions)
 }

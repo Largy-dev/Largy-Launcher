@@ -1,35 +1,35 @@
-//! Spawns the final `java` process built by `minecraft::launch_args` and
-//! streams stdout/stderr to the frontend as `instance-log` events. The
-//! cross-module assembly of *what* to launch lives in [`orchestrator`].
+//! Spawns the final `java` process built by `minecraft::launch_args`; the
+//! cross-module assembly of *what* to launch lives in [`orchestrator`], and
+//! log streaming in [`logs`].
 
 pub mod crash_detect;
+pub mod logs;
 pub mod orchestrator;
+mod prepare;
 
 use std::process::Stdio;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Notify;
 
 use crate::error::{AppError, AppResult};
-use crate::minecraft::launch_args::{build_command_args, LaunchContext};
+use crate::minecraft::launch_args::{command_args, LaunchContext};
 use crash_detect::CrashAnalysis;
 
-/// A running game as seen from outside its waiter task: the waiter owns the
-/// `Child` itself (it has to hold it mutably for the whole `wait()`), so
-/// stopping goes through `kill` instead of locking the process.
+/// A launch as seen from outside its own tasks. Registered as soon as a
+/// launch *starts preparing* (so a second click can't start a parallel
+/// preparation), `pid` is filled in once the game process exists; `kill`
+/// cancels the preparation or stops the game.
 #[derive(Clone)]
 pub struct RunningChild {
     pub pid: Option<u32>,
     pub kill: Arc<Notify>,
 }
 
-/// Coarse launch steps, emitted as `launch-phase` events so the UI can show
-/// where a launch currently is (auth -> files -> loader -> Java -> game).
+/// Coarse launch steps, emitted as `launch-phase` events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LaunchPhase {
@@ -49,35 +49,13 @@ pub struct LaunchPhaseEvent {
 }
 
 pub fn emit_phase(app: &AppHandle, instance_id: &str, phase: LaunchPhase) {
-    let _ = app.emit(
-        "launch-phase",
-        LaunchPhaseEvent {
-            instance_id: instance_id.to_string(),
-            phase,
-        },
-    );
+    let _ = app.emit("launch-phase", LaunchPhaseEvent { instance_id: instance_id.to_string(), phase });
 }
 
-/// Memory/CPU usage of a running game's process, for the live stats panel.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessStats {
     pub memory_mb: u64,
     pub cpu_percent: f32,
-}
-
-/// How many of the most recent stdout/stderr lines are kept for crash
-/// analysis once the process exits — enough to catch a crash trace without
-/// holding an unbounded amount of a long play session's log in memory.
-const LOG_BUFFER_CAPACITY: usize = 500;
-
-/// Shared, bounded ring of recent log lines for one launch — local to that
-/// launch's tasks (not `AppState`), so it's dropped automatically once the
-/// instance exits and nothing else needs to reach into a running instance's
-/// live log from outside this module.
-pub type LogBuffer = Arc<Mutex<Vec<String>>>;
-
-pub fn new_log_buffer() -> LogBuffer {
-    Arc::new(Mutex::new(Vec::with_capacity(LOG_BUFFER_CAPACITY)))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,64 +66,51 @@ pub struct LaunchState {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct InstanceLogLine {
-    pub instance_id: String,
-    pub line: String,
-    pub stream: &'static str,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct InstanceExit {
     pub instance_id: String,
     pub code: Option<i32>,
     pub crash_analysis: Option<CrashAnalysis>,
+    /// Stopped from the launcher — a non-zero code is expected, not a crash.
+    pub killed: bool,
 }
 
-pub fn spawn(instance_id: &str, ctx: &LaunchContext) -> AppResult<Child> {
-    let args = build_command_args(ctx);
-    tracing::info!("launching instance {instance_id}: {} {:?}", ctx.java_path.display(), args);
+/// The command line as it's safe to log: the access token replaced.
+fn redacted(args: &[String], secret: &str) -> Vec<String> {
+    if secret.len() < 8 {
+        return args.to_vec();
+    }
+    args.iter().map(|a| a.replace(secret, "********")).collect()
+}
+
+pub fn spawn(instance_id: &str, ctx: &LaunchContext, secret: &str) -> AppResult<Child> {
+    let args = command_args(ctx)?;
+    tracing::info!(
+        "launching instance {instance_id}: {} {:?}",
+        ctx.java_path.display(),
+        redacted(&args, secret)
+    );
 
     let mut cmd = Command::new(&ctx.java_path);
     cmd.args(&args)
         .current_dir(&ctx.game_directory)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .kill_on_drop(false);
     crate::process_ext::hide_console_window(&mut cmd);
 
-    cmd.spawn().map_err(|e| AppError::Launch(format!("échec du lancement de java: {e}")))
+    cmd.spawn()
+        .map_err(|e| AppError::Launch(format!("échec du lancement de java ({}): {e}", ctx.java_path.display())))
 }
 
-pub fn stream_output(app: &AppHandle, instance_id: &str, child: &mut Child, log_buffer: LogBuffer) {
-    if let Some(stdout) = child.stdout.take() {
-        spawn_log_reader(app.clone(), instance_id.to_string(), stdout, "stdout", log_buffer.clone());
-    }
-    if let Some(stderr) = child.stderr.take() {
-        spawn_log_reader(app.clone(), instance_id.to_string(), stderr, "stderr", log_buffer);
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn spawn_log_reader<R>(app: AppHandle, instance_id: String, reader: R, stream: &'static str, log_buffer: LogBuffer)
-where
-    R: tokio::io::AsyncRead + Unpin + Send + 'static,
-{
-    tokio::spawn(async move {
-        let mut lines = BufReader::new(reader).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            {
-                let mut buffer = log_buffer.lock();
-                if buffer.len() >= LOG_BUFFER_CAPACITY {
-                    buffer.remove(0);
-                }
-                buffer.push(line.clone());
-            }
-            let _ = app.emit(
-                "instance-log",
-                InstanceLogLine {
-                    instance_id: instance_id.clone(),
-                    line,
-                    stream,
-                },
-            );
-        }
-    });
+    #[test]
+    fn redacted_hides_the_access_token() {
+        let args = vec!["--accessToken".to_string(), "eyJhbGciOiJSUzI1NiJ9.secret".to_string()];
+        assert_eq!(redacted(&args, "eyJhbGciOiJSUzI1NiJ9.secret")[1], "********");
+        assert_eq!(redacted(&args, "-")[1], "eyJhbGciOiJSUzI1NiJ9.secret");
+    }
 }

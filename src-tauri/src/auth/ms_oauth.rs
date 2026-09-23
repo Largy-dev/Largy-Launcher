@@ -13,6 +13,8 @@ const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceCodeInfo {
+    #[serde(default)]
+    pub message: Option<String>,
     pub device_code: String,
     pub user_code: String,
     pub verification_uri: String,
@@ -28,6 +30,7 @@ pub struct MsTokens {
 pub enum PollOutcome {
     Success(MsTokens),
     Pending,
+    SlowDown,
     Expired,
 }
 
@@ -41,6 +44,7 @@ pub async fn request_device_code(client: &reqwest::Client, client_id: &str) -> A
         .await?;
 
     Ok(DeviceCodeInfo {
+        message: None,
         device_code: field_str(&body, "device_code")?,
         user_code: field_str(&body, "user_code")?,
         verification_uri: body
@@ -80,7 +84,8 @@ pub async fn poll_device_token(
     }
 
     match body.get("error").and_then(|v| v.as_str()) {
-        Some("authorization_pending") | Some("slow_down") => Ok(PollOutcome::Pending),
+        Some("authorization_pending") => Ok(PollOutcome::Pending),
+        Some("slow_down") => Ok(PollOutcome::SlowDown),
         Some("expired_token") | Some("code_expired") => Ok(PollOutcome::Expired),
         _ => Err(AppError::Auth(
             body.get("error_description")

@@ -1,16 +1,17 @@
 //! Builds the final `java` invocation from a resolved version manifest plus
-//! any mod-loader contributions (`LoaderProfile`), substituting the standard
+//! any mod-loader contributions, substituting the standard
 //! `${auth_player_name}`-style placeholders Mojang's version JSON uses.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::modloaders::LoaderProfile;
 use crate::util::placeholders::substitute_dollar_braces;
 
 #[derive(Debug, Clone)]
 pub struct LaunchContext {
     pub java_path: PathBuf,
+    /// Major version of `java_path` (argfiles need Java 9+).
+    pub java_major: u32,
     pub game_directory: PathBuf,
     pub natives_directory: PathBuf,
     pub classpath: Vec<PathBuf>,
@@ -23,15 +24,32 @@ pub struct LaunchContext {
     pub raw_game_args: Vec<String>,
 }
 
-/// Merges a mod loader's contributions (extra libraries already folded into
-/// `classpath` by the caller) into a `LaunchContext` built from the vanilla
-/// version manifest.
-pub fn apply_loader_profile(ctx: &mut LaunchContext, profile: &LoaderProfile) {
-    if let Some(main_class) = &profile.main_class_override {
-        ctx.main_class = main_class.clone();
+/// Windows caps a whole command line at 32 767 chars; big modpacks' classpaths
+/// get close, so past this the arguments go through a Java `@argfile`.
+const MAX_COMMAND_LINE: usize = 30_000;
+
+impl LaunchContext {
+    pub fn argfile_path(&self) -> PathBuf {
+        self.game_directory.join(".largy-launch-args.txt")
     }
-    ctx.extra_jvm_args.extend(profile.extra_jvm_args.iter().cloned());
-    ctx.raw_game_args.extend(profile.extra_game_args.iter().cloned());
+}
+
+fn quote_for_argfile(arg: &str) -> String {
+    format!("\"{}\"", arg.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The arguments to actually pass to `java`: the full list, or a single
+/// `@file` pointing at them when the command line would be too long.
+pub fn command_args(ctx: &LaunchContext) -> std::io::Result<Vec<String>> {
+    let args = build_command_args(ctx);
+    let length: usize = args.iter().map(|a| a.len() + 3).sum();
+    if length <= MAX_COMMAND_LINE || ctx.java_major < 9 {
+        return Ok(args);
+    }
+    let path = ctx.argfile_path();
+    let content: Vec<String> = args.iter().map(|a| quote_for_argfile(a)).collect();
+    crate::util::fs::write_atomic(&path, content.join("\n").as_bytes())?;
+    Ok(vec![format!("@{}", path.display())])
 }
 
 /// Produces the full argument list to pass to `Command::new(java_path).args(...)`.
@@ -78,6 +96,7 @@ mod tests {
         placeholders.insert("auth_player_name".to_string(), "Steve".to_string());
         LaunchContext {
             java_path: PathBuf::from("/usr/bin/java"),
+            java_major: 17,
             game_directory: PathBuf::from("/instances/demo"),
             natives_directory: PathBuf::from("/instances/demo/natives"),
             classpath: vec![PathBuf::from("/libs/a.jar"), PathBuf::from("/libs/b.jar")],
@@ -115,35 +134,13 @@ mod tests {
     }
 
     #[test]
-    fn apply_loader_profile_merges_main_class_and_extra_args() {
-        let mut ctx = fixture_ctx();
-        let profile = LoaderProfile {
-            extra_libraries: Vec::new(),
-            main_class_override: Some("net.minecraftforge.Main".to_string()),
-            extra_jvm_args: vec!["-Dloader=1".to_string()],
-            extra_game_args: vec!["--forge".to_string()],
-            install_side_effects: Vec::new(),
-        };
-
-        apply_loader_profile(&mut ctx, &profile);
-
-        assert_eq!(ctx.main_class, "net.minecraftforge.Main");
-        assert!(ctx.extra_jvm_args.contains(&"-Dloader=1".to_string()));
-        assert!(ctx.raw_game_args.contains(&"--forge".to_string()));
+    fn argfile_quoting_escapes_backslashes_and_quotes() {
+        assert_eq!(quote_for_argfile(r#"C:\dir"b"#), r#""C:\\dir\"b""#);
     }
 
     #[test]
-    fn apply_loader_profile_keeps_vanilla_main_class_when_no_override() {
-        let mut ctx = fixture_ctx();
-        let profile = LoaderProfile {
-            extra_libraries: Vec::new(),
-            main_class_override: None,
-            extra_jvm_args: Vec::new(),
-            extra_game_args: Vec::new(),
-            install_side_effects: Vec::new(),
-        };
-
-        apply_loader_profile(&mut ctx, &profile);
-        assert_eq!(ctx.main_class, "net.minecraft.client.main.Main");
+    fn short_command_lines_are_passed_directly() {
+        let ctx = fixture_ctx();
+        assert_eq!(command_args(&ctx).unwrap(), build_command_args(&ctx));
     }
 }

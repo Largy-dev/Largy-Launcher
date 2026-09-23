@@ -1,31 +1,34 @@
 //! CurseForge modpacks via the official Core API (`api.curseforge.com`).
 //! Requires a personal API key from https://console.curseforge.com/ — set it
 //! in Paramètres. Modpacks are distributed as a zip (`manifest.json` +
-//! `overrides/`), so `resolve_version` downloads and unpacks it, then
-//! resolves each referenced mod file's real download URL individually
-//! (CurseForge lets mod authors disable third-party redistribution, in
-//! which case we fall back to `FileDownloadInfo::ManualRequired`).
+//! `overrides/`): `resolve_version` downloads and unpacks it, then looks up
+//! every referenced file in two batched requests (files, then their
+//! projects — for the target folder and the manual-download page).
 
 mod api_types;
-mod zip_extract;
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use parking_lot::RwLock;
-use tokio::task::JoinSet;
+use serde::de::DeserializeOwned;
+use serde_json::json;
 
+use super::archive;
 use super::{
-    FileDownloadInfo, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
+    InstallWarning, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
     ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
 };
-use api_types::{parse_loader_id, FileResponse, FilesResponse, ModResponse, SearchResponse};
-use zip_extract::extract_manifest_and_overrides;
+use crate::download::{DownloadItem, DownloadManager};
+use api_types::{parse_loader_id, CfFile, CfManifest, CfMod, ItemResponse, ListResponse};
 
 const BASE: &str = "https://api.curseforge.com/v1";
 const MINECRAFT_GAME_ID: u32 = 432;
 const MODPACK_CLASS_ID: u32 = 4471;
+const MAX_VERSION_PAGES: u32 = 4;
+const BATCH: usize = 500;
 
 pub struct CurseForgeProvider {
     client: reqwest::Client,
@@ -43,12 +46,148 @@ impl CurseForgeProvider {
         if key.trim().is_empty() {
             return Err(ProviderError::Other(
                 "Clé API CurseForge manquante. Ouvre Paramètres et renseigne ta clé depuis \
-                 console.curseforge.com pour parcourir les modpacks CurseForge."
+                 console.curseforge.com pour utiliser CurseForge."
                     .to_string(),
             ));
         }
         Ok(key)
     }
+
+    async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, String)]) -> Result<T, ProviderError> {
+        let response = self
+            .client
+            .get(format!("{BASE}{path}"))
+            .header("x-api-key", self.key()?)
+            .query(query)
+            .send()
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(ProviderError::NotFound(path.to_string()));
+        }
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return Err(ProviderError::Other("Clé API CurseForge refusée — vérifie-la dans Paramètres.".to_string()));
+        }
+        Ok(response.error_for_status()?.json().await?)
+    }
+
+    async fn post<T: DeserializeOwned>(&self, path: &str, body: serde_json::Value) -> Result<T, ProviderError> {
+        Ok(self
+            .client
+            .post(format!("{BASE}{path}"))
+            .header("x-api-key", self.key()?)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
+    async fn files_by_id(&self, ids: &[u32]) -> Result<HashMap<u32, CfFile>, ProviderError> {
+        let mut out = HashMap::new();
+        for chunk in ids.chunks(BATCH) {
+            let response: ListResponse<CfFile> = self.post("/mods/files", json!({ "fileIds": chunk })).await?;
+            out.extend(response.data.into_iter().map(|f| (f.id, f)));
+        }
+        Ok(out)
+    }
+
+    async fn mods_by_id(&self, ids: &[u32]) -> Result<HashMap<u32, CfMod>, ProviderError> {
+        let mut out = HashMap::new();
+        for chunk in ids.chunks(BATCH) {
+            let response: ListResponse<CfMod> = self.post("/mods", json!({ "modIds": chunk })).await?;
+            out.extend(response.data.into_iter().map(|m| (m.id, m)));
+        }
+        Ok(out)
+    }
+
+    /// Resolves an already-downloaded modpack zip — shared by provider
+    /// installs and "import a zip" from disk.
+    pub async fn resolve_zip(&self, zip_path: &Path, extract_dir: &Path) -> Result<ResolvedModpackVersion, ProviderError> {
+        let manifest_text = archive::read_text(zip_path, "manifest.json")?
+            .ok_or_else(|| ProviderError::Other("ce zip n'est pas un modpack CurseForge (manifest.json absent)".to_string()))?;
+        let manifest: CfManifest =
+            serde_json::from_str(&manifest_text).map_err(|e| ProviderError::Other(format!("manifest.json invalide: {e}")))?;
+
+        let overrides_prefix = format!("{}/", manifest.overrides.trim_matches('/'));
+        let overrides_dirs = {
+            let (zip, dest) = (zip_path.to_path_buf(), extract_dir.to_path_buf());
+            tokio::task::spawn_blocking(move || archive::extract_prefixes(&zip, &dest, &[overrides_prefix.as_str()]))
+                .await
+                .map_err(|e| ProviderError::Other(format!("tâche de fond interrompue: {e}")))??
+        };
+
+        let (loader, loader_version) = manifest
+            .minecraft
+            .mod_loaders
+            .iter()
+            .find(|l| l.primary)
+            .or_else(|| manifest.minecraft.mod_loaders.first())
+            .and_then(|l| parse_loader_id(&l.id))
+            .unwrap_or((LoaderKind::Vanilla, String::new()));
+
+        let wanted: Vec<_> = manifest.files.iter().filter(|f| f.required).cloned().collect();
+        let (files, warnings) = if wanted.is_empty() {
+            (Vec::new(), Vec::new())
+        } else {
+            let file_ids: Vec<u32> = wanted.iter().map(|f| f.file_id).collect();
+            let found = self.files_by_id(&file_ids).await?;
+            let mut mod_ids: Vec<u32> = wanted.iter().map(|f| f.project_id).collect();
+            mod_ids.sort_unstable();
+            mod_ids.dedup();
+            let projects = self.mods_by_id(&mod_ids).await?;
+            build_file_refs(&wanted, &found, &projects)
+        };
+
+        Ok(ResolvedModpackVersion {
+            minecraft_version: manifest.minecraft.version,
+            loader,
+            loader_version,
+            files,
+            overrides_dirs,
+            warnings,
+            pack_name: manifest.name,
+        })
+    }
+}
+
+fn build_file_refs(
+    wanted: &[api_types::CfManifestFile],
+    found: &HashMap<u32, CfFile>,
+    projects: &HashMap<u32, CfMod>,
+) -> (Vec<ModpackFileRef>, Vec<InstallWarning>) {
+    let mut files = Vec::new();
+    let mut warnings = Vec::new();
+    for entry in wanted {
+        let project = projects.get(&entry.project_id);
+        let Some(file) = found.get(&entry.file_id) else {
+            warnings.push(InstallWarning {
+                file_name: format!("projet {} / fichier {}", entry.project_id, entry.file_id),
+                message: "Fichier introuvable sur CurseForge (supprimé par son auteur ?).".to_string(),
+                browser_url: project.and_then(|p| p.links.website_url.clone()),
+            });
+            continue;
+        };
+        if !crate::util::fs::is_plain_file_name(&file.file_name) {
+            continue;
+        }
+        let folder = project.map(CfMod::target_folder).unwrap_or("mods");
+        let browser_url = project
+            .and_then(|p| p.links.website_url.clone())
+            .map(|site| format!("{}/files/{}", site.trim_end_matches('/'), file.id));
+        files.push(ModpackFileRef {
+            project_id: entry.project_id.to_string(),
+            file_id: entry.file_id.to_string(),
+            path: PathBuf::from(folder).join(&file.file_name),
+            sha1: file.sha1(),
+            size: file.file_length,
+            direct_url: file.download_url.clone(),
+            browser_url: browser_url.or_else(|| {
+                Some(format!("https://www.curseforge.com/minecraft/mc-mods/search?search={}", entry.project_id))
+            }),
+        });
+    }
+    (files, warnings)
 }
 
 #[async_trait]
@@ -62,61 +201,48 @@ impl ModpackProvider for CurseForgeProvider {
     }
 
     async fn search(&self, query: SearchQuery) -> Result<Vec<ModpackSummary>, ProviderError> {
-        let key = self.key()?;
-        let response: SearchResponse = self
-            .client
-            .get(format!("{BASE}/mods/search"))
-            .header("x-api-key", key)
-            .query(&[
-                ("gameId", MINECRAFT_GAME_ID.to_string()),
-                ("classId", MODPACK_CLASS_ID.to_string()),
-                ("searchFilter", query.text.clone()),
-                ("pageSize", "25".to_string()),
-                ("sortField", "2".to_string()),
-                ("sortOrder", "desc".to_string()),
-            ])
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
+        let response: ListResponse<CfMod> = self
+            .get(
+                "/mods/search",
+                &[
+                    ("gameId", MINECRAFT_GAME_ID.to_string()),
+                    ("classId", MODPACK_CLASS_ID.to_string()),
+                    ("searchFilter", query.text.clone()),
+                    ("pageSize", "25".to_string()),
+                    ("index", query.offset.to_string()),
+                    ("sortField", "2".to_string()),
+                    ("sortOrder", "desc".to_string()),
+                ],
+            )
             .await?;
-
-        Ok(response.data.iter().map(|m| m.to_summary()).collect())
+        Ok(response.data.iter().map(CfMod::to_summary).collect())
     }
 
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {
-        let key = self.key()?;
-        let response: ModResponse = self
-            .client
-            .get(format!("{BASE}/mods/{pack_id}"))
-            .header("x-api-key", key)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-
-        Ok(ModpackDetails {
-            summary: response.data.to_summary(),
-            description: response.data.summary.clone(),
-        })
+        let response: ItemResponse<CfMod> = self.get(&format!("/mods/{pack_id}"), &[]).await?;
+        Ok(ModpackDetails { summary: response.data.to_summary(), description: response.data.summary.clone() })
     }
 
     async fn get_versions(&self, pack_id: &str) -> Result<Vec<ModpackVersionSummary>, ProviderError> {
-        let key = self.key()?;
-        let response: FilesResponse = self
-            .client
-            .get(format!("{BASE}/mods/{pack_id}/files"))
-            .header("x-api-key", key)
-            .query(&[("pageSize", "50")])
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+        let mut all: Vec<CfFile> = Vec::new();
+        for page in 0..MAX_VERSION_PAGES {
+            let response: ListResponse<CfFile> = self
+                .get(
+                    &format!("/mods/{pack_id}/files"),
+                    &[("pageSize", "50".to_string()), ("index", (page * 50).to_string())],
+                )
+                .await?;
+            let total = response.pagination.as_ref().map(|p| p.total_count).unwrap_or(0);
+            let got = response.data.len();
+            all.extend(response.data);
+            if got < 50 || all.len() as u32 >= total {
+                break;
+            }
+        }
+        all.retain(|f| f.is_server_pack != Some(true));
+        all.sort_by_key(|f| std::cmp::Reverse(f.id));
 
-        Ok(response
-            .data
+        Ok(all
             .into_iter()
             .map(|f| {
                 let (loader, loader_version) = f.loader().unwrap_or((LoaderKind::Vanilla, String::new()));
@@ -131,117 +257,75 @@ impl ModpackProvider for CurseForgeProvider {
             .collect())
     }
 
-    async fn resolve_version(
-        &self,
-        pack_id: &str,
-        version_id: &str,
-    ) -> Result<ResolvedModpackVersion, ProviderError> {
-        let key = self.key()?;
-        let file: FileResponse = self
-            .client
-            .get(format!("{BASE}/mods/{pack_id}/files/{version_id}"))
-            .header("x-api-key", key.clone())
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-
-        let download_url = file.data.download_url.clone().ok_or_else(|| {
+    async fn resolve_version(&self, pack_id: &str, version_id: &str) -> Result<ResolvedModpackVersion, ProviderError> {
+        let file: ItemResponse<CfFile> = self.get(&format!("/mods/{pack_id}/files/{version_id}"), &[]).await?;
+        let file = file.data;
+        let download_url = file.download_url.clone().ok_or_else(|| {
             ProviderError::Other(
-                "Cet auteur désactive le téléchargement direct de ce modpack ; télécharge-le \
-                 manuellement depuis curseforge.com puis importe le zip."
+                "Cet auteur désactive le téléchargement direct de ce modpack : télécharge-le depuis \
+                 curseforge.com puis importe le zip dans le launcher."
                     .to_string(),
             )
         })?;
 
         let pack_zip_path = self.cache_dir.join(format!("{pack_id}-{version_id}.zip"));
-        if !pack_zip_path.exists() {
-            std::fs::create_dir_all(&self.cache_dir).map_err(|e| ProviderError::Other(e.to_string()))?;
-            let bytes = self.client.get(&download_url).send().await?.bytes().await?;
-            std::fs::write(&pack_zip_path, &bytes).map_err(|e| ProviderError::Other(e.to_string()))?;
-        }
-
-        let extract_dir = self.cache_dir.join(format!("{pack_id}-{version_id}-extracted"));
-        let manifest = {
-            let zip_path = pack_zip_path.clone();
-            let extract_dir = extract_dir.clone();
-            tokio::task::spawn_blocking(move || extract_manifest_and_overrides(&zip_path, &extract_dir))
-                .await
-                .map_err(|e| ProviderError::Other(format!("tâche de fond interrompue: {e}")))?
-                .map_err(|e| ProviderError::Other(e.to_string()))?
-        };
-
-        let (loader, loader_version) = manifest
-            .minecraft
-            .mod_loaders
-            .iter()
-            .find(|l| l.primary)
-            .or_else(|| manifest.minecraft.mod_loaders.first())
-            .and_then(|l| parse_loader_id(&l.id))
-            .unwrap_or((LoaderKind::Vanilla, String::new()));
-
-        let mut set = JoinSet::new();
-        for entry in manifest.files.iter().filter(|f| f.required).cloned() {
-            let client = self.client.clone();
-            let key = key.clone();
-            set.spawn(async move {
-                let response: Result<FileResponse, reqwest::Error> = client
-                    .get(format!("{BASE}/mods/{}/files/{}", entry.project_id, entry.file_id))
-                    .header("x-api-key", key)
-                    .send()
-                    .await?
-                    .json()
-                    .await;
-                response.map(|r| (entry, r.data))
-            });
-        }
-
-        let mut files = Vec::new();
-        while let Some(result) = set.join_next().await {
-            if let Ok(Ok((entry, file))) = result {
-                files.push(ModpackFileRef {
-                    project_id: entry.project_id.to_string(),
-                    file_id: entry.file_id.to_string(),
-                    path: PathBuf::from("mods").join(&file.file_name),
-                    sha1: None,
-                    size: 0,
-                    direct_url: file.download_url,
-                });
-            }
-        }
-
-        Ok(ResolvedModpackVersion {
-            minecraft_version: manifest.minecraft.version,
-            loader,
-            loader_version,
-            files,
-            overrides_dir: Some(extract_dir.join("overrides")),
-        })
-    }
-
-    async fn resolve_file_download(&self, file: &ModpackFileRef) -> Result<FileDownloadInfo, ProviderError> {
-        if let Some(url) = &file.direct_url {
-            return Ok(FileDownloadInfo::Direct { url: url.clone() });
-        }
-
-        let key = self.key()?;
-        let response: FileResponse = self
-            .client
-            .get(format!("{BASE}/mods/{}/files/{}", file.project_id, file.file_id))
-            .header("x-api-key", key)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
+        DownloadManager::new(self.client.clone())
+            .ensure_file(&DownloadItem {
+                url: download_url,
+                dest: pack_zip_path.clone(),
+                sha1: file.sha1(),
+                size: (file.file_length > 0).then_some(file.file_length),
+            })
             .await?;
 
-        match response.data.download_url {
-            Some(url) => Ok(FileDownloadInfo::Direct { url }),
-            None => Ok(FileDownloadInfo::ManualRequired {
-                browser_url: format!("https://www.curseforge.com/minecraft/mc-mods/search?search={}", file.project_id),
-                expected_filename: response.data.file_name,
-            }),
-        }
+        let extract_dir = self.cache_dir.join(format!("{pack_id}-{version_id}-extracted"));
+        self.resolve_zip(&pack_zip_path, &extract_dir).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api_types::CfManifestFile;
+
+    fn cf_mod(id: u32, class_id: u32) -> CfMod {
+        serde_json::from_value(json!({
+            "id": id, "name": "M", "summary": "", "classId": class_id,
+            "links": {"websiteUrl": format!("https://www.curseforge.com/minecraft/x/m{id}")}
+        }))
+        .unwrap()
+    }
+
+    fn cf_file(id: u32, name: &str, url: Option<&str>) -> CfFile {
+        serde_json::from_value(json!({
+            "id": id, "modId": 1, "displayName": name, "fileName": name, "downloadUrl": url,
+            "hashes": [{"value": "AA", "algo": 1}], "fileLength": 42
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn file_refs_go_to_the_right_folder_and_report_missing_files() {
+        let wanted = vec![
+            CfManifestFile { project_id: 1, file_id: 10, required: true },
+            CfManifestFile { project_id: 2, file_id: 20, required: true },
+            CfManifestFile { project_id: 3, file_id: 30, required: true },
+        ];
+        let found = HashMap::from([
+            (10, cf_file(10, "a.jar", Some("https://edge/a.jar"))),
+            (20, cf_file(20, "pack.zip", None)),
+        ]);
+        let projects = HashMap::from([(1, cf_mod(1, 6)), (2, cf_mod(2, 12)), (3, cf_mod(3, 6))]);
+
+        let (files, warnings) = build_file_refs(&wanted, &found, &projects);
+
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, PathBuf::from("mods/a.jar"));
+        assert_eq!(files[0].sha1.as_deref(), Some("aa"));
+        assert_eq!(files[0].size, 42);
+        assert_eq!(files[1].path, PathBuf::from("resourcepacks/pack.zip"));
+        assert_eq!(files[1].direct_url, None);
+        assert_eq!(files[1].browser_url.as_deref(), Some("https://www.curseforge.com/minecraft/x/m2/files/20"));
+        assert_eq!(warnings.len(), 1);
     }
 }

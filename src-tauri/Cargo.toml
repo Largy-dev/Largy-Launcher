@@ -29,6 +29,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 async-trait = "0.1"
 thiserror = "2"
 sha1 = "0.10"
+sha2 = "0.10"
 md-5 = "0.10"
 zip = "2"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
@@ -41,6 +42,8 @@ tauri-plugin-process = "2.3.1"
 tauri-plugin-notification = "2"
 sysinfo = "0.39.6"
 parking_lot = "0.12"
+futures-util = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
 tempfile = "3"

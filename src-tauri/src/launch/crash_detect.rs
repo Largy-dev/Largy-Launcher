@@ -1,7 +1,6 @@
 //! A small, deliberately dumb pattern table over the tail of a launch's
-//! stdout/stderr — not a state machine or multi-line correlation engine,
-//! just "does any buffered line contain a known crash signature". Run once,
-//! at process exit, against the buffered log (see [`super::orchestrator`]).
+//! stdout/stderr — "does any buffered line contain a known crash
+//! signature". Run once, at process exit (see [`super::orchestrator`]).
 
 use serde::Serialize;
 
@@ -10,12 +9,31 @@ pub struct CrashAnalysis {
     pub summary: String,
     pub suggestion: Option<String>,
     pub matched_pattern: &'static str,
+    /// Path of the crash report Minecraft wrote, when it logged one.
+    pub crash_report: Option<String>,
 }
 
-/// Ordered pattern table — first match wins, since some signatures (e.g. a
-/// generic mixin failure) are more common downstream of a more specific one
-/// and would otherwise shadow it if checked in the wrong order.
+const MIXIN_SUMMARY: &str = "Un mod utilisant Mixin a échoué à s'appliquer — probablement une incompatibilité entre mods.";
+const MIXIN_HINT: &str = "Vérifie que tous tes mods sont compatibles avec cette version de Minecraft et du mod loader.";
+
+/// Ordered pattern table — first match wins, since generic signatures often
+/// appear downstream of a more specific one.
 const PATTERNS: &[(&str, &str, Option<&str>)] = &[
+    (
+        "Could not reserve enough space for",
+        "Java n'a pas pu réserver la mémoire demandée.",
+        Some("Baisse la RAM allouée à l'instance : ta machine n'a pas assez de mémoire libre."),
+    ),
+    (
+        "Invalid maximum heap size",
+        "La quantité de RAM configurée est invalide.",
+        Some("Vérifie la RAM et les arguments JVM de l'instance."),
+    ),
+    (
+        "Unrecognized VM option",
+        "Un argument JVM n'est pas reconnu par cette version de Java.",
+        Some("Retire l'argument en cause dans les paramètres Java de l'instance."),
+    ),
     (
         "java.lang.OutOfMemoryError",
         "Le jeu a manqué de mémoire.",
@@ -23,51 +41,77 @@ const PATTERNS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "UnsupportedClassVersionError",
-        "Version de Java incompatible avec ce Minecraft.",
-        Some("Vérifie le chemin Java personnalisé dans Paramètres, ou laisse le launcher gérer Java automatiquement."),
+        "Version de Java incompatible avec ce Minecraft ou un de ses mods.",
+        Some("Laisse le launcher gérer Java automatiquement, ou choisis une version de Java plus récente."),
     ),
     (
-        "Mixin apply failed",
-        "Un mod utilisant Mixin a échoué à s'appliquer — probablement une incompatibilité entre mods.",
-        Some("Vérifie que tous tes mods sont compatibles avec cette version de Minecraft et du mod loader."),
+        "Pixel format not accelerated",
+        "Le pilote graphique ne prend pas en charge OpenGL.",
+        Some("Mets à jour le pilote de ta carte graphique."),
     ),
     (
-        "MixinApplyError",
-        "Un mod utilisant Mixin a échoué à s'appliquer — probablement une incompatibilité entre mods.",
-        Some("Vérifie que tous tes mods sont compatibles avec cette version de Minecraft et du mod loader."),
+        "GLFW error 65542",
+        "Le pilote graphique ne prend pas en charge OpenGL.",
+        Some("Mets à jour le pilote de ta carte graphique."),
     ),
     (
-        "Missing or unsupported mandatory dependencies",
-        "Des mods requis par d'autres mods sont manquants ou incompatibles.",
-        None,
+        "java.lang.UnsatisfiedLinkError",
+        "Une bibliothèque native n'a pas pu être chargée.",
+        Some("Utilise « Réparer l'instance » pour retélécharger les fichiers du jeu."),
+    ),
+    ("Mixin apply failed", MIXIN_SUMMARY, Some(MIXIN_HINT)),
+    ("MixinApplyError", MIXIN_SUMMARY, Some(MIXIN_HINT)),
+    ("Missing or unsupported mandatory dependencies", "Des mods requis par d'autres mods sont manquants ou incompatibles.", None),
+    ("requires any version of", "Des mods requis par d'autres mods sont manquants ou incompatibles.", None),
+    (
+        "Incompatible mods found!",
+        "Des mods incompatibles entre eux sont installés.",
+        Some("Le log ci-dessus indique quels mods retirer ou mettre à jour."),
+    ),
+    (
+        "java.lang.NoClassDefFoundError",
+        "Une classe est introuvable — un mod ou une de ses dépendances manque.",
+        Some("Vérifie que les dépendances de tes mods sont installées."),
     ),
     ("A mod crashed on startup", "Un mod a provoqué un crash au démarrage du jeu.", None),
 ];
 
-/// Scans `log_lines` (typically the last few hundred lines of a finished
-/// launch) for a known crash signature. Returns `None` when nothing matched
-/// and the exit was clean (`exit_code` is `Some(0)` or absent) — a non-zero,
-/// unrecognized exit still gets a generic fallback so the user isn't left
-/// with nothing.
-pub fn analyze(log_lines: &[String], exit_code: Option<i32>) -> Option<CrashAnalysis> {
+const CRASH_REPORT_MARKER: &str = "Crash report saved to:";
+
+fn crash_report_path(log_lines: &[String]) -> Option<String> {
+    log_lines.iter().rev().find_map(|line| {
+        let (_, rest) = line.split_once(CRASH_REPORT_MARKER)?;
+        let path = rest.trim().trim_start_matches("#@!@#").trim();
+        (!path.is_empty()).then(|| path.to_string())
+    })
+}
+
+/// `None` for a clean exit (code 0) or a launcher-initiated stop. A
+/// non-zero, unrecognized exit still gets a generic explanation.
+pub fn analyze(log_lines: &[String], exit_code: Option<i32>, killed: bool) -> Option<CrashAnalysis> {
+    if killed || exit_code == Some(0) {
+        return None;
+    }
+    let crash_report = crash_report_path(log_lines);
     for (needle, summary, suggestion) in PATTERNS {
         if log_lines.iter().any(|line| line.contains(needle)) {
             return Some(CrashAnalysis {
                 summary: summary.to_string(),
-                suggestion: suggestion.map(|s| s.to_string()),
+                suggestion: suggestion.map(str::to_string),
                 matched_pattern: needle,
+                crash_report,
             });
         }
     }
-
-    match exit_code {
-        Some(0) | None => None,
-        Some(code) => Some(CrashAnalysis {
-            summary: format!("Le jeu s'est arrêté avec une erreur (code {code})."),
-            suggestion: None,
-            matched_pattern: "unknown-nonzero-exit",
-        }),
-    }
+    Some(CrashAnalysis {
+        summary: match exit_code {
+            Some(code) => format!("Le jeu s'est arrêté avec une erreur (code {code})."),
+            None => "Le jeu s'est arrêté de manière inattendue.".to_string(),
+        },
+        suggestion: crash_report.is_some().then(|| "Consulte le crash report pour plus de détails.".to_string()),
+        matched_pattern: "unknown-nonzero-exit",
+        crash_report,
+    })
 }
 
 #[cfg(test)]
@@ -81,7 +125,7 @@ mod tests {
     #[test]
     fn detects_out_of_memory() {
         let log = lines(&["Exception in thread \"main\" java.lang.OutOfMemoryError: Java heap space"]);
-        let analysis = analyze(&log, Some(1)).unwrap();
+        let analysis = analyze(&log, Some(1), false).unwrap();
         assert_eq!(analysis.matched_pattern, "java.lang.OutOfMemoryError");
         assert!(analysis.suggestion.is_some());
     }
@@ -89,29 +133,35 @@ mod tests {
     #[test]
     fn detects_mixin_failure() {
         let log = lines(&["[main/ERROR] Mixin apply failed examplemod.mixins.json:ExampleMixin -> net.minecraft.Foo"]);
-        let analysis = analyze(&log, Some(1)).unwrap();
-        assert_eq!(analysis.matched_pattern, "Mixin apply failed");
+        assert_eq!(analyze(&log, Some(1), false).unwrap().matched_pattern, "Mixin apply failed");
     }
 
     #[test]
     fn first_matching_pattern_wins() {
         let log = lines(&["java.lang.OutOfMemoryError", "Mixin apply failed"]);
-        let analysis = analyze(&log, Some(1)).unwrap();
-        assert_eq!(analysis.matched_pattern, "java.lang.OutOfMemoryError");
+        assert_eq!(analyze(&log, Some(1), false).unwrap().matched_pattern, "java.lang.OutOfMemoryError");
     }
 
     #[test]
     fn falls_back_to_generic_message_for_unrecognized_nonzero_exit() {
-        let log = lines(&["some totally normal line"]);
-        let analysis = analyze(&log, Some(1)).unwrap();
+        let analysis = analyze(&lines(&["some totally normal line"]), Some(1), false).unwrap();
         assert_eq!(analysis.matched_pattern, "unknown-nonzero-exit");
         assert!(analysis.summary.contains('1'));
     }
 
     #[test]
-    fn returns_none_for_a_clean_exit_with_no_known_signature() {
-        let log = lines(&["Stopping server", "Saving worlds"]);
-        assert_eq!(analyze(&log, Some(0)), None);
-        assert_eq!(analyze(&log, None), None);
+    fn clean_exit_or_user_stop_is_never_a_crash() {
+        let log = lines(&["java.lang.OutOfMemoryError mentioned in a harmless warning"]);
+        assert_eq!(analyze(&log, Some(0), false), None);
+        assert_eq!(analyze(&log, Some(1), true), None);
+    }
+
+    #[test]
+    fn extracts_the_crash_report_path() {
+        let log = lines(&[
+            "#@!@# Game crashed! Crash report saved to: #@!@# C:\\games\\crash-reports\\crash-2026.txt",
+        ]);
+        let analysis = analyze(&log, Some(-1), false).unwrap();
+        assert_eq!(analysis.crash_report.as_deref(), Some("C:\\games\\crash-reports\\crash-2026.txt"));
     }
 }

@@ -9,6 +9,8 @@ use crate::error::{AppError, AppResult};
 pub struct XblToken {
     pub token: String,
     pub uhs: String,
+    /// Xbox user id, when the relying party includes it in the claims.
+    pub xid: Option<String>,
 }
 
 pub async fn authenticate_xbl(client: &reqwest::Client, ms_access_token: &str) -> AppResult<XblToken> {
@@ -81,17 +83,19 @@ fn parse_token_response(body: &serde_json::Value) -> AppResult<XblToken> {
         .ok_or_else(|| AppError::Auth("réponse Xbox Live invalide".to_string()))?
         .to_string();
 
-    let uhs = body
+    let claims = body
         .get("DisplayClaims")
         .and_then(|v| v.get("xui"))
         .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
+        .and_then(|arr| arr.first());
+    let uhs = claims
         .and_then(|v| v.get("uhs"))
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::Auth("réponse Xbox Live invalide (uhs manquant)".to_string()))?
         .to_string();
+    let xid = claims.and_then(|v| v.get("xid")).and_then(|v| v.as_str()).map(str::to_string);
 
-    Ok(XblToken { token, uhs })
+    Ok(XblToken { token, uhs, xid })
 }
 
 #[cfg(test)]

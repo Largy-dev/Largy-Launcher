@@ -10,6 +10,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
+use crate::util::fs::validate_file_name;
 
 const DISABLED_SUFFIX: &str = ".disabled";
 
@@ -52,6 +53,7 @@ pub fn list(instance_dir: &Path) -> AppResult<Vec<ModEntry>> {
 }
 
 pub fn set_enabled(instance_dir: &Path, file_name: &str, enabled: bool) -> AppResult<()> {
+    validate_file_name(file_name)?;
     let dir = mods_dir(instance_dir);
     let enabled_path = dir.join(file_name);
     let disabled_path = dir.join(format!("{file_name}{DISABLED_SUFFIX}"));
@@ -65,6 +67,7 @@ pub fn set_enabled(instance_dir: &Path, file_name: &str, enabled: bool) -> AppRe
 }
 
 pub fn delete(instance_dir: &Path, file_name: &str) -> AppResult<()> {
+    validate_file_name(file_name)?;
     let dir = mods_dir(instance_dir);
     let enabled_path = dir.join(file_name);
     let disabled_path = dir.join(format!("{file_name}{DISABLED_SUFFIX}"));
@@ -171,6 +174,15 @@ mod tests {
     fn delete_errors_when_the_mod_does_not_exist() {
         let dir = setup();
         assert!(delete(dir.path(), "missing.jar").is_err());
+    }
+
+    #[test]
+    fn file_names_with_path_components_are_rejected() {
+        let dir = setup();
+        std::fs::write(dir.path().join("victim.jar"), b"x").unwrap();
+        assert!(delete(dir.path(), "../victim.jar").is_err());
+        assert!(set_enabled(dir.path(), "../victim.jar", false).is_err());
+        assert!(dir.path().join("victim.jar").exists());
     }
 
     #[test]

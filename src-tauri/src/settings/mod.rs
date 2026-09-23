@@ -6,6 +6,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppResult;
 use crate::paths::AppPaths;
+use crate::util::fs::write_atomic;
+
+pub const MIN_HEAP_MB: u32 = 512;
+
+/// `(min, max)` heap sizes the JVM will accept: max at least [`MIN_HEAP_MB`],
+/// min at least 128 and never above max.
+pub fn sanitize_memory(min_mb: u32, max_mb: u32) -> (u32, u32) {
+    let max = max_mb.max(MIN_HEAP_MB);
+    (min_mb.clamp(128, max), max)
+}
 
 /// Largy Launcher's own public-client Azure AD application id (device code
 /// flow, `consumers` tenant, "Allow public client flows" — no secret
@@ -37,6 +47,19 @@ pub struct GlobalSettings {
     pub offline_mode: bool,
     #[serde(default)]
     pub offline_username: String,
+    /// What the launcher window does once a game is running.
+    #[serde(default)]
+    pub on_game_launch: LauncherBehavior,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LauncherBehavior {
+    #[default]
+    KeepOpen,
+    Minimize,
+    /// Hidden while the game runs, shown again when it exits.
+    Hide,
 }
 
 impl Default for GlobalSettings {
@@ -50,24 +73,42 @@ impl Default for GlobalSettings {
             java_path_override: None,
             offline_mode: false,
             offline_username: String::new(),
+            on_game_launch: LauncherBehavior::KeepOpen,
         }
     }
 }
 
 impl GlobalSettings {
+    /// Never fails on a bad file: an unreadable settings.json is moved aside
+    /// (`settings.json.corrupt`) and defaults are used, so one bad write can't
+    /// stop the launcher from opening.
     pub fn load(paths: &AppPaths) -> AppResult<Self> {
         let path = paths.settings_file();
         if !path.exists() {
             return Ok(Self::default());
         }
-        let bytes = std::fs::read(path)?;
-        Ok(serde_json::from_slice(&bytes)?)
+        let bytes = std::fs::read(&path)?;
+        match serde_json::from_slice::<Self>(&bytes) {
+            Ok(settings) => Ok(settings.sanitized()),
+            Err(e) => {
+                tracing::error!("settings.json is unreadable ({e}); falling back to defaults");
+                let _ = std::fs::rename(&path, path.with_extension("json.corrupt"));
+                Ok(Self::default())
+            }
+        }
     }
 
     pub fn save(&self, paths: &AppPaths) -> AppResult<()> {
-        std::fs::create_dir_all(paths.root())?;
-        std::fs::write(paths.settings_file(), serde_json::to_string_pretty(self)?)?;
+        write_atomic(&paths.settings_file(), serde_json::to_string_pretty(self)?.as_bytes())?;
         Ok(())
+    }
+
+    /// Clamps values the JVM would refuse (`-Xmx0M`, min above max).
+    pub fn sanitized(mut self) -> Self {
+        let (min, max) = sanitize_memory(self.default_min_memory_mb, self.default_max_memory_mb);
+        self.default_min_memory_mb = min;
+        self.default_max_memory_mb = max;
+        self
     }
 }
 
@@ -83,6 +124,25 @@ mod tests {
         assert_eq!(settings.default_min_memory_mb, 1024);
         assert!(!settings.offline_mode);
         assert_eq!(settings.azure_client_id, DEFAULT_AZURE_CLIENT_ID);
+    }
+
+    #[test]
+    fn corrupt_settings_file_falls_back_to_defaults_and_is_moved_aside() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        std::fs::write(paths.settings_file(), b"{ not json").unwrap();
+
+        let settings = GlobalSettings::load(&paths).unwrap();
+
+        assert_eq!(settings.default_max_memory_mb, 4096);
+        assert!(dir.path().join("settings.json.corrupt").exists());
+    }
+
+    #[test]
+    fn sanitize_memory_fixes_values_the_jvm_would_reject() {
+        assert_eq!(sanitize_memory(0, 0), (128, MIN_HEAP_MB));
+        assert_eq!(sanitize_memory(8192, 4096), (4096, 4096));
+        assert_eq!(sanitize_memory(1024, 4096), (1024, 4096));
     }
 
     #[test]

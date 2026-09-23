@@ -9,9 +9,15 @@ pub async fn launch_instance(app: AppHandle, state: State<'_, AppState>, instanc
     orchestrator::launch_instance(&app, &state, &instance_id).await
 }
 
+/// Stops a running game, or cancels a launch that's still preparing.
 #[tauri::command]
 pub async fn stop_instance(state: State<'_, AppState>, instance_id: String) -> AppResult<()> {
     orchestrator::stop_instance(&state, &instance_id).await
+}
+
+#[tauri::command]
+pub async fn repair_instance(app: AppHandle, state: State<'_, AppState>, instance_id: String) -> AppResult<()> {
+    orchestrator::repair_instance(&app, &state, &instance_id).await
 }
 
 #[tauri::command]

@@ -6,6 +6,7 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::minecraft::libraries::maven_path;
+use crate::util::fs::safe_join;
 
 use super::super::LoaderError;
 
@@ -64,7 +65,8 @@ pub(super) fn resolve_token(
     if let Some(coord) = raw_value.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
         let rel_path = maven_path(coord)
             .ok_or_else(|| LoaderError::Other(format!("coordonnée maven invalide: {coord}")))?;
-        let dest = libraries_dir.join(&rel_path);
+        let dest = safe_join(libraries_dir, &rel_path)
+            .ok_or_else(|| LoaderError::Other(format!("chemin invalide: {rel_path}")))?;
         extract_zip_entry(archive, &format!("maven/{rel_path}"), &dest)?;
         return Ok(dest.display().to_string());
     }
@@ -75,7 +77,8 @@ pub(super) fn resolve_token(
 
     if raw_value.starts_with('/') {
         let zip_path = raw_value.trim_start_matches('/');
-        let dest = scratch_dir.join(zip_path);
+        let dest = safe_join(scratch_dir, zip_path)
+            .ok_or_else(|| LoaderError::Other(format!("chemin invalide: {zip_path}")))?;
         extract_zip_entry(archive, zip_path, &dest)?;
         return Ok(dest.display().to_string());
     }

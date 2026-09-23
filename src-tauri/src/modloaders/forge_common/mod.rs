@@ -1,14 +1,14 @@
-//! Shared installer-jar/"install profile" processor execution used by both
-//! Forge and NeoForge (NeoForge is a fork that reuses the exact same
-//! installer technology). This is the single hardest part of the launcher:
-//! the installer jar ships a small graph of processor jars that patch the
-//! vanilla client jar in place to produce the loader-enabled one.
+//! Shared installer-jar/"install profile" execution used by both Forge and
+//! NeoForge (NeoForge is a fork that reuses the exact same installer
+//! technology). Two installer generations exist:
 //!
-//! Only the modern (~1.13+) `install_profile.json` schema (with a
-//! `processors` array) is supported; legacy pre-1.13 Forge installers use a
-//! different, simpler-but-still-bespoke format and are rejected with a clear
-//! error instead of silently producing a broken install.
+//! - modern (1.13+): `install_profile.json` + `version.json` with a
+//!   `processors` graph whose jars patch the vanilla client jar in place;
+//! - legacy (1.5.2–1.12.2): `install_profile.json` with `install` +
+//!   `versionInfo`, the universal jar embedded in the installer, and a
+//!   LaunchWrapper main class — see [`legacy`].
 
+mod legacy;
 mod libraries;
 mod processor;
 mod zip_resolve;
@@ -16,14 +16,11 @@ mod zip_resolve;
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use tauri::AppHandle;
 
-use crate::download::{DownloadItem, DownloadManager};
-use crate::java::JavaManager;
+use crate::download::DownloadItem;
 use crate::minecraft::manifest::{self, RawLibrary, RawVersionJson};
-use crate::paths::AppPaths;
 
-use super::{LoaderError, LoaderProfile};
+use super::{LoaderContext, LoaderError, LoaderProfile};
 use libraries::{dedupe_libraries, downloadable_items, library_entries};
 use processor::{resolve_processor_plan, run_processor};
 use zip_resolve::read_zip_text;
@@ -54,62 +51,84 @@ struct InstallProfile {
     libraries: Vec<RawLibrary>,
 }
 
-fn to_loader_err(e: impl std::fmt::Display) -> LoaderError {
-    LoaderError::Other(e.to_string())
+/// Every `<version>` in a Maven `maven-metadata.xml`, in document order.
+pub fn maven_versions(xml: &str) -> Vec<String> {
+    xml.split("<version>")
+        .skip(1)
+        .filter_map(|chunk| chunk.split("</version>").next())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
-/// Downloads `installer_url`, runs its install profile's processor chain
-/// (skipped if `cache_key` was already installed), and returns the resulting
-/// `LoaderProfile`. Shared by Forge and NeoForge.
-#[allow(clippy::too_many_arguments)]
+fn open_installer(path: &std::path::Path) -> Result<zip::ZipArchive<std::fs::File>, LoaderError> {
+    let file = std::fs::File::open(path)?;
+    zip::ZipArchive::new(file).map_err(|e| {
+        // A jar that doesn't open is useless; drop it so the next attempt
+        // downloads it again instead of failing on the same bytes forever.
+        let _ = std::fs::remove_file(path);
+        LoaderError::Other(format!("installeur corrompu ({e}), réessaie"))
+    })
+}
+
+/// Downloads (cached) the installer jar, installs whatever it needs into the
+/// shared library cache, and returns the runtime profile.
 pub async fn install_from_installer_jar(
-    app: &AppHandle,
-    client: &reqwest::Client,
-    downloader: &DownloadManager,
-    java: &JavaManager,
-    paths: &AppPaths,
+    ctx: &LoaderContext<'_>,
     mc_version: &str,
     installer_url: &str,
     cache_key: &str,
 ) -> Result<LoaderProfile, LoaderError> {
+    let paths = ctx.paths;
     let installer_path = paths.installers_dir().join(format!("{cache_key}-installer.jar"));
-    downloader
-        .ensure_file(&DownloadItem {
-            url: installer_url.to_string(),
-            dest: installer_path.clone(),
-            sha1: None,
-            size: None,
-        })
-        .await
-        .map_err(to_loader_err)?;
+    ctx.downloader
+        .ensure_file(&DownloadItem { url: installer_url.to_string(), dest: installer_path.clone(), sha1: None, size: None })
+        .await?;
 
-    let file = std::fs::File::open(&installer_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-
+    let mut archive = open_installer(&installer_path)?;
     let install_profile_text = read_zip_text(&mut archive, "install_profile.json")?;
     let install_profile_raw: serde_json::Value = serde_json::from_str(&install_profile_text)?;
+
+    if install_profile_raw.get("versionInfo").is_some() {
+        return legacy::install(ctx, &mut archive, install_profile_raw).await;
+    }
     if install_profile_raw.get("processors").is_none() {
-        return Err(unsupported_legacy_error(mc_version));
+        return Err(unsupported_installer_error(mc_version));
     }
 
-    let install_profile: InstallProfile = serde_json::from_str(&install_profile_text)?;
+    let install_profile: InstallProfile = serde_json::from_value(install_profile_raw)?;
     let version_json: RawVersionJson = serde_json::from_str(&read_zip_text(&mut archive, "version.json")?)?;
 
     let mut all_libraries = install_profile.libraries.clone();
     all_libraries.extend(version_json.libraries.clone());
 
-    downloader
+    // Libraries without a download URL ship inside the installer's `maven/`
+    // folder (e.g. the Forge jar itself on 1.12.2–1.16); the official
+    // installer extracts them, so must we. Processor outputs aren't in there
+    // and are simply skipped.
+    for lib in &all_libraries {
+        let embedded = lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()).is_some_and(|a| a.url.is_empty());
+        let Some(rel) = embedded.then(|| crate::minecraft::libraries::maven_path(&lib.name)).flatten() else {
+            continue;
+        };
+        if let Some(dest) = crate::util::fs::safe_join(&paths.libraries_dir(), &rel) {
+            zip_resolve::extract_zip_entry(&mut archive, &format!("maven/{rel}"), &dest)?;
+        }
+    }
+    ctx.downloader
         .run_batch(
-            app,
+            ctx.app,
             "loader-libraries",
             "Bibliothèques Forge/NeoForge",
             downloadable_items(&all_libraries, &paths.libraries_dir()),
             8,
         )
-        .await
-        .map_err(to_loader_err)?;
+        .await?;
 
     let marker = paths.libraries_dir().join(".installed").join(format!("{cache_key}.done"));
+    if ctx.force_reinstall {
+        let _ = std::fs::remove_file(&marker);
+    }
 
     if !marker.exists() {
         let data = install_profile.data.clone();
@@ -118,9 +137,7 @@ pub async fn install_from_installer_jar(
         let mc_version_owned = mc_version.to_string();
         let installer_path_owned = installer_path.clone();
         let cache_key_owned = cache_key.to_string();
-
-        // `placeholders` isn't needed here: `resolve_processor_plan` already
-        // baked every resolved value into `runnable_processors`' args.
+        // Resolving the plan walks the installer jar (sync I/O): blocking pool.
         let (_placeholders, runnable_processors) = tokio::task::spawn_blocking(move || {
             resolve_processor_plan(
                 archive,
@@ -135,31 +152,21 @@ pub async fn install_from_installer_jar(
         .await
         .map_err(|e| LoaderError::Other(format!("tâche de fond interrompue: {e}")))??;
 
-        let vanilla_entry = manifest::find_version_entry(client, mc_version).await.map_err(to_loader_err)?;
-        let vanilla_raw = manifest::fetch_version_json(client, &vanilla_entry.url).await.map_err(to_loader_err)?;
-        let java_component = crate::java::resolve_component(vanilla_raw.java_version.as_ref());
-        let runtime = java.ensure_runtime(app, paths, &java_component).await.map_err(to_loader_err)?;
-
+        let runtime = ctx.java.ensure_runtime(ctx.app, paths, ctx.downloader, ctx.java_component).await?;
         let libraries_dir = paths.libraries_dir();
         for (jar, classpath, args) in &runnable_processors {
             run_processor(jar, classpath, args, &libraries_dir, &runtime.path).await?;
         }
 
-        if let Some(parent) = marker.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&marker, "ok")?;
+        crate::util::fs::write_atomic(&marker, b"ok")?;
     }
 
     // The runtime classpath comes from version.json alone, never from
     // install_profile.libraries: several install_profile entries (e.g.
-    // AutoRenamingTool, a shaded jar that bundles its own copy of gson) are
-    // install-time-only processor dependencies with no place on the actual
-    // game's module path. Including them causes the JPMS module resolver to
-    // see the same package (e.g. com.google.gson.stream) exported by two
-    // modules and refuse to launch at all. `all_libraries` above still
-    // includes install_profile's libraries — that's needed so every
-    // processor dependency actually gets downloaded to disk.
+    // AutoRenamingTool, a shaded jar bundling its own gson) are
+    // install-time-only processor dependencies. Putting them on the game's
+    // module path makes the JPMS resolver see one package exported by two
+    // modules and refuse to launch.
     let extra_libraries = library_entries(&dedupe_libraries(version_json.libraries.clone()), &paths.libraries_dir());
     let (extra_jvm_args, extra_game_args) = match &version_json.arguments {
         Some(args) => (manifest::flatten_args(&args.jvm), manifest::flatten_args(&args.game)),
@@ -171,14 +178,33 @@ pub async fn install_from_installer_jar(
         main_class_override: Some(version_json.main_class),
         extra_jvm_args,
         extra_game_args,
-        install_side_effects: Vec::new(),
+        // Late 1.12.2 installers use this format but still ship legacy
+        // `minecraftArguments` (with `--tweakClass`), which replace vanilla's.
+        game_args_override: version_json
+            .legacy_arguments
+            .as_ref()
+            .map(|args| args.split_whitespace().map(String::from).collect()),
     })
 }
 
-pub fn unsupported_legacy_error(mc_version: &str) -> LoaderError {
+pub fn unsupported_installer_error(mc_version: &str) -> LoaderError {
     LoaderError::UnsupportedVersion(format!(
-        "Forge/NeoForge pour Minecraft {mc_version} utilise un format d'installeur trop ancien \
-         (pré-1.13), qui n'est pas encore supporté par Largy Launcher. Utilise Fabric ou Quilt \
-         pour cette version."
+        "L'installeur Forge/NeoForge pour Minecraft {mc_version} utilise un format non reconnu. \
+         Essaie une autre version du mod loader."
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maven_versions_parses_metadata_xml() {
+        let xml = "<metadata><versioning><versions>\
+                     <version>20.4.190</version>\
+                     <version> 20.4.191 </version>\
+                   </versions></versioning></metadata>";
+        assert_eq!(maven_versions(xml), vec!["20.4.190".to_string(), "20.4.191".to_string()]);
+        assert!(maven_versions("<metadata></metadata>").is_empty());
+    }
 }

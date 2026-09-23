@@ -3,6 +3,10 @@
 //! `instance.json` — no shared state between instances besides the
 //! libraries/assets/java caches in [`crate::paths::AppPaths`].
 
+pub mod backup;
+pub mod content;
+pub mod export;
+pub mod import;
 pub mod mods;
 
 use serde::{Deserialize, Serialize};
@@ -12,6 +16,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
 use crate::providers::LoaderKind;
+use crate::util::fs::{is_plain_file_name, write_atomic};
+
+/// Instance ids come back from the webview; anything that isn't a single
+/// plain path segment (`""`, `..`, `a/b`) would point `instance_dir` outside
+/// its own folder — e.g. `delete("")` would wipe every instance.
+pub fn validate_id(id: &str) -> AppResult<()> {
+    if is_plain_file_name(id) && !id.starts_with('.') {
+        Ok(())
+    } else {
+        Err(AppError::Instance(format!("identifiant d'instance invalide: {id:?}")))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModpackRef {
@@ -55,6 +71,19 @@ pub struct Instance {
     /// Cumulative time spent in-game across every session, in seconds.
     #[serde(default)]
     pub play_time_seconds: u64,
+    /// Java executable for this instance only; falls back to the global
+    /// override, then to the Mojang-managed runtime.
+    #[serde(default)]
+    pub java_path: Option<String>,
+    #[serde(default)]
+    pub window_width: Option<u32>,
+    #[serde(default)]
+    pub window_height: Option<u32>,
+    #[serde(default)]
+    pub fullscreen: bool,
+    /// `host[:port]` to join straight from the main menu.
+    #[serde(default)]
+    pub auto_join_server: Option<String>,
 }
 
 fn now_unix() -> i64 {
@@ -78,7 +107,11 @@ pub fn list(paths: &AppPaths) -> AppResult<Vec<Instance>> {
         }
         let bytes = std::fs::read(&instance_file)?;
         match serde_json::from_slice::<Instance>(&bytes) {
-            Ok(instance) => instances.push(instance),
+            Ok(mut instance) => {
+                instance.id = entry.file_name().to_string_lossy().into_owned();
+                instance.directory = entry.path();
+                instances.push(instance)
+            }
             Err(e) => tracing::warn!("skipping unreadable instance {:?}: {e}", entry.path()),
         }
     }
@@ -86,19 +119,28 @@ pub fn list(paths: &AppPaths) -> AppResult<Vec<Instance>> {
     Ok(instances)
 }
 
+/// The stored `directory` is ignored in favour of the folder the file was
+/// actually found in, so a moved or duplicated instance never points back
+/// at another instance's files.
 pub fn get(paths: &AppPaths, id: &str) -> AppResult<Instance> {
-    let path = paths.instance_dir(id).join("instance.json");
+    validate_id(id)?;
+    let dir = paths.instance_dir(id);
+    let path = dir.join("instance.json");
     if !path.exists() {
         return Err(AppError::Instance(format!("instance introuvable: {id}")));
     }
     let bytes = std::fs::read(path)?;
-    Ok(serde_json::from_slice(&bytes)?)
+    let mut instance: Instance = serde_json::from_slice(&bytes)?;
+    instance.id = id.to_string();
+    instance.directory = dir;
+    Ok(instance)
 }
 
 pub fn save(instance: &Instance) -> AppResult<()> {
-    std::fs::create_dir_all(&instance.directory)?;
-    let path = instance.directory.join("instance.json");
-    std::fs::write(path, serde_json::to_string_pretty(instance)?)?;
+    write_atomic(
+        &instance.directory.join("instance.json"),
+        serde_json::to_string_pretty(instance)?.as_bytes(),
+    )?;
     Ok(())
 }
 
@@ -133,13 +175,42 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         created_at: now_unix(),
         last_played_at: None,
         play_time_seconds: 0,
+        java_path: None,
+        window_width: None,
+        window_height: None,
+        fullscreen: false,
+        auto_join_server: None,
     };
 
     save(&instance)?;
     Ok(instance)
 }
 
+/// Full copy of an instance (mods, configs, saves) under a fresh id.
+pub fn duplicate(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
+    let source = get(paths, id)?;
+    let name = validate_name(name)?;
+    let new_id = uuid::Uuid::new_v4().to_string();
+    let directory = paths.instance_dir(&new_id);
+    if let Err(e) = crate::util::fs::copy_tree(&source.directory, &directory) {
+        let _ = std::fs::remove_dir_all(&directory);
+        return Err(e);
+    }
+    let instance = Instance {
+        id: new_id,
+        name,
+        directory,
+        created_at: now_unix(),
+        last_played_at: None,
+        play_time_seconds: 0,
+        ..source
+    };
+    save(&instance)?;
+    Ok(instance)
+}
+
 pub fn delete(paths: &AppPaths, id: &str) -> AppResult<()> {
+    validate_id(id)?;
     let dir = paths.instance_dir(id);
     if dir.exists() {
         std::fs::remove_dir_all(dir)?;
@@ -162,7 +233,7 @@ pub fn add_play_time(paths: &AppPaths, id: &str, seconds: u64) -> AppResult<()> 
 /// Longest name accepted by [`rename`] — keeps cards and the sidebar readable.
 pub const MAX_NAME_LEN: usize = 64;
 
-pub fn rename(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
+pub fn validate_name(name: &str) -> AppResult<String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err(AppError::Instance("le nom de l'instance ne peut pas être vide".to_string()));
@@ -172,8 +243,13 @@ pub fn rename(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
             "le nom de l'instance ne peut pas dépasser {MAX_NAME_LEN} caractères"
         )));
     }
+    Ok(trimmed.to_string())
+}
+
+pub fn rename(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
+    let name = validate_name(name)?;
     let mut instance = get(paths, id)?;
-    instance.name = trimmed.to_string();
+    instance.name = name;
     save(&instance)?;
     Ok(instance)
 }
@@ -283,6 +359,37 @@ mod tests {
             "loader_version":null,"directory":"x"}"#;
         let instance: Instance = serde_json::from_str(json).unwrap();
         assert_eq!(instance.play_time_seconds, 0);
+    }
+
+    #[test]
+    fn ids_that_could_escape_the_instances_folder_are_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        create(&paths, test_input("Survivor")).unwrap();
+
+        for bad in ["", ".", "..", "../x", "a/b", "a\\b"] {
+            assert!(delete(&paths, bad).is_err(), "{bad:?} should be rejected");
+            assert!(get(&paths, bad).is_err());
+        }
+        assert_eq!(list(&paths).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn duplicate_copies_files_under_a_new_id_and_resets_stats() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(dir.path().to_path_buf());
+        let mut source = create(&paths, test_input("Original")).unwrap();
+        source.play_time_seconds = 99;
+        save(&source).unwrap();
+        std::fs::write(source.directory.join("mods/a.jar"), b"jar").unwrap();
+
+        let copy = duplicate(&paths, &source.id, "Copie").unwrap();
+
+        assert_ne!(copy.id, source.id);
+        assert_eq!(copy.name, "Copie");
+        assert_eq!(copy.play_time_seconds, 0);
+        assert_eq!(std::fs::read(copy.directory.join("mods/a.jar")).unwrap(), b"jar");
+        assert_eq!(get(&paths, &copy.id).unwrap().directory, paths.instance_dir(&copy.id));
     }
 
     #[test]

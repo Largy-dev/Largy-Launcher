@@ -4,29 +4,30 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::{Mutex, RwLock};
 use tauri::AppHandle;
+use tokio::sync::Notify;
 
 use crate::auth::AccountSession;
 use crate::download::DownloadManager;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::java::JavaManager;
 use crate::launch::RunningChild;
-use crate::modloaders::fabric::FabricInstaller;
-use crate::modloaders::forge::ForgeInstaller;
-use crate::modloaders::neoforge::NeoForgeInstaller;
-use crate::modloaders::quilt::QuiltInstaller;
 use crate::modloaders::LoaderRegistry;
 use crate::paths::{self, AppPaths};
 use crate::providers::curseforge::CurseForgeProvider;
 use crate::providers::ftb::FtbProvider;
+use crate::providers::modrinth::ModrinthProvider;
 use crate::providers::ProviderRegistry;
 use crate::settings::GlobalSettings;
+use crate::util::http_cache::MetaCache;
 
 pub struct AppState {
     pub paths: AppPaths,
     pub client: reqwest::Client,
+    pub meta: MetaCache,
     pub downloader: DownloadManager,
     pub java: JavaManager,
     pub providers: ProviderRegistry,
@@ -38,6 +39,28 @@ pub struct AppState {
     /// Kept across calls so per-process CPU usage has a previous sample to
     /// diff against (sysinfo computes it between two refreshes).
     pub system: Mutex<sysinfo::System>,
+    /// Signalled to abort the in-flight Microsoft device-code poll.
+    pub login_cancel: Mutex<Option<Arc<Notify>>>,
+    /// Modpack installs/updates in flight, keyed by instance id (or pack
+    /// install token), each cancellable from the UI.
+    pub installs: Mutex<HashMap<String, Arc<Notify>>>,
+}
+
+/// Shared HTTP client. Connect/read timeouts (not a total timeout — a
+/// 200 MB modpack legitimately takes minutes) so a stalled connection
+/// fails and gets retried instead of hanging a launch forever.
+pub fn build_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent(concat!(
+            "Largy-dev/Largy-Launcher/",
+            env!("CARGO_PKG_VERSION"),
+            " (github.com/Largy-dev/Largy-Launcher)"
+        ))
+        .connect_timeout(Duration::from_secs(15))
+        .read_timeout(Duration::from_secs(45))
+        .pool_idle_timeout(Duration::from_secs(60))
+        .build()
+        .expect("building the shared HTTP client cannot fail with this config")
 }
 
 impl AppState {
@@ -47,17 +70,15 @@ impl AppState {
         paths::ensure_dir(&app_paths.instances_dir())?;
         paths::ensure_dir(&app_paths.cache_dir())?;
 
-        let client = reqwest::Client::builder()
-            .user_agent(concat!("LargyLauncher/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .expect("building the shared HTTP client cannot fail with this config");
-
+        let client = build_http_client();
+        let meta = MetaCache::new(client.clone(), app_paths.meta_cache_dir());
         let downloader = DownloadManager::new(client.clone());
-        let java = JavaManager::new(client.clone());
+        let java = JavaManager::new(meta.clone());
         let settings = GlobalSettings::load(&app_paths)?;
         let curseforge_api_key = Arc::new(RwLock::new(settings.curseforge_api_key.clone()));
 
         let mut providers = ProviderRegistry::new();
+        providers.register(Box::new(ModrinthProvider::new(client.clone(), app_paths.cache_dir().join("modrinth"))));
         providers.register(Box::new(FtbProvider::new(client.clone())));
         providers.register(Box::new(CurseForgeProvider::new(
             client.clone(),
@@ -65,24 +86,54 @@ impl AppState {
             app_paths.cache_dir().join("curseforge"),
         )));
 
-        let mut loaders = LoaderRegistry::new();
-        loaders.register(Box::new(FabricInstaller::new(client.clone(), app_paths.libraries_dir())));
-        loaders.register(Box::new(QuiltInstaller::new(client.clone(), app_paths.libraries_dir())));
-        loaders.register(Box::new(ForgeInstaller::new(client.clone(), java.clone(), app_paths.clone())));
-        loaders.register(Box::new(NeoForgeInstaller::new(client.clone(), java.clone(), app_paths.clone())));
-
         Ok(Self {
             paths: app_paths,
             client,
+            meta,
             downloader,
             java,
             providers,
-            loaders,
+            loaders: LoaderRegistry::with_defaults(),
             settings: RwLock::new(settings),
             active_account: RwLock::new(None),
             curseforge_api_key,
             running: Arc::new(Mutex::new(HashMap::new())),
             system: Mutex::new(sysinfo::System::new()),
+            login_cancel: Mutex::new(None),
+            installs: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// Registers a cancellable install under `key`; fails if one is already
+    /// running for it (double-clicked install/update).
+    pub fn begin_install(&self, key: &str) -> AppResult<InstallGuard<'_>> {
+        let mut installs = self.installs.lock();
+        if installs.contains_key(key) {
+            return Err(AppError::Instance("une installation est déjà en cours pour cette instance".to_string()));
+        }
+        let cancel = Arc::new(Notify::new());
+        installs.insert(key.to_string(), cancel.clone());
+        Ok(InstallGuard { state: self, key: key.to_string(), cancel })
+    }
+}
+
+pub struct InstallGuard<'a> {
+    state: &'a AppState,
+    key: String,
+    pub cancel: Arc<Notify>,
+}
+
+impl Drop for InstallGuard<'_> {
+    fn drop(&mut self) {
+        self.state.installs.lock().remove(&self.key);
+    }
+}
+
+/// Runs `fut` unless `cancel` fires first, in which case the future is
+/// dropped (aborting every download task it owns) and `Cancelled` returned.
+pub async fn cancellable<T>(cancel: &Notify, fut: impl std::future::Future<Output = AppResult<T>>) -> AppResult<T> {
+    tokio::select! {
+        result = fut => result,
+        _ = cancel.notified() => Err(AppError::Cancelled),
     }
 }

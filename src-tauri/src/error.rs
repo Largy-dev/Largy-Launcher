@@ -37,6 +37,9 @@ pub enum AppError {
     #[error("launch error: {0}")]
     Launch(String),
 
+    #[error("opération annulée")]
+    Cancelled,
+
     #[error("{0}")]
     Other(String),
 }
@@ -67,6 +70,7 @@ impl Serialize for AppError {
             AppError::Java(_) => "java",
             AppError::Download(_) => "download",
             AppError::Launch(_) => "launch",
+            AppError::Cancelled => "cancelled",
             AppError::Other(_) => "other",
         };
         let mut state = serializer.serialize_struct("AppError", 2)?;

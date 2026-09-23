@@ -63,8 +63,24 @@ impl AppPaths {
         self.cache_dir().join("installers")
     }
 
-    #[cfg(test)]
-    pub(crate) fn from_root(root: PathBuf) -> Self {
+    pub fn meta_cache_dir(&self) -> PathBuf {
+        self.cache_dir().join("meta")
+    }
+
+    pub fn log_configs_dir(&self) -> PathBuf {
+        self.assets_dir().join("log_configs")
+    }
+
+    pub fn launcher_logs_dir(&self) -> PathBuf {
+        self.root.join("launcher-logs")
+    }
+
+    pub fn backups_dir(&self, instance_id: &str) -> PathBuf {
+        self.root.join("backups").join(instance_id)
+    }
+
+    /// A layout rooted anywhere (tests, tools).
+    pub fn from_root(root: PathBuf) -> Self {
         Self { root }
     }
 }

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
+use crate::util::http_cache::{MetaCache, HOURLY, IMMUTABLE};
 
 const VERSION_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
@@ -29,23 +30,38 @@ pub struct VersionManifestEntry {
     #[serde(rename = "type")]
     pub kind: String,
     pub url: String,
+    #[serde(rename = "releaseTime", default)]
+    pub release_time: String,
 }
 
-pub async fn fetch_version_manifest(client: &reqwest::Client) -> AppResult<VersionManifestRoot> {
-    let root: VersionManifestRoot = client.get(VERSION_MANIFEST_URL).send().await?.json().await?;
-    Ok(root)
+pub async fn fetch_version_manifest(meta: &MetaCache) -> AppResult<VersionManifestRoot> {
+    meta.get_json(VERSION_MANIFEST_URL, HOURLY).await
 }
 
-pub async fn find_version_entry(
-    client: &reqwest::Client,
-    mc_version: &str,
-) -> AppResult<VersionManifestEntry> {
-    let manifest = fetch_version_manifest(client).await?;
+pub async fn find_version_entry(meta: &MetaCache, mc_version: &str) -> AppResult<VersionManifestEntry> {
+    let manifest = fetch_version_manifest(meta).await?;
     manifest
         .versions
         .into_iter()
         .find(|v| v.id == mc_version)
-        .ok_or_else(|| AppError::Other(format!("unknown Minecraft version: {mc_version}")))
+        .ok_or_else(|| AppError::Other(format!("version de Minecraft inconnue: {mc_version}")))
+}
+
+/// Optional launcher features a version JSON's argument rules can depend on.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Features {
+    pub custom_resolution: bool,
+    pub quick_play_multiplayer: bool,
+}
+
+impl Features {
+    fn enabled(&self, name: &str) -> bool {
+        match name {
+            "has_custom_resolution" => self.custom_resolution,
+            "is_quick_play_multiplayer" => self.quick_play_multiplayer,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -73,23 +89,35 @@ pub fn current_os_name() -> &'static str {
     }
 }
 
-fn rule_condition_matches(rule: &Rule) -> bool {
+fn rule_condition_matches(rule: &Rule, features: &Features) -> bool {
     if let Some(os) = &rule.os {
         if let Some(name) = &os.name {
             if name != current_os_name() {
                 return false;
             }
         }
+        // `x86` rules target 32-bit JVMs (old LWJGL natives); we only ever
+        // run 64-bit runtimes.
+        if os.arch.as_deref() == Some("x86") && cfg!(target_pointer_width = "64") {
+            return false;
+        }
     }
-    if let Some(features) = &rule.features {
-        // We never opt into any of Mojang's optional features (demo mode,
-        // custom resolution, quick play, ...), so a rule that requires one
-        // to be `true` can never match.
-        if features.values().any(|v| *v) {
+    if let Some(required) = &rule.features {
+        if required.iter().any(|(name, wanted)| features.enabled(name) != *wanted) {
             return false;
         }
     }
     true
+}
+
+fn rules_allow_with(rules: &[Rule], features: &Features) -> bool {
+    let mut allowed = false;
+    for rule in rules {
+        if rule_condition_matches(rule, features) {
+            allowed = rule.action == "allow";
+        }
+    }
+    allowed
 }
 
 /// Mirrors Mojang's own rule evaluation: default to allowed when there are no
@@ -97,15 +125,7 @@ fn rule_condition_matches(rule: &Rule) -> bool {
 pub fn rules_allow(rules: &Option<Vec<Rule>>) -> bool {
     match rules {
         None => true,
-        Some(rules) => {
-            let mut allowed = false;
-            for rule in rules {
-                if rule_condition_matches(rule) {
-                    allowed = rule.action == "allow";
-                }
-            }
-            allowed
-        }
+        Some(rules) => rules_allow_with(rules, &Features::default()),
     }
 }
 
@@ -124,12 +144,16 @@ pub enum ArgEntry {
 }
 
 pub fn flatten_args(entries: &[ArgEntry]) -> Vec<String> {
+    flatten_args_with(entries, &Features::default())
+}
+
+pub fn flatten_args_with(entries: &[ArgEntry], features: &Features) -> Vec<String> {
     let mut out = Vec::new();
     for entry in entries {
         match entry {
             ArgEntry::Plain(s) => out.push(s.clone()),
             ArgEntry::Conditional { rules, value } => {
-                if rules_allow(&Some(rules.clone())) {
+                if rules_allow_with(rules, features) {
                     match value {
                         ArgValue::Single(s) => out.push(s.clone()),
                         ArgValue::Multi(items) => out.extend(items.clone()),
@@ -214,6 +238,26 @@ pub struct VersionDownloads {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct LoggingFile {
+    pub id: String,
+    pub sha1: String,
+    pub size: u64,
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct LoggingClient {
+    pub argument: String,
+    pub file: LoggingFile,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct LoggingConfig {
+    #[serde(default)]
+    pub client: Option<LoggingClient>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct JavaVersionRef {
     #[serde(default)]
     pub component: Option<String>,
@@ -242,11 +286,15 @@ pub struct RawVersionJson {
     pub java_version: Option<JavaVersionRef>,
     #[serde(default)]
     pub inherits_from: Option<String>,
+    #[serde(rename = "type", default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub logging: Option<LoggingConfig>,
 }
 
-pub async fn fetch_version_json(client: &reqwest::Client, url: &str) -> AppResult<RawVersionJson> {
-    let json: RawVersionJson = client.get(url).send().await?.json().await?;
-    Ok(json)
+/// Version JSON URLs embed the file's hash, so a cached copy never goes stale.
+pub async fn fetch_version_json(meta: &MetaCache, url: &str) -> AppResult<RawVersionJson> {
+    meta.get_json(url, IMMUTABLE).await
 }
 
 #[cfg(test)]
@@ -289,6 +337,29 @@ mod tests {
         let mut features = HashMap::new();
         features.insert("is_demo_user".to_string(), true);
         let rules = vec![Rule { action: "allow".to_string(), os: None, features: Some(features) }];
+        assert!(!rules_allow(&Some(rules)));
+    }
+
+    #[test]
+    fn feature_rules_follow_the_enabled_features() {
+        let mut required = HashMap::new();
+        required.insert("has_custom_resolution".to_string(), true);
+        let entries = vec![ArgEntry::Conditional {
+            rules: vec![Rule { action: "allow".to_string(), os: None, features: Some(required) }],
+            value: ArgValue::Multi(vec!["--width".to_string(), "${resolution_width}".to_string()]),
+        }];
+        assert!(flatten_args(&entries).is_empty());
+        let on = Features { custom_resolution: true, ..Features::default() };
+        assert_eq!(flatten_args_with(&entries, &on), vec!["--width", "${resolution_width}"]);
+    }
+
+    #[test]
+    fn x86_only_rules_never_match_on_a_64_bit_launcher() {
+        let rules = vec![Rule {
+            action: "allow".to_string(),
+            os: Some(OsRule { name: None, arch: Some("x86".to_string()) }),
+            features: None,
+        }];
         assert!(!rules_allow(&Some(rules)));
     }
 

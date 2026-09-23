@@ -7,6 +7,7 @@ use std::path::Path;
 use crate::download::DownloadItem;
 use crate::minecraft::libraries::{group_artifact, maven_path};
 use crate::minecraft::manifest::RawLibrary;
+use crate::util::fs::safe_join;
 
 use super::super::LibraryEntry;
 
@@ -21,14 +22,10 @@ pub(super) fn downloadable_items(libraries: &[RawLibrary], libraries_dir: &Path)
             if artifact.url.is_empty() {
                 return None;
             }
-            let rel_path = artifact
-                .path
-                .clone()
-                .or_else(|| maven_path(&lib.name))
-                .unwrap_or_else(|| lib.name.replace(':', "/"));
+            let rel_path = artifact.path.clone().or_else(|| maven_path(&lib.name))?;
             Some(DownloadItem {
                 url: artifact.url.clone(),
-                dest: libraries_dir.join(rel_path),
+                dest: safe_join(libraries_dir, rel_path)?,
                 sha1: artifact.sha1.clone(),
                 size: artifact.size,
             })
@@ -43,17 +40,21 @@ pub(super) fn downloadable_items(libraries: &[RawLibrary], libraries_dir: &Path)
 /// merging in `install_profile.libraries` (see
 /// [`super::install_from_installer_jar`]).
 pub(super) fn dedupe_libraries(libraries: Vec<RawLibrary>) -> Vec<RawLibrary> {
-    let mut keyed: HashMap<String, RawLibrary> = HashMap::new();
-    let mut unkeyed: Vec<RawLibrary> = Vec::new();
+    let mut position: HashMap<String, usize> = HashMap::new();
+    let mut out: Vec<RawLibrary> = Vec::new();
     for lib in libraries {
         match group_artifact(&lib.name) {
-            Some(key) => {
-                keyed.insert(key, lib);
-            }
-            None => unkeyed.push(lib),
+            Some(key) => match position.get(&key) {
+                Some(&i) => out[i] = lib,
+                None => {
+                    position.insert(key, out.len());
+                    out.push(lib);
+                }
+            },
+            None => out.push(lib),
         }
     }
-    unkeyed.into_iter().chain(keyed.into_values()).collect()
+    out
 }
 
 /// Every library becomes a classpath entry regardless of how it got onto
@@ -68,17 +69,7 @@ pub(super) fn library_entries(libraries: &[RawLibrary], libraries_dir: &Path) ->
                 .and_then(|d| d.artifact.as_ref())
                 .and_then(|a| a.path.clone())
                 .or_else(|| maven_path(&lib.name))?;
-            Some(LibraryEntry {
-                name: lib.name.clone(),
-                url: lib
-                    .downloads
-                    .as_ref()
-                    .and_then(|d| d.artifact.as_ref())
-                    .map(|a| a.url.clone())
-                    .unwrap_or_default(),
-                sha1: lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()).and_then(|a| a.sha1.clone()),
-                path: libraries_dir.join(rel_path),
-            })
+            Some(LibraryEntry { name: lib.name.clone(), path: safe_join(libraries_dir, rel_path)? })
         })
         .collect()
 }

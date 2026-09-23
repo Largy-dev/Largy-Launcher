@@ -8,42 +8,33 @@ pub mod fabric;
 pub mod forge;
 pub mod forge_common;
 pub mod neoforge;
-pub mod quilt;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::download::DownloadManager;
+use crate::java::JavaManager;
 use crate::minecraft::manifest::{self, RawVersionJson};
+use crate::paths::AppPaths;
 use crate::providers::LoaderKind;
+use crate::util::http_cache::MetaCache;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryEntry {
     pub name: String,
-    pub url: String,
-    pub sha1: Option<String>,
     pub path: std::path::PathBuf,
 }
 
-/// A record of one already-executed Forge/NeoForge "install profile"
-/// processor step (`java -cp <classpath> <main_class> <args>`), kept only
-/// for diagnostics/logging — by the time a `LoaderProfile` exists, every
-/// step in here has already run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProcessorStep {
-    pub main_class: String,
-    pub classpath: Vec<String>,
-    pub args: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LoaderProfile {
     pub extra_libraries: Vec<LibraryEntry>,
     pub main_class_override: Option<String>,
     pub extra_jvm_args: Vec<String>,
     pub extra_game_args: Vec<String>,
-    pub install_side_effects: Vec<ProcessorStep>,
+    /// Pre-1.13 Forge replaces vanilla's `minecraftArguments` wholesale
+    /// (it adds `--tweakClass`), rather than appending to them.
+    pub game_args_override: Option<Vec<String>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +47,8 @@ pub enum LoaderError {
     Serde(#[from] serde_json::Error),
     #[error("archive error: {0}")]
     Zip(#[from] zip::result::ZipError),
+    #[error("{0}")]
+    App(#[from] crate::error::AppError),
     #[error("unsupported minecraft version: {0}")]
     UnsupportedVersion(String),
     #[error("loader install error: {0}")]
@@ -64,17 +57,34 @@ pub enum LoaderError {
 
 impl From<LoaderError> for crate::error::AppError {
     fn from(err: LoaderError) -> Self {
-        crate::error::AppError::Loader(err.to_string())
+        match err {
+            LoaderError::App(inner) => inner,
+            other => crate::error::AppError::Loader(other.to_string()),
+        }
     }
+}
+
+/// Everything an installer needs, borrowed from the launch in progress.
+pub struct LoaderContext<'a> {
+    pub app: &'a AppHandle,
+    pub paths: &'a AppPaths,
+    pub meta: &'a MetaCache,
+    pub downloader: &'a DownloadManager,
+    pub java: &'a JavaManager,
+    /// Runtime component of the vanilla version (Forge processors run on it).
+    pub java_component: &'a str,
+    /// Re-run install steps even when a completion marker exists (repair).
+    pub force_reinstall: bool,
 }
 
 #[async_trait]
 pub trait LoaderInstaller: Send + Sync {
     fn kind(&self) -> LoaderKind;
-    async fn list_versions(&self, mc_version: &str) -> Result<Vec<String>, LoaderError>;
+    /// Newest first.
+    async fn list_versions(&self, meta: &MetaCache, mc_version: &str) -> Result<Vec<String>, LoaderError>;
     async fn resolve(
         &self,
-        app: &AppHandle,
+        ctx: &LoaderContext<'_>,
         mc_version: &str,
         loader_version: &str,
     ) -> Result<LoaderProfile, LoaderError>;
@@ -82,36 +92,20 @@ pub trait LoaderInstaller: Send + Sync {
 
 /// Fabric's and Quilt's "profile/json" responses are a version-json *delta*
 /// on top of vanilla (`inheritsFrom`): just extra libraries, a main class
-/// override, and occasionally extra arguments. Both loaders share this
-/// conversion into a [`LoaderProfile`].
+/// override, and occasionally extra arguments.
 pub(crate) async fn loader_profile_from_delta_json(
-    app: &AppHandle,
-    downloader: &DownloadManager,
+    ctx: &LoaderContext<'_>,
     raw: &RawVersionJson,
-    libraries_dir: &std::path::Path,
 ) -> Result<LoaderProfile, LoaderError> {
-    let resolved = crate::minecraft::libraries::resolve_libraries(&raw.libraries, libraries_dir);
-
-    downloader
-        .run_batch(
-            app,
-            "loader-libraries",
-            "Bibliothèques du mod loader",
-            resolved.classpath_items.clone(),
-            8,
-        )
-        .await
-        .map_err(|e| LoaderError::Other(e.to_string()))?;
+    let resolved = crate::minecraft::libraries::resolve_libraries(&raw.libraries, &ctx.paths.libraries_dir());
+    ctx.downloader
+        .run_batch(ctx.app, "loader-libraries", "Bibliothèques du mod loader", resolved.download_items(), 8)
+        .await?;
 
     let extra_libraries = resolved
-        .classpath_items
+        .classpath
         .into_iter()
-        .map(|item| LibraryEntry {
-            name: item.url.clone(),
-            url: item.url,
-            sha1: item.sha1,
-            path: item.dest,
-        })
+        .map(|l| LibraryEntry { name: l.name, path: l.item.dest })
         .collect();
 
     let (extra_jvm_args, extra_game_args) = match &raw.arguments {
@@ -124,22 +118,24 @@ pub(crate) async fn loader_profile_from_delta_json(
         main_class_override: Some(raw.main_class.clone()),
         extra_jvm_args,
         extra_game_args,
-        install_side_effects: Vec::new(),
+        game_args_override: None,
     })
 }
 
-#[derive(Default)]
 pub struct LoaderRegistry {
     installers: Vec<Box<dyn LoaderInstaller>>,
 }
 
 impl LoaderRegistry {
-    pub fn new() -> Self {
-        Self { installers: Vec::new() }
-    }
-
-    pub fn register(&mut self, installer: Box<dyn LoaderInstaller>) {
-        self.installers.push(installer);
+    pub fn with_defaults() -> Self {
+        Self {
+            installers: vec![
+                Box::new(fabric::MetaLoaderInstaller::fabric()),
+                Box::new(fabric::MetaLoaderInstaller::quilt()),
+                Box::new(forge::ForgeInstaller),
+                Box::new(neoforge::NeoForgeInstaller),
+            ],
+        }
     }
 
     pub fn get(&self, kind: LoaderKind) -> Option<&dyn LoaderInstaller> {

@@ -10,9 +10,10 @@ use serde::Deserialize;
 use tokio::task::JoinSet;
 
 use super::{
-    find_loader_target, FileDownloadInfo, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider,
-    ModpackSummary, ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
+    find_loader_target, InstallWarning, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
+    ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
 };
+use crate::util::fs::safe_join;
 
 const BASE: &str = "https://api.feed-the-beast.com/v1/modpacks/public";
 
@@ -90,6 +91,7 @@ impl FtbPackResponse {
                 .or_else(|| self.art.first())
                 .map(|a| a.url.clone()),
             summary: self.synopsis.clone(),
+            downloads: None,
         }
     }
 }
@@ -100,12 +102,30 @@ struct FtbTarget {
     version: String,
 }
 
+/// FTB sends these ids as strings ("609977"), older responses as numbers.
+#[derive(Debug, Deserialize)]
+struct FtbCurseRef {
+    project: serde_json::Value,
+    file: serde_json::Value,
+}
+
+fn id_text(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct FtbFile {
     id: u64,
     path: String,
     name: String,
+    #[serde(default)]
     url: String,
+    /// Set for mods FTB doesn't mirror itself: they come from CurseForge.
+    #[serde(default)]
+    curseforge: Option<FtbCurseRef>,
     #[serde(default)]
     sha1: String,
     #[serde(default)]
@@ -157,26 +177,31 @@ impl ModpackProvider for FtbProvider {
             response.packs
         };
 
+        // Fetched concurrently, but reassembled in the API's own order (by
+        // popularity / relevance), not in whatever order responses land.
         let mut set = JoinSet::new();
-        for id in ids.into_iter().take(24) {
+        for (rank, id) in ids.into_iter().take(24).enumerate() {
             let client = self.client.clone();
             set.spawn(async move {
-                client
+                let pack = client
                     .get(format!("{BASE}/modpack/{id}"))
                     .send()
                     .await?
+                    .error_for_status()?
                     .json::<FtbPackResponse>()
-                    .await
+                    .await?;
+                Ok::<_, reqwest::Error>((rank, pack))
             });
         }
 
-        let mut summaries = Vec::new();
+        let mut ranked = Vec::new();
         while let Some(result) = set.join_next().await {
-            if let Ok(Ok(pack)) = result {
-                summaries.push(pack.to_summary());
+            if let Ok(Ok(entry)) = result {
+                ranked.push(entry);
             }
         }
-        Ok(summaries)
+        ranked.sort_by_key(|(rank, _)| *rank);
+        Ok(ranked.into_iter().map(|(_, pack)| pack.to_summary()).collect())
     }
 
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {
@@ -217,7 +242,7 @@ impl ModpackProvider for FtbProvider {
             })
             .collect();
 
-        versions.sort_by(|a, b| b.id.cmp(&a.id));
+        versions.sort_by_key(|v| std::cmp::Reverse(v.id.parse::<u64>().unwrap_or(0)));
         Ok(versions)
     }
 
@@ -226,14 +251,11 @@ impl ModpackProvider for FtbProvider {
         pack_id: &str,
         version_id: &str,
     ) -> Result<ResolvedModpackVersion, ProviderError> {
-        let detail: FtbVersionDetail = self
-            .client
-            .get(format!("{BASE}/modpack/{pack_id}/{version_id}"))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+        let response = self.client.get(format!("{BASE}/modpack/{pack_id}/{version_id}")).send().await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(ProviderError::NotFound(format!("{pack_id}/{version_id}")));
+        }
+        let detail: FtbVersionDetail = response.error_for_status()?.json().await?;
 
         let minecraft_version = detail
             .targets
@@ -246,37 +268,49 @@ impl ModpackProvider for FtbProvider {
             find_loader_target(detail.targets.iter().map(|t| (t.name.as_str(), t.version.as_str())))
                 .unwrap_or((LoaderKind::Vanilla, String::new()));
 
-        let files = detail
-            .files
-            .into_iter()
-            .filter(|f| !f.serveronly || f.clientonly)
-            .map(|f| ModpackFileRef {
+        let mut files = Vec::new();
+        let mut warnings = Vec::new();
+        for f in detail.files.into_iter().filter(|f| !f.serveronly || f.clientonly) {
+            let relative = std::path::Path::new(f.path.trim_start_matches("./")).join(&f.name);
+            if safe_join(std::path::Path::new("instance"), &relative).is_none() {
+                warnings.push(InstallWarning {
+                    file_name: f.name.clone(),
+                    message: "Chemin de fichier refusé (sort du dossier de l'instance).".to_string(),
+                    browser_url: None,
+                });
+                continue;
+            }
+            let direct_url = if !f.url.is_empty() {
+                Some(f.url)
+            } else {
+                f.curseforge.as_ref().map(|cf| {
+                    format!(
+                        "https://www.curseforge.com/api/v1/mods/{}/files/{}/download",
+                        id_text(&cf.project),
+                        id_text(&cf.file)
+                    )
+                })
+            };
+            files.push(ModpackFileRef {
                 project_id: pack_id.to_string(),
                 file_id: f.id.to_string(),
-                path: std::path::PathBuf::from(f.path.trim_start_matches("./")).join(&f.name),
+                path: relative,
                 sha1: (!f.sha1.is_empty()).then_some(f.sha1),
                 size: f.size,
-                direct_url: (!f.url.is_empty()).then_some(f.url),
-            })
-            .collect();
+                direct_url,
+                browser_url: None,
+            });
+        }
 
         Ok(ResolvedModpackVersion {
             minecraft_version,
             loader,
             loader_version,
             files,
-            overrides_dir: None,
+            overrides_dirs: Vec::new(),
+            warnings,
+            pack_name: None,
         })
-    }
-
-    async fn resolve_file_download(&self, file: &ModpackFileRef) -> Result<FileDownloadInfo, ProviderError> {
-        match &file.direct_url {
-            Some(url) => Ok(FileDownloadInfo::Direct { url: url.clone() }),
-            None => Err(ProviderError::Other(format!(
-                "fichier FTB {} sans URL directe",
-                file.file_id
-            ))),
-        }
     }
 }
 
@@ -322,11 +356,22 @@ mod tests {
     }
 
     #[test]
+    fn curseforge_refs_accept_string_or_numeric_ids() {
+        let file: FtbFile = serde_json::from_str(
+            r#"{"id": 1, "path": "./mods", "name": "a.jar", "url": "", "curseforge": {"project": "609977", "file": 4948360}}"#,
+        )
+        .unwrap();
+        let cf = file.curseforge.unwrap();
+        assert_eq!(id_text(&cf.project), "609977");
+        assert_eq!(id_text(&cf.file), "4948360");
+    }
+
+    #[test]
     fn files_filter_excludes_server_only_unless_also_client_only() {
         let files = vec![
-            FtbFile { id: 1, path: "./mods".to_string(), name: "a.jar".to_string(), url: "u1".to_string(), sha1: String::new(), size: 0, serveronly: true, clientonly: false },
-            FtbFile { id: 2, path: "./mods".to_string(), name: "b.jar".to_string(), url: "u2".to_string(), sha1: String::new(), size: 0, serveronly: true, clientonly: true },
-            FtbFile { id: 3, path: "./mods".to_string(), name: "c.jar".to_string(), url: "u3".to_string(), sha1: String::new(), size: 0, serveronly: false, clientonly: false },
+            FtbFile { id: 1, path: "./mods".to_string(), name: "a.jar".to_string(), url: "u1".to_string(), curseforge: None, sha1: String::new(), size: 0, serveronly: true, clientonly: false },
+            FtbFile { id: 2, path: "./mods".to_string(), name: "b.jar".to_string(), url: "u2".to_string(), curseforge: None, sha1: String::new(), size: 0, serveronly: true, clientonly: true },
+            FtbFile { id: 3, path: "./mods".to_string(), name: "c.jar".to_string(), url: "u3".to_string(), curseforge: None, sha1: String::new(), size: 0, serveronly: false, clientonly: false },
         ];
         let kept: Vec<u64> = files.into_iter().filter(|f| !f.serveronly || f.clientonly).map(|f| f.id).collect();
         assert_eq!(kept, vec![2, 3]);
