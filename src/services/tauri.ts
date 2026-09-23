@@ -10,6 +10,11 @@ export function isAppError(value: unknown): value is AppError {
   return typeof value === "object" && value !== null && "kind" in value && "message" in value;
 }
 
+/** The user cancelled the operation themselves — not worth an error toast. */
+export function isCancelled(error: unknown): boolean {
+  return isAppError(error) && error.kind === "cancelled";
+}
+
 export function errorMessage(error: unknown): string {
   if (isAppError(error)) return error.message;
   if (error instanceof Error) return error.message;
@@ -52,7 +57,25 @@ export interface Instance {
   created_at: number;
   last_played_at: number | null;
   play_time_seconds: number;
+  java_path: string | null;
+  window_width: number | null;
+  window_height: number | null;
+  fullscreen: boolean;
+  auto_join_server: string | null;
 }
+
+export interface InstanceSettingsInput {
+  min_memory_mb: number | null;
+  max_memory_mb: number | null;
+  extra_jvm_args: string[];
+  java_path: string | null;
+  window_width: number | null;
+  window_height: number | null;
+  fullscreen: boolean;
+  auto_join_server: string | null;
+}
+
+export type LauncherBehavior = "keep_open" | "minimize" | "hide";
 
 export interface GlobalSettings {
   default_min_memory_mb: number;
@@ -63,6 +86,7 @@ export interface GlobalSettings {
   java_path_override: string | null;
   offline_mode: boolean;
   offline_username: string;
+  on_game_launch: LauncherBehavior;
 }
 
 export interface MinecraftProfile {
@@ -70,10 +94,17 @@ export interface MinecraftProfile {
   name: string;
 }
 
+/** The active account as the backend exposes it (the game token stays in Rust). */
 export interface AccountSession {
   profile: MinecraftProfile;
-  minecraft_access_token: string;
-  expires_at: number;
+  /** Restored without network: singleplayer only until the next refresh. */
+  offline: boolean;
+}
+
+export interface StoredAccount {
+  id: string;
+  name: string;
+  active: boolean;
 }
 
 export interface DeviceCodeInfo {
@@ -84,6 +115,13 @@ export interface DeviceCodeInfo {
   interval: number;
 }
 
+export interface JavaInstallation {
+  path: string;
+  version: string;
+  major: number;
+  source: "managed" | "system";
+}
+
 export interface ModpackSummary {
   id: string;
   provider: string;
@@ -91,6 +129,7 @@ export interface ModpackSummary {
   author: string;
   icon_url: string | null;
   summary: string;
+  downloads: number | null;
 }
 
 export interface ModpackDetails {
@@ -106,7 +145,7 @@ export interface ModpackVersionSummary {
   loader_version: string;
 }
 
-export type ProviderId = "ftb" | "curseforge";
+export type ProviderId = "modrinth" | "ftb" | "curseforge";
 
 export interface InstallWarning {
   file_name: string;
@@ -117,6 +156,38 @@ export interface InstallWarning {
 export interface InstanceInstallResult {
   instance: Instance;
   warnings: InstallWarning[];
+}
+
+export interface ExportSummary {
+  path: string;
+  referenced: number;
+  bundled: number;
+}
+
+export type ContentKind = "mod" | "resource_pack" | "shader";
+
+export interface ContentHit {
+  project_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  author: string;
+  icon_url: string | null;
+  downloads: number;
+  project_type: string;
+}
+
+export interface ModUpdate {
+  file_name: string;
+  project_id: string;
+  title: string;
+  icon_url: string | null;
+  current_version: string;
+  new_version: string;
+  new_file_name: string;
+  url: string;
+  sha1: string;
+  size: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,16 +203,21 @@ export interface DownloadProgress {
   files_total: number;
 }
 
-export interface InstanceLogLine {
-  instance_id: string;
+export interface LogLine {
   line: string;
   stream: "stdout" | "stderr";
+}
+
+export interface InstanceLogBatch {
+  instance_id: string;
+  lines: LogLine[];
 }
 
 export interface CrashAnalysis {
   summary: string;
   suggestion: string | null;
   matched_pattern: string;
+  crash_report: string | null;
 }
 
 export type LaunchPhase = "auth" | "version" | "loader" | "natives" | "java" | "starting" | "running";
@@ -165,14 +241,15 @@ export interface InstanceExit {
   instance_id: string;
   code: number | null;
   crash_analysis: CrashAnalysis | null;
+  killed: boolean;
 }
 
 export function onDownloadProgress(handler: (p: DownloadProgress) => void): Promise<UnlistenFn> {
   return listen<DownloadProgress>("download-progress", (e) => handler(e.payload));
 }
 
-export function onInstanceLog(handler: (line: InstanceLogLine) => void): Promise<UnlistenFn> {
-  return listen<InstanceLogLine>("instance-log", (e) => handler(e.payload));
+export function onInstanceLog(handler: (batch: InstanceLogBatch) => void): Promise<UnlistenFn> {
+  return listen<InstanceLogBatch>("instance-log", (e) => handler(e.payload));
 }
 
 export function onInstanceExit(handler: (exit: InstanceExit) => void): Promise<UnlistenFn> {
@@ -181,6 +258,10 @@ export function onInstanceExit(handler: (exit: InstanceExit) => void): Promise<U
 
 export function onLaunchPhase(handler: (e: LaunchPhaseEvent) => void): Promise<UnlistenFn> {
   return listen<LaunchPhaseEvent>("launch-phase", (e) => handler(e.payload));
+}
+
+export function onInstancesChanged(handler: () => void): Promise<UnlistenFn> {
+  return listen("instances-changed", () => handler());
 }
 
 // ---------------------------------------------------------------------------
@@ -203,17 +284,30 @@ export function loadersListVersions(loader: LoaderKind, minecraftVersion: string
   return invoke<string[]>("loaders_list_versions", { loader, minecraftVersion });
 }
 
+export const javaApi = {
+  list: () => invoke<JavaInstallation[]>("java_list_installations"),
+  probe: (path: string) => invoke<JavaInstallation>("java_probe", { path }),
+};
+
+export function openLauncherLogs(): Promise<void> {
+  return invoke<void>("open_launcher_logs");
+}
+
 export const auth = {
   beginLogin: () => invoke<DeviceCodeInfo>("auth_begin_login"),
   completeLogin: (device: DeviceCodeInfo) => invoke<AccountSession>("auth_complete_login", { device }),
+  cancelLogin: () => invoke<void>("auth_cancel_login"),
   trySilentLogin: () => invoke<AccountSession | null>("auth_try_silent_login"),
-  logout: () => invoke<void>("auth_logout"),
+  listAccounts: () => invoke<StoredAccount[]>("auth_list_accounts"),
+  switchAccount: (accountId: string) => invoke<AccountSession>("auth_switch_account", { accountId }),
+  /** Forgets `accountId`, or the active account when omitted. */
+  logout: (accountId?: string) => invoke<void>("auth_logout", { accountId: accountId ?? null }),
   getActiveAccount: () => invoke<AccountSession | null>("auth_get_active_account"),
 };
 
 export const settingsApi = {
   get: () => invoke<GlobalSettings>("settings_get"),
-  update: (settings: GlobalSettings) => invoke<void>("settings_update", { settings }),
+  update: (settings: GlobalSettings) => invoke<GlobalSettings>("settings_update", { settings }),
 };
 
 export const minecraftApi = {
@@ -221,7 +315,8 @@ export const minecraftApi = {
 };
 
 export const providersApi = {
-  search: (provider: ProviderId, text: string) => invoke<ModpackSummary[]>("providers_search", { provider, text }),
+  search: (provider: ProviderId, text: string, offset = 0) =>
+    invoke<ModpackSummary[]>("providers_search", { provider, text, offset }),
   getModpack: (provider: ProviderId, packId: string) =>
     invoke<ModpackDetails>("providers_get_modpack", { provider, packId }),
   getVersions: (provider: ProviderId, packId: string) =>
@@ -235,9 +330,12 @@ export const instancesApi = {
     invoke<Instance>("instances_create", { name, minecraftVersion, loader, loaderVersion }),
   delete: (id: string) => invoke<void>("instances_delete", { id }),
   rename: (id: string, name: string) => invoke<Instance>("instances_rename", { id, name }),
-  updateSettings: (id: string, minMemoryMb: number | null, maxMemoryMb: number | null, extraJvmArgs: string[]) =>
-    invoke<Instance>("instances_update_settings", { id, minMemoryMb, maxMemoryMb, extraJvmArgs }),
-  openFolder: (id: string) => invoke<void>("instances_open_folder", { id }),
+  duplicate: (id: string, name: string) => invoke<Instance>("instances_duplicate", { id, name }),
+  updateSettings: (id: string, settings: InstanceSettingsInput) =>
+    invoke<Instance>("instances_update_settings", { id, settings }),
+  /** Opens the instance folder, or one of its sub-folders (`mods`, `saves`, `backups`…). */
+  openFolder: (id: string, sub?: string) => invoke<void>("instances_open_folder", { id, sub: sub ?? null }),
+  revealFile: (id: string, path: string) => invoke<void>("instances_reveal_file", { id, path }),
   installModpack: (
     provider: ProviderId,
     packId: string,
@@ -254,13 +352,20 @@ export const instancesApi = {
       packIconUrl,
       instanceName,
     }),
+  cancelInstall: (id: string) => invoke<void>("instances_cancel_install", { id }),
   updateModpack: (instanceId: string, versionId: string) =>
     invoke<InstanceInstallResult>("instances_update_modpack", { instanceId, versionId }),
+  import: (path: string) => invoke<InstanceInstallResult>("instances_import", { path }),
+  export: (id: string, dest: string, includeSaves: boolean) =>
+    invoke<ExportSummary>("instances_export", { id, dest, includeSaves }),
+  backupWorlds: (id: string) => invoke<string | null>("instances_backup_worlds", { id }),
 };
 
 export const launchApi = {
   launch: (instanceId: string) => invoke<void>("launch_instance", { instanceId }),
+  /** Stops the game — or cancels a launch still preparing. */
   stop: (instanceId: string) => invoke<void>("stop_instance", { instanceId }),
+  repair: (instanceId: string) => invoke<void>("repair_instance", { instanceId }),
   isRunning: (instanceId: string) => invoke<boolean>("is_instance_running", { instanceId }),
   stats: (instanceId: string) => invoke<ProcessStats | null>("instance_process_stats", { instanceId }),
 };
@@ -276,5 +381,16 @@ export const instanceModsApi = {
   setEnabled: (instanceId: string, fileName: string, enabled: boolean) =>
     invoke<void>("instance_mods_set_enabled", { instanceId, fileName, enabled }),
   delete: (instanceId: string, fileName: string) => invoke<void>("instance_mods_delete", { instanceId, fileName }),
-  add: (instanceId: string, sourcePath: string) => invoke<void>("instance_mods_add", { instanceId, sourcePath }),
+  add: (instanceId: string, sourcePaths: string[]) => invoke<void>("instance_mods_add", { instanceId, sourcePaths }),
+  checkUpdates: (instanceId: string) => invoke<ModUpdate[]>("instance_mods_check_updates", { instanceId }),
+  /** Resolves to the file names that failed to update. */
+  applyUpdates: (instanceId: string, updates: ModUpdate[]) =>
+    invoke<string[]>("instance_mods_apply_updates", { instanceId, updates }),
+};
+
+export const contentApi = {
+  search: (instanceId: string, kind: ContentKind, query: string, offset = 0) =>
+    invoke<ContentHit[]>("content_search", { instanceId, kind, query, offset }),
+  install: (instanceId: string, projectId: string, kind: ContentKind) =>
+    invoke<string[]>("content_install", { instanceId, projectId, kind }),
 };

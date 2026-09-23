@@ -68,7 +68,7 @@ export function InstallWarningsDialog() {
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => pending && instancesApi.openFolder(pending.instanceId)}
+              onClick={() => pending && instancesApi.openFolder(pending.instanceId, "mods")}
             >
               <FolderOpen className="size-3.5" aria-hidden="true" />
               Ouvrir le dossier de l'instance

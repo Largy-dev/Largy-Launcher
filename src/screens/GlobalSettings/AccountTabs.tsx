@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { BellRing, LogIn, LogOut } from "lucide-react";
+import { BellRing, Loader2, LogIn, LogOut, UserPlus } from "lucide-react";
 
 import { SettingRow, SettingSection } from "@/components/settings/SettingsKit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useAccounts } from "@/hooks/useAccounts";
 import { notify } from "@/lib/notify";
 import { LoginDialog } from "@/screens/Login/LoginScreen";
-import { auth, type GlobalSettings } from "@/services/tauri";
+import { type GlobalSettings } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 import { usePreferences, type NotificationPreferences } from "@/store/preferencesStore";
 
@@ -18,8 +19,8 @@ interface FormTabProps {
 
 export function AccountTab({ form, update }: FormTabProps) {
   const account = useAppStore((s) => s.account);
-  const setAccount = useAppStore((s) => s.setAccount);
   const [loginOpen, setLoginOpen] = useState(false);
+  const { others, switchTo, forget } = useAccounts();
 
   return (
     <>
@@ -33,16 +34,18 @@ export function AccountTab({ form, update }: FormTabProps) {
             />
             <div className="flex-1 space-y-1">
               <p className="text-xl font-bold">{account.profile.name}</p>
-              <p className="text-sm text-success">Connecté · serveurs officiels disponibles</p>
+              {account.offline ? (
+                <p className="text-sm text-warning">Hors connexion · solo uniquement jusqu'au retour du réseau</p>
+              ) : (
+                <p className="text-sm text-success">Connecté · serveurs officiels disponibles</p>
+              )}
               <p className="font-mono text-[0.7rem] text-muted-foreground">{account.profile.id}</p>
             </div>
             <Button
               variant="outline"
               className="gap-1.5"
-              onClick={async () => {
-                await auth.logout();
-                setAccount(null);
-              }}
+              disabled={forget.isPending}
+              onClick={() => forget.mutate(account.profile.id)}
             >
               <LogOut aria-hidden="true" />
               Se déconnecter
@@ -60,6 +63,54 @@ export function AccountTab({ form, update }: FormTabProps) {
             }
           />
         )}
+        {others.map((other) => (
+          <SettingRow
+            key={other.id}
+            label={
+              <span className="flex items-center gap-2.5">
+                <img
+                  src={`https://mc-heads.net/avatar/${other.id}/32`}
+                  alt=""
+                  className="size-6 rounded [image-rendering:pixelated]"
+                />
+                {other.name}
+              </span>
+            }
+            control={
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Oublier ce compte"
+                  onClick={() => forget.mutate(other.id)}
+                  disabled={forget.isPending}
+                >
+                  Oublier
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={switchTo.isPending}
+                  onClick={() => switchTo.mutate(other.id)}
+                >
+                  {switchTo.isPending && switchTo.variables === other.id && (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  )}
+                  Utiliser
+                </Button>
+              </div>
+            }
+          />
+        ))}
+        {account && (
+          <div className="flex justify-end p-3">
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setLoginOpen(true)}>
+              <UserPlus aria-hidden="true" />
+              Ajouter un compte
+            </Button>
+          </div>
+        )}
       </SettingSection>
 
       <SettingSection title="Mode Hors-ligne">
@@ -71,7 +122,7 @@ export function AccountTab({ form, update }: FormTabProps) {
         {form.offline_mode && (
           <SettingRow
             label="Pseudo hors-ligne"
-            description="16 caractères max. Toujours le même UUID pour ce pseudo."
+            description="16 caractères max, sans espace. Toujours le même UUID pour ce pseudo."
             control={
               <Input
                 className="w-56"

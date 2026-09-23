@@ -240,6 +240,7 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
                   author: "",
                   icon_url: instance.icon_url,
                   summary: "",
+                  downloads: null,
                 }
               : null
           }

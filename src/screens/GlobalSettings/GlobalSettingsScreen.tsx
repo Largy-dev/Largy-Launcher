@@ -2,11 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Bell, CheckCircle2, Coffee, ExternalLink, Info, Loader2, Palette, UserRound, Wrench } from "lucide-react";
+import {
+  Bell,
+  CheckCircle2,
+  Coffee,
+  ExternalLink,
+  FileText,
+  Info,
+  Loader2,
+  Palette,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 
 import { MemorySlider } from "@/components/MemorySlider";
 import { PageHeader } from "@/components/PageHeader";
+import { JavaPicker } from "@/components/settings/JavaPicker";
 import {
+  ChoiceGroup,
   SettingRow,
   SettingSection,
   SettingsLayout,
@@ -23,7 +36,19 @@ import { parseJvmArgs } from "@/lib/jvmArgs";
 import { notify } from "@/lib/notify";
 import { adviseRam } from "@/lib/ramAdvice";
 import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
-import { errorMessage, settingsApi, type GlobalSettings } from "@/services/tauri";
+import {
+  errorMessage,
+  openLauncherLogs,
+  settingsApi,
+  type GlobalSettings,
+  type LauncherBehavior,
+} from "@/services/tauri";
+
+const BEHAVIORS: { value: LauncherBehavior; label: string }[] = [
+  { value: "keep_open", label: "Rester ouvert" },
+  { value: "minimize", label: "Réduire" },
+  { value: "hide", label: "Masquer" },
+];
 
 import { AccountTab, NotificationsTab } from "./AccountTabs";
 import { AppearanceTab } from "./AppearanceTab";
@@ -137,8 +162,9 @@ export function GlobalSettingsScreen() {
   const dirty = !!form && !!settings && JSON.stringify(form) !== JSON.stringify(settings);
   const saveMutation = useMutation({
     mutationFn: (next: GlobalSettings) => settingsApi.update(next),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["settings"], saved);
+      setForm(saved);
       notify.success({ title: "Paramètres enregistrés", history: false });
     },
     onError: (e) => notify.error({ title: "Enregistrement impossible", message: errorMessage(e) }),
@@ -205,12 +231,29 @@ export function GlobalSettingsScreen() {
                     min={256}
                     step={256}
                     value={form.default_min_memory_mb}
-                    onChange={(e) => update("default_min_memory_mb", Number(e.target.value))}
+                    onChange={(e) => update("default_min_memory_mb", Math.max(0, Number(e.target.value) || 0))}
+                    onBlur={() =>
+                      update(
+                        "default_min_memory_mb",
+                        Math.min(Math.max(form.default_min_memory_mb, 256), form.default_max_memory_mb),
+                      )
+                    }
                   />
                 }
               />
             </SettingSection>
             <SettingSection title="Java">
+              <SettingRow
+                label="Java par défaut"
+                description="Automatique = le launcher télécharge le Java adapté à chaque version (recommandé)."
+                control={
+                  <JavaPicker
+                    value={form.java_path_override}
+                    onChange={(path) => update("java_path_override", path)}
+                    autoLabel="Automatique (recommandé)"
+                  />
+                }
+              />
               <SettingRow
                 label="Arguments JVM par défaut"
                 description="Ajoutés à toutes les instances, en plus de leurs réglages propres."
@@ -220,6 +263,19 @@ export function GlobalSettingsScreen() {
                     placeholder="Aucun"
                     value={form.default_jvm_args.join(" ")}
                     onChange={(e) => update("default_jvm_args", parseJvmArgs(e.target.value))}
+                  />
+                }
+              />
+            </SettingSection>
+            <SettingSection title="Pendant le jeu">
+              <SettingRow
+                label="Fenêtre du launcher"
+                description="Masquée : elle réapparaît automatiquement quand le jeu se ferme."
+                control={
+                  <ChoiceGroup
+                    value={form.on_game_launch}
+                    options={BEHAVIORS}
+                    onChange={(v) => update("on_game_launch", v)}
                   />
                 }
               />
@@ -242,15 +298,13 @@ export function GlobalSettingsScreen() {
               }
             />
             <SettingRow
-              label="Chemin Java personnalisé"
-              description="Laisse vide pour que le launcher télécharge et gère Java automatiquement (recommandé)."
+              label="Journal du launcher"
+              description="Utile pour signaler un problème : joins le fichier launcher.log."
               control={
-                <Input
-                  className="w-72 font-mono text-xs"
-                  placeholder="Automatique"
-                  value={form.java_path_override ?? ""}
-                  onChange={(e) => update("java_path_override", e.target.value || null)}
-                />
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openLauncherLogs()}>
+                  <FileText aria-hidden="true" />
+                  Ouvrir le dossier
+                </Button>
               }
             />
           </SettingSection>

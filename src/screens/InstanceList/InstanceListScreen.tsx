@@ -1,7 +1,19 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { LayoutGrid, LayoutList, Package, Plus, Rows3, Search, Sparkles, Timer, type LucideIcon } from "lucide-react";
+import {
+  FileDown,
+  LayoutGrid,
+  LayoutList,
+  Loader2,
+  Package,
+  Plus,
+  Rows3,
+  Search,
+  Sparkles,
+  Timer,
+  type LucideIcon,
+} from "lucide-react";
 
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { EmptyState } from "@/components/EmptyState";
@@ -13,10 +25,11 @@ import { useFeaturedInstance } from "@/components/shell/AmbientBackground";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFileDrop } from "@/hooks/useFileDrop";
+import { useImportInstance } from "@/hooks/useImportInstance";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { instanceModsApi, instancesApi, type Instance, type LoaderKind } from "@/services/tauri";
-import { useAppStore } from "@/store/appStore";
 import { usePreferences, type CardDensity, type InstanceSort } from "@/store/preferencesStore";
 
 import { CreateInstanceDialog } from "./CreateInstanceDialog";
@@ -86,16 +99,10 @@ export function InstanceListScreen() {
   const sort = usePreferences((s) => s.instanceSort);
   const setPrefs = usePreferences((s) => s.set);
   const featured = useFeaturedInstance();
-  const downloadProgress = useAppStore((s) => s.downloadProgress);
-  const downloadActive = !!downloadProgress && downloadProgress.files_done < downloadProgress.files_total;
-  const { data: instances, isLoading } = useQuery({
-    queryKey: ["instances"],
-    queryFn: instancesApi.list,
-    // A modpack install writes its instance.json before its files finish
-    // downloading — poll while a download is active so the new (in-progress)
-    // card shows up within a second instead of only once the install finishes.
-    refetchInterval: downloadActive ? 1000 : false,
-  });
+  // Refreshed by the backend's `instances-changed` event (see useAppEvents).
+  const { data: instances, isLoading } = useQuery({ queryKey: ["instances"], queryFn: instancesApi.list });
+  const { pickAndImport, importPaths, importing } = useImportInstance();
+  const dragging = useFileDrop(importPaths);
 
   const loadersPresent = useMemo(() => LOADER_ORDER.filter((l) => instances?.some((i) => i.loader === l)), [instances]);
   const visible = useMemo(() => {
@@ -107,10 +114,22 @@ export function InstanceListScreen() {
   }, [instances, loaderFilter, search, sort]);
 
   const newButton = (
-    <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
-      <Plus aria-hidden="true" />
-      Nouvelle instance
-    </Button>
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        onClick={pickAndImport}
+        disabled={importing}
+        className="gap-1.5"
+        title="Importer un .mrpack, un zip CurseForge ou une instance Prism/MultiMC"
+      >
+        {importing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <FileDown aria-hidden="true" />}
+        Importer
+      </Button>
+      <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
+        <Plus aria-hidden="true" />
+        Nouvelle instance
+      </Button>
+    </div>
   );
 
   return (
@@ -130,7 +149,7 @@ export function InstanceListScreen() {
           <EmptyState
             icon={Sparkles}
             title="Aucune instance pour le moment"
-            description="Crée une instance vanilla en deux clics, ou installe un modpack FTB / CurseForge depuis l'onglet Modpacks."
+            description="Crée une instance en deux clics, installe un modpack depuis l'onglet Modpacks, ou glisse un fichier .mrpack / .zip ici."
             action={newButton}
           />
         </>
@@ -229,6 +248,11 @@ export function InstanceListScreen() {
         </>
       )}
 
+      {dragging && (
+        <div className="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
+          <p className="text-lg font-semibold text-primary">Dépose un .mrpack ou un .zip pour l'importer</p>
+        </div>
+      )}
       <CreateInstanceDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );

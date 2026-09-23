@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { ArrowLeft, Check, Coffee, FolderOpen, Info, Loader2, MemoryStick, Puzzle } from "lucide-react";
+import { ArrowLeft, Check, Coffee, FolderOpen, Gamepad2, Info, Loader2, MemoryStick, Puzzle } from "lucide-react";
 
+import { InstanceActions } from "@/components/instance/InstanceActions";
 import { InstanceIcon } from "@/components/instance/InstanceIcon";
 import { LoaderBadge } from "@/components/instance/LoaderBadge";
 import { PlayButton } from "@/components/instance/PlayButton";
@@ -15,6 +16,7 @@ import {
   UnsavedChanges,
   type SettingsTab,
 } from "@/components/settings/SettingsKit";
+import { JavaPicker } from "@/components/settings/JavaPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -30,12 +32,13 @@ import { cn } from "@/lib/utils";
 import { errorMessage, instancesApi, type Instance } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
-type TabId = "general" | "memory" | "java";
+type TabId = "general" | "game" | "memory" | "java";
 
 const TABS: SettingsTab<TabId>[] = [
-  { id: "general", label: "Général", icon: Info, description: "Nom, emplacement et informations de l'instance." },
+  { id: "general", label: "Général", icon: Info, description: "Nom, emplacement, outils et statistiques." },
+  { id: "game", label: "Jeu", icon: Gamepad2, description: "Fenêtre du jeu et connexion directe à un serveur." },
   { id: "memory", label: "Mémoire", icon: MemoryStick, description: "La RAM allouée au jeu, avec un conseil adapté." },
-  { id: "java", label: "Java", icon: Coffee, description: "Optimisations et arguments de la JVM." },
+  { id: "java", label: "Java", icon: Coffee, description: "Version de Java, optimisations et arguments de la JVM." },
 ];
 
 interface Draft {
@@ -43,6 +46,11 @@ interface Draft {
   minMb: number | null;
   maxMb: number | null;
   jvmArgs: string;
+  javaPath: string | null;
+  width: number | null;
+  height: number | null;
+  fullscreen: boolean;
+  server: string;
 }
 
 function draftOf(instance: Instance): Draft {
@@ -51,8 +59,15 @@ function draftOf(instance: Instance): Draft {
     minMb: instance.min_memory_mb,
     maxMb: instance.max_memory_mb,
     jvmArgs: instance.extra_jvm_args.join(" "),
+    javaPath: instance.java_path,
+    width: instance.window_width,
+    height: instance.window_height,
+    fullscreen: instance.fullscreen,
+    server: instance.auto_join_server ?? "",
   };
 }
+
+const numberOrNull = (raw: string) => (raw.trim() === "" ? null : Math.max(0, Math.round(Number(raw)) || 0));
 
 export function InstanceSettingsScreen() {
   const { id } = useParams<{ id: string }>();
@@ -89,7 +104,16 @@ export function InstanceSettingsScreen() {
   const saveMutation = useMutation({
     mutationFn: async (next: Draft) => {
       if (next.name.trim() !== saved?.name) await instancesApi.rename(instanceId, next.name);
-      return instancesApi.updateSettings(instanceId, next.minMb, next.maxMb, parseJvmArgs(next.jvmArgs));
+      return instancesApi.updateSettings(instanceId, {
+        min_memory_mb: next.minMb,
+        max_memory_mb: next.maxMb,
+        extra_jvm_args: parseJvmArgs(next.jvmArgs),
+        java_path: next.javaPath,
+        window_width: next.width,
+        window_height: next.height,
+        fullscreen: next.fullscreen,
+        auto_join_server: next.server.trim() || null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instance", instanceId] });
@@ -134,17 +158,15 @@ export function InstanceSettingsScreen() {
               <ArrowLeft aria-hidden="true" />
               Retour
             </Button>
-            {instance.loader !== "vanilla" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => navigate(`/instances/${instanceId}/mods`)}
-              >
-                <Puzzle aria-hidden="true" />
-                Mods{modCount !== null && ` (${modCount})`}
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => navigate(`/instances/${instanceId}/mods`)}
+            >
+              <Puzzle aria-hidden="true" />
+              {instance.loader === "vanilla" ? "Contenu" : `Mods${modCount !== null ? ` (${modCount})` : ""}`}
+            </Button>
             <PlayButton instance={instance} />
           </>
         }
@@ -201,7 +223,57 @@ export function InstanceSettingsScreen() {
                 ))}
               </div>
             </SettingSection>
+            <InstanceActions instance={instance} />
           </>
+        )}
+
+        {tab === "game" && (
+          <SettingSection>
+            <SettingRow
+              label="Taille de la fenêtre"
+              description="Vide = taille par défaut de Minecraft."
+              control={
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    className="w-24"
+                    min={320}
+                    placeholder="Largeur"
+                    aria-label="Largeur"
+                    value={draft.width ?? ""}
+                    onChange={(e) => patch({ width: numberOrNull(e.target.value) })}
+                  />
+                  <span className="text-muted-foreground">×</span>
+                  <Input
+                    type="number"
+                    className="w-24"
+                    min={240}
+                    placeholder="Hauteur"
+                    aria-label="Hauteur"
+                    value={draft.height ?? ""}
+                    onChange={(e) => patch({ height: numberOrNull(e.target.value) })}
+                  />
+                </div>
+              }
+            />
+            <SettingRow
+              label="Plein écran"
+              description="Démarre le jeu directement en plein écran."
+              control={<Switch checked={draft.fullscreen} onCheckedChange={(fullscreen) => patch({ fullscreen })} />}
+            />
+            <SettingRow
+              label="Rejoindre un serveur au lancement"
+              description="Adresse du serveur (ex. play.exemple.fr ou play.exemple.fr:25566). Vide = menu principal."
+              control={
+                <Input
+                  className="w-72"
+                  placeholder="play.exemple.fr"
+                  value={draft.server}
+                  onChange={(e) => patch({ server: e.target.value })}
+                />
+              }
+            />
+          </SettingSection>
         )}
 
         {tab === "memory" && (
@@ -252,6 +324,19 @@ export function InstanceSettingsScreen() {
 
         {tab === "java" && (
           <>
+            <SettingSection title="Version de Java">
+              <SettingRow
+                label="Java utilisé"
+                description="Automatique = le Java recommandé pour cette version, téléchargé par le launcher."
+                control={
+                  <JavaPicker
+                    value={draft.javaPath}
+                    onChange={(javaPath) => patch({ javaPath })}
+                    autoLabel={settings?.java_path_override ? "Réglage global" : "Automatique (recommandé)"}
+                  />
+                }
+              />
+            </SettingSection>
             <SettingSection title="Optimisations en un clic">
               {JVM_PRESETS.map((preset) => {
                 const active = isPresetActive(args, preset);

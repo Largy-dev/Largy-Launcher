@@ -31,6 +31,7 @@ describe("useSettings", () => {
       java_path_override: null,
       offline_mode: false,
       offline_username: "",
+      on_game_launch: "keep_open",
     });
 
     const { result } = renderHook(() => useSettings(), { wrapper });

@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { motion } from "motion/react";
-import { ArrowLeft, Blocks, FolderOpen, Loader2, Plus, Puzzle, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Blocks, Compass, FolderOpen, Loader2, Plus, Puzzle, RefreshCw, Search, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
@@ -12,11 +12,15 @@ import { Skeleton } from "@/components/Skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useFileDrop } from "@/hooks/useFileDrop";
 import { formatBytes } from "@/lib/format";
 import { listItem } from "@/lib/motion";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { errorMessage, instanceModsApi, instancesApi, type ModEntry } from "@/services/tauri";
+
+import { ContentBrowserDialog } from "./ContentBrowserDialog";
+import { ModUpdatesDialog } from "./ModUpdatesDialog";
 
 /** "create-1.20.1-0.5.1f.jar" → "create 1.20.1 0.5.1f" — easier to scan than raw file names. */
 function prettyModName(fileName: string): string {
@@ -36,6 +40,8 @@ export function InstanceModsScreen() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [toDelete, setToDelete] = useState<ModEntry | null>(null);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
 
   const { data: instance } = useQuery({
     queryKey: ["instance", instanceId],
@@ -73,23 +79,33 @@ export function InstanceModsScreen() {
   });
 
   const addMutation = useMutation({
-    mutationFn: (sourcePath: string) => instanceModsApi.add(instanceId, sourcePath),
-    onSuccess: () => {
+    mutationFn: (sourcePaths: string[]) => instanceModsApi.add(instanceId, sourcePaths),
+    onSuccess: (_, paths) => {
       invalidate();
-      notify.success({ title: "Mod ajouté", history: false });
+      notify.success({ title: paths.length > 1 ? `${paths.length} mods ajoutés` : "Mod ajouté", history: false });
     },
     onError,
   });
 
   async function addMod() {
     const picked = await open({
-      multiple: false,
+      multiple: true,
       filters: [{ name: "Mod (.jar)", extensions: ["jar"] }],
     });
-    if (typeof picked === "string") {
-      addMutation.mutate(picked);
-    }
+    const paths = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
+    if (paths.length > 0) addMutation.mutate(paths);
   }
+
+  const vanilla = instance?.loader === "vanilla";
+  const onDrop = useCallback(
+    (paths: string[]) => {
+      const jars = paths.filter((p) => p.toLowerCase().endsWith(".jar"));
+      if (jars.length > 0) addMutation.mutate(jars);
+      else notify.warning({ title: "Seuls les fichiers .jar peuvent être ajoutés ici", history: false });
+    },
+    [addMutation],
+  );
+  const dragging = useFileDrop(onDrop, !vanilla);
 
   const mods = useMemo(() => modsQuery.data ?? [], [modsQuery.data]);
   const enabledCount = mods.filter((m) => m.enabled).length;
@@ -111,11 +127,13 @@ export function InstanceModsScreen() {
     <div className="flex flex-1 flex-col">
       <PageHeader
         eyebrow={instance?.name ?? "Instance"}
-        title="Mods"
+        title={vanilla ? "Contenu" : "Mods"}
         description={
-          mods.length > 0
-            ? `${enabledCount} actif${enabledCount > 1 ? "s" : ""} sur ${mods.length} · ${formatBytes(totalSize)}`
-            : "Active, désactive, supprime ou ajoute des mods."
+          vanilla
+            ? "Ajoute des resource packs et des shaders depuis Modrinth."
+            : mods.length > 0
+              ? `${enabledCount} actif${enabledCount > 1 ? "s" : ""} sur ${mods.length} · ${formatBytes(totalSize)}`
+              : "Active, désactive, supprime ou ajoute des mods."
         }
         action={
           <>
@@ -123,17 +141,40 @@ export function InstanceModsScreen() {
               <ArrowLeft aria-hidden="true" />
               Retour
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => instancesApi.openFolder(instanceId)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => instancesApi.openFolder(instanceId, vanilla ? undefined : "mods")}
+            >
               <FolderOpen aria-hidden="true" />
               Dossier
             </Button>
-            <Button size="sm" onClick={addMod} disabled={addMutation.isPending} className="bg-gradient-brand gap-1.5">
-              {addMutation.isPending ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Plus aria-hidden="true" />
-              )}
-              Ajouter un mod…
+            {!vanilla && (
+              <>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setUpdatesOpen(true)}>
+                  <RefreshCw aria-hidden="true" />
+                  Mises à jour
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addMod}
+                  disabled={addMutation.isPending}
+                  className="gap-1.5"
+                >
+                  {addMutation.isPending ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus aria-hidden="true" />
+                  )}
+                  Fichier .jar…
+                </Button>
+              </>
+            )}
+            <Button size="sm" onClick={() => setBrowseOpen(true)} className="bg-gradient-brand gap-1.5">
+              <Compass aria-hidden="true" />
+              Parcourir Modrinth
             </Button>
           </>
         }
@@ -148,12 +189,16 @@ export function InstanceModsScreen() {
       ) : mods.length === 0 ? (
         <EmptyState
           icon={Blocks}
-          title="Aucun mod"
-          description="Ajoute un fichier .jar pour l'installer dans cette instance."
+          title={vanilla ? "Instance vanilla" : "Aucun mod"}
+          description={
+            vanilla
+              ? "Cette instance n'a pas de mod loader : ajoute des resource packs ou des shaders."
+              : "Parcours Modrinth, ou glisse des fichiers .jar sur la fenêtre."
+          }
           action={
-            <Button onClick={addMod} className="gap-1.5">
-              <Plus aria-hidden="true" />
-              Ajouter un mod
+            <Button onClick={() => setBrowseOpen(true)} className="gap-1.5">
+              <Compass aria-hidden="true" />
+              Parcourir Modrinth
             </Button>
           }
         />
@@ -234,6 +279,15 @@ export function InstanceModsScreen() {
           </motion.div>
         </>
       )}
+
+      {dragging && (
+        <div className="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
+          <p className="text-lg font-semibold text-primary">Dépose tes fichiers .jar pour les ajouter</p>
+        </div>
+      )}
+
+      {instance && <ContentBrowserDialog instance={instance} open={browseOpen} onOpenChange={setBrowseOpen} />}
+      <ModUpdatesDialog instanceId={instanceId} open={updatesOpen} onOpenChange={setUpdatesOpen} />
 
       <ConfirmDialog
         open={toDelete !== null}

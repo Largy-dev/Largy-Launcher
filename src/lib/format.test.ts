@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatClock, formatDuration, formatEta, formatGb, formatRelative } from "./format";
+import { formatBytes, formatClock, formatCount, formatDuration, formatEta, formatGb, formatRelative } from "./format";
 
 describe("formatDuration", () => {
   it("formats hours, minutes and seconds compactly", () => {
@@ -51,5 +51,13 @@ describe("formatEta", () => {
   it("estimates the remaining time", () => {
     expect(formatEta(10_000, 1000)).toBe("10 s");
     expect(formatEta(600_000, 1000)).toBe("10 min");
+  });
+});
+
+describe("formatCount", () => {
+  it("abbreviates thousands and millions the French way", () => {
+    expect(formatCount(950)).toBe("950");
+    expect(formatCount(12_300)).toBe("12,3 k");
+    expect(formatCount(4_500_000)).toBe("4,5 M");
   });
 });

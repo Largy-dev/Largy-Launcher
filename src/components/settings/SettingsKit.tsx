@@ -98,7 +98,7 @@ export function SettingSection({ title, children }: { title?: string; children: 
 }
 
 interface SettingRowProps {
-  label: string;
+  label: ReactNode;
   description?: ReactNode;
   control?: ReactNode;
   /** Put the control under the text instead of on the right (wide controls). */
@@ -109,7 +109,7 @@ export function SettingRow({ label, description, control, stacked }: SettingRowP
   return (
     <div className={cn("gap-6 px-4 py-3.5", stacked ? "space-y-3" : "flex items-center justify-between")}>
       <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
+        <div className="text-sm font-medium">{label}</div>
         {description && <div className="text-xs text-muted-foreground">{description}</div>}
       </div>
       {control && <div className={cn(!stacked && "shrink-0")}>{control}</div>}

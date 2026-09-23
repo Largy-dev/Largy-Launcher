@@ -39,7 +39,10 @@ export function LaunchProgressScreen() {
     );
   }
 
-  const openFolder = () => instancesApi.openFolder(instance.id);
+  const openCrashDetails = () => {
+    const report = crashAnalysis?.crash_report;
+    return report ? instancesApi.revealFile(instance.id, report) : instancesApi.openFolder(instance.id, "logs");
+  };
   const status = preparing
     ? "Lancement en cours"
     : running
@@ -87,13 +90,17 @@ export function LaunchProgressScreen() {
             analysis={crashAnalysis}
             logs={runtime.logs}
             onDismiss={() => clearCrashAnalysis(instance.id)}
-            onOpenFolder={openFolder}
+            onOpenFolder={openCrashDetails}
             onRelaunch={play}
           />
         )}
       </AnimatePresence>
 
-      <LogConsole lines={runtime.logs} onOpenFolder={openFolder} className="min-h-72 flex-1" />
+      <LogConsole
+        lines={runtime.logs}
+        onOpenFolder={() => instancesApi.openFolder(instance.id, "logs")}
+        className="min-h-72 flex-1"
+      />
     </div>
   );
 }

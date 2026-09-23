@@ -58,3 +58,11 @@ export function formatEta(bytesRemaining: number, bytesPerSecond: number): strin
   const seconds = Math.ceil(bytesRemaining / bytesPerSecond);
   return seconds < 60 ? `${seconds} s` : formatDuration(seconds);
 }
+
+/** 950 → "950", 12 300 → "12,3 k", 4 500 000 → "4,5 M". */
+export function formatCount(n: number): string {
+  const fmt = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  if (n >= 1_000_000) return `${fmt(n / 1_000_000)} M`;
+  if (n >= 1_000) return `${fmt(n / 1_000)} k`;
+  return String(n);
+}

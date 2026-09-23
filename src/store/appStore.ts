@@ -42,7 +42,7 @@ interface AppStore {
   setRunning: (instanceId: string, running: boolean) => void;
   markStopping: (instanceId: string) => void;
   setPhase: (instanceId: string, phase: LaunchPhase) => void;
-  appendLog: (instanceId: string, line: string, stream: RawLogLine["stream"]) => void;
+  appendLogs: (instanceId: string, lines: RawLogLine[]) => void;
   clearLogs: (instanceId: string) => void;
 
   crashAnalysis: Record<string, CrashAnalysis | null>;
@@ -105,8 +105,11 @@ export const useAppStore = create<AppStore>((set) => {
         phase,
         startedAt: phase === "running" ? (current.startedAt ?? Date.now()) : current.startedAt,
       })),
-    appendLog: (instanceId, line, stream) =>
-      patchRuntime(instanceId, (current) => ({ logs: [...current.logs, { line, stream }].slice(-MAX_LOG_LINES) })),
+    appendLogs: (instanceId, lines) =>
+      patchRuntime(instanceId, (current) => {
+        const next = current.logs.concat(lines);
+        return { logs: next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next };
+      }),
     clearLogs: (instanceId) => patchRuntime(instanceId, () => ({ logs: [] })),
 
     crashAnalysis: {},

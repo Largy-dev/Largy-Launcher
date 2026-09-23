@@ -2,7 +2,18 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { Blocks, ChevronUp, History, LayoutGrid, LogIn, LogOut, Palette, Settings, UserRound } from "lucide-react";
+import {
+  Blocks,
+  ChevronUp,
+  History,
+  LayoutGrid,
+  LogIn,
+  LogOut,
+  Palette,
+  Settings,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
 
 import { InstanceIcon } from "@/components/instance/InstanceIcon";
 import { Button } from "@/components/ui/button";
@@ -13,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAccounts } from "@/hooks/useAccounts";
 import { useSettings } from "@/hooks/useSettings";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { useNow } from "@/hooks/useInstanceInfo";
@@ -20,7 +32,7 @@ import { formatClock } from "@/lib/format";
 import { spring } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { LoginDialog } from "@/screens/Login/LoginScreen";
-import { auth, instancesApi, type Instance } from "@/services/tauri";
+import { instancesApi, type Instance } from "@/services/tauri";
 import { runtimeOf, useAppStore } from "@/store/appStore";
 
 import { NotificationCenter } from "./NotificationCenter";
@@ -68,8 +80,8 @@ function InstanceShortcut({ instance }: { instance: Instance }) {
 
 function AccountCard() {
   const account = useAppStore((s) => s.account);
-  const setAccount = useAppStore((s) => s.setAccount);
   const { data: settings } = useSettings();
+  const { others, switchTo, forget } = useAccounts();
   const navigate = useNavigate();
   const [loginOpen, setLoginOpen] = useState(false);
 
@@ -112,7 +124,11 @@ function AccountCard() {
           />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{account.profile.name}</p>
-            <p className="text-[0.68rem] text-success">Compte Microsoft</p>
+            {account.offline ? (
+              <p className="text-[0.68rem] text-warning">Hors connexion</p>
+            ) : (
+              <p className="text-[0.68rem] text-success">Compte Microsoft</p>
+            )}
           </div>
           <ChevronUp className="size-3.5 text-sidebar-foreground/40" aria-hidden="true" />
         </button>
@@ -122,18 +138,27 @@ function AccountCard() {
           <UserRound className="size-4" aria-hidden="true" />
           Mon compte
         </DropdownMenuItem>
+        {others.map((other) => (
+          <DropdownMenuItem key={other.id} onClick={() => switchTo.mutate(other.id)} className="gap-2">
+            <img
+              src={`https://mc-heads.net/avatar/${other.id}/32`}
+              alt=""
+              className="size-4 rounded-sm [image-rendering:pixelated]"
+            />
+            {other.name}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem onClick={() => setLoginOpen(true)} className="gap-2">
+          <UserPlus className="size-4" aria-hidden="true" />
+          Ajouter un compte
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={async () => {
-            await auth.logout();
-            setAccount(null);
-          }}
-          className="gap-2 text-destructive"
-        >
+        <DropdownMenuItem onClick={() => forget.mutate(account.profile.id)} className="gap-2 text-destructive">
           <LogOut className="size-4" aria-hidden="true" />
           Se déconnecter
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
     </DropdownMenu>
   );
 }

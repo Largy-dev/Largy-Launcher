@@ -18,17 +18,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSystemMemory } from "@/hooks/useInstanceInfo";
 import { formatGb } from "@/lib/format";
+import { notifyInstallResult } from "@/lib/installResult";
 import { notify } from "@/lib/notify";
 import { adviseRam } from "@/lib/ramAdvice";
 import {
   errorMessage,
   instancesApi,
+  isCancelled,
   providersApi,
-  type InstanceInstallResult,
   type ModpackSummary,
   type ProviderId,
 } from "@/services/tauri";
-import { useAppStore, type PendingInstallWarnings } from "@/store/appStore";
 
 interface ModpackDetailDialogProps {
   provider: ProviderId;
@@ -48,41 +48,10 @@ interface InstallVars {
   instanceName: string;
 }
 
-function notifyResult(
-  result: InstanceInstallResult,
-  title: string,
-  setInstallWarnings: (w: PendingInstallWarnings) => void,
-  openInstance: () => void,
-) {
-  const pending: PendingInstallWarnings = {
-    instanceId: result.instance.id,
-    instanceName: result.instance.name,
-    warnings: result.warnings,
-  };
-  if (result.warnings.length > 0) {
-    notify.warning({
-      title,
-      message: `${result.warnings.length} fichier(s) à télécharger à la main.`,
-      native: "installDone",
-      sticky: true,
-      action: { label: "Voir la liste", onClick: () => setInstallWarnings(pending) },
-    });
-    setInstallWarnings(pending);
-  } else {
-    notify.success({
-      title,
-      message: "Tout est prêt, bon jeu !",
-      native: "installDone",
-      action: { label: "Ouvrir", onClick: openInstance },
-    });
-  }
-}
-
 export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstanceId }: ModpackDetailDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const setInstallWarnings = useAppStore((s) => s.setInstallWarnings);
-  const [versionId, setVersionId] = useState("");
+  const [pickedVersionId, setVersionId] = useState("");
   const [instanceName, setInstanceName] = useState("");
   const isUpdate = !!updateInstanceId;
   const { data: memory } = useSystemMemory();
@@ -92,6 +61,8 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
     queryFn: () => providersApi.getVersions(provider, pack!.id),
     enabled: pack !== null,
   });
+  // Newest version preselected: it's what most people want to install.
+  const versionId = pickedVersionId || versionsQuery.data?.[0]?.id || "";
 
   // Variables are captured explicitly (not read from `pack`/`versionId` at
   // success time) since the dialog closes and navigates away immediately on
@@ -109,12 +80,12 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["instance-mods", result.instance.id] });
-      notifyResult(result, `${vars.packName} installé`, setInstallWarnings, () =>
-        navigate(`/instances/${result.instance.id}`),
-      );
+      notifyInstallResult(result, `${vars.packName} installé`, () => navigate(`/instances/${result.instance.id}`));
     },
     onError: (e, vars) =>
-      notify.error({ title: `Échec de l'installation de ${vars.packName}`, message: errorMessage(e) }),
+      isCancelled(e)
+        ? notify.info({ title: `Installation de ${vars.packName} annulée`, history: false })
+        : notify.error({ title: `Échec de l'installation de ${vars.packName}`, message: errorMessage(e) }),
   });
 
   const updateMutation = useMutation({
@@ -124,11 +95,14 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
       queryClient.invalidateQueries({ queryKey: ["modpack-versions", provider, pack?.id] });
       queryClient.invalidateQueries({ queryKey: ["instance-mods", result.instance.id] });
       queryClient.invalidateQueries({ queryKey: ["instance", result.instance.id] });
-      notifyResult(result, `${result.instance.name} mis à jour`, setInstallWarnings, () =>
+      notifyInstallResult(result, `${result.instance.name} mis à jour`, () =>
         navigate(`/instances/${result.instance.id}`),
       );
     },
-    onError: (e) => notify.error({ title: "Échec de la mise à jour", message: errorMessage(e) }),
+    onError: (e) =>
+      isCancelled(e)
+        ? notify.info({ title: "Mise à jour annulée", history: false })
+        : notify.error({ title: "Échec de la mise à jour", message: errorMessage(e) }),
   });
 
   const activeMutation = isUpdate ? updateMutation : installMutation;
@@ -198,7 +172,9 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
           </div>
         </DialogHeader>
         <DialogDescription className="line-clamp-3">
-          {isUpdate ? "Choisis la version vers laquelle mettre à jour cette instance." : pack?.summary}
+          {isUpdate
+            ? "Choisis la version cible. Tes mondes sont sauvegardés avant, et tes options de jeu conservées."
+            : pack?.summary}
         </DialogDescription>
 
         <div className="space-y-4">

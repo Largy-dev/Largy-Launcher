@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Loader2, Play, Square } from "lucide-react";
+import { Loader2, Play, Square, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useLaunchInstance } from "@/hooks/useLaunchInstance";
@@ -15,15 +15,31 @@ interface PlayButtonProps {
 
 /** Play → Préparation (current step) → En jeu + Arrêter, with the accent glow when idle. */
 export function PlayButton({ instance, size = "sm", className }: PlayButtonProps) {
-  const { play, stop, running, preparing, phase, installing, installPercent } = useLaunchInstance(instance);
+  const { play, stop, cancelInstall, running, preparing, phase, installing, installPercent } =
+    useLaunchInstance(instance);
   const large = size === "lg";
 
   if (installing) {
     return (
-      <Button disabled size={large ? "lg" : "sm"} className={cn("gap-1.5", large && "h-12 px-6 text-base", className)}>
-        <Loader2 className="animate-spin" aria-hidden="true" />
-        Installation {installPercent}%
-      </Button>
+      <div className={cn("flex items-center gap-2", className)}>
+        <Button disabled size={large ? "lg" : "sm"} className={cn("gap-1.5", large && "h-12 px-6 text-base")}>
+          <Loader2 className="animate-spin" aria-hidden="true" />
+          Installation {installPercent}%
+        </Button>
+        <Button
+          variant="outline"
+          size={large ? "lg" : "sm"}
+          className={cn(large && "h-12 px-4")}
+          onClick={(e) => {
+            e.stopPropagation();
+            cancelInstall();
+          }}
+          title="Annuler l'installation"
+          aria-label="Annuler l'installation"
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
     );
   }
 
@@ -59,10 +75,11 @@ export function PlayButton({ instance, size = "sm", className }: PlayButtonProps
             stop();
           }}
           className={cn("gap-1.5", large && "h-12 px-4")}
-          title="Arrêter le jeu"
+          title={preparing ? "Annuler le lancement" : "Arrêter le jeu"}
+          aria-label={preparing ? "Annuler le lancement" : "Arrêter le jeu"}
         >
-          <Square className="fill-current" aria-hidden="true" />
-          {large && "Arrêter"}
+          {preparing ? <X aria-hidden="true" /> : <Square className="fill-current" aria-hidden="true" />}
+          {large && (preparing ? "Annuler" : "Arrêter")}
         </Button>
       </div>
     );

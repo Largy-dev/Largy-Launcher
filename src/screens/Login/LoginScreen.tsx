@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/lib/notify";
-import { auth, errorMessage, settingsApi, type DeviceCodeInfo } from "@/services/tauri";
+import { auth, errorMessage, isCancelled, settingsApi, type DeviceCodeInfo } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
 function MicrosoftMark() {
@@ -67,6 +67,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       setStatus("polling");
       const session = await auth.completeLogin(info);
       setAccount(session);
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
       notify.success({ title: `Bienvenue, ${session.profile.name} !`, message: "Compte Microsoft connecté." });
       if (settings?.offline_mode) {
         setStatus("confirm-offline");
@@ -74,9 +75,20 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         finishLogin();
       }
     } catch (e) {
+      if (isCancelled(e)) return;
       setError(errorMessage(e));
       setStatus("error");
     }
+  }
+
+  async function copyAndOpen(info: DeviceCodeInfo) {
+    try {
+      await navigator.clipboard.writeText(info.user_code);
+      notify.success({ title: "Code copié", message: "Colle-le sur la page Microsoft.", history: false });
+    } catch {
+      // Clipboard unavailable: the code stays readable on screen.
+    }
+    await openUrl(info.verification_uri);
   }
 
   return (
@@ -84,7 +96,10 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next);
-        if (!next) reset();
+        if (!next) {
+          if (status === "polling" || status === "waiting") auth.cancelLogin().catch(() => {});
+          reset();
+        }
       }}
     >
       <DialogContent className="sm:max-w-sm">
@@ -116,14 +131,9 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
             <p className="rounded-md bg-muted py-3 font-mono text-2xl font-semibold tracking-widest">
               {device.user_code}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full gap-2"
-              onClick={() => openUrl(device.verification_uri)}
-            >
+            <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => copyAndOpen(device)}>
               <ExternalLink className="size-3.5" aria-hidden="true" />
-              Ouvrir la page de connexion
+              Copier le code et ouvrir la page
             </Button>
             <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3 animate-spin" aria-hidden="true" />

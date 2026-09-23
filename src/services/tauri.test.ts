@@ -26,9 +26,16 @@ describe("auth", () => {
     expect(invokeMock).toHaveBeenCalledWith("auth_complete_login", { device });
   });
 
-  it("logout calls auth_logout with no args", async () => {
+  it("logout forgets the active account by default, or the given one", async () => {
     await auth.logout();
-    expect(invokeMock).toHaveBeenCalledWith("auth_logout");
+    expect(invokeMock).toHaveBeenCalledWith("auth_logout", { accountId: null });
+    await auth.logout("abc");
+    expect(invokeMock).toHaveBeenCalledWith("auth_logout", { accountId: "abc" });
+  });
+
+  it("switchAccount camelCases accountId", async () => {
+    await auth.switchAccount("abc");
+    expect(invokeMock).toHaveBeenCalledWith("auth_switch_account", { accountId: "abc" });
   });
 });
 
@@ -43,6 +50,7 @@ describe("settingsApi", () => {
       java_path_override: null,
       offline_mode: false,
       offline_username: "",
+      on_game_launch: "keep_open" as const,
     };
     await settingsApi.update(settings);
     expect(invokeMock).toHaveBeenCalledWith("settings_update", { settings });
@@ -59,7 +67,7 @@ describe("minecraftApi", () => {
 describe("providersApi", () => {
   it("search maps provider/text to snake_case-free camelCase args", async () => {
     await providersApi.search("curseforge", "create");
-    expect(invokeMock).toHaveBeenCalledWith("providers_search", { provider: "curseforge", text: "create" });
+    expect(invokeMock).toHaveBeenCalledWith("providers_search", { provider: "curseforge", text: "create", offset: 0 });
   });
 
   it("getVersions camelCases packId", async () => {
@@ -89,14 +97,26 @@ describe("instancesApi", () => {
     expect(invokeMock).toHaveBeenCalledWith("instances_rename", { id: "abc", name: "New name" });
   });
 
-  it("updateSettings camelCases every argument", async () => {
-    await instancesApi.updateSettings("abc", 1024, 4096, ["-Dfoo=bar"]);
-    expect(invokeMock).toHaveBeenCalledWith("instances_update_settings", {
-      id: "abc",
-      minMemoryMb: 1024,
-      maxMemoryMb: 4096,
-      extraJvmArgs: ["-Dfoo=bar"],
-    });
+  it("updateSettings sends the settings object as-is", async () => {
+    const settings = {
+      min_memory_mb: 1024,
+      max_memory_mb: 4096,
+      extra_jvm_args: ["-Dfoo=bar"],
+      java_path: null,
+      window_width: 1280,
+      window_height: 720,
+      fullscreen: false,
+      auto_join_server: "play.example.net",
+    };
+    await instancesApi.updateSettings("abc", settings);
+    expect(invokeMock).toHaveBeenCalledWith("instances_update_settings", { id: "abc", settings });
+  });
+
+  it("openFolder passes an optional sub-folder", async () => {
+    await instancesApi.openFolder("abc");
+    expect(invokeMock).toHaveBeenCalledWith("instances_open_folder", { id: "abc", sub: null });
+    await instancesApi.openFolder("abc", "mods");
+    expect(invokeMock).toHaveBeenCalledWith("instances_open_folder", { id: "abc", sub: "mods" });
   });
 
   it("installModpack camelCases every argument", async () => {

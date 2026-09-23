@@ -9,9 +9,11 @@ import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
 import {
   auth,
   errorMessage,
+  instancesApi,
   onDownloadProgress,
   onInstanceExit,
   onInstanceLog,
+  onInstancesChanged,
   onLaunchPhase,
   type Instance,
 } from "@/services/tauri";
@@ -26,8 +28,20 @@ export function useAppEvents() {
     const { setAccount } = useAppStore.getState();
     auth
       .trySilentLogin()
-      .then(setAccount)
-      .catch(() => setAccount(null));
+      .then((account) => {
+        setAccount(account);
+        if (account?.offline) {
+          notify.warning({
+            title: "Mode hors connexion",
+            message: `Impossible de joindre Microsoft : ${account.profile.name} peut jouer en solo, pas en multijoueur.`,
+            history: false,
+          });
+        }
+      })
+      .catch((e) => {
+        setAccount(null);
+        notify.warning({ title: "Reconnexion nécessaire", message: errorMessage(e), history: false });
+      });
   }, []);
 
   useEffect(() => {
@@ -62,13 +76,13 @@ export function useAppEvents() {
 
     const unlisten = [
       onDownloadProgress((p) => store().setDownloadProgress(p)),
-      onInstanceLog((l) => store().appendLog(l.instance_id, l.line, l.stream)),
+      onInstanceLog((batch) => store().appendLogs(batch.instance_id, batch.lines)),
       onLaunchPhase((e) => store().setPhase(e.instance_id, e.phase)),
+      onInstancesChanged(() => queryClient.invalidateQueries({ queryKey: ["instances"] })),
       onInstanceExit((e) => {
         const runtime = runtimeOf(store().runtime, e.instance_id);
         const name = instanceName(e.instance_id);
-        const userStopped = runtime.stopping && e.crash_analysis?.matched_pattern === "unknown-nonzero-exit";
-        const crash = userStopped ? null : e.crash_analysis;
+        const crash = e.killed ? null : e.crash_analysis;
         const session = runtime.startedAt ? (Date.now() - runtime.startedAt) / 1000 : 0;
 
         store().setRunning(e.instance_id, false);
@@ -77,12 +91,15 @@ export function useAppEvents() {
         queryClient.invalidateQueries({ queryKey: ["instance", e.instance_id] });
 
         if (crash) {
+          const report = crash.crash_report;
           notify.error({
             title: `${name} a crashé`,
             message: crash.suggestion ? `${crash.summary} ${crash.suggestion}` : crash.summary,
             native: "crash",
             sticky: true,
-            action: { label: "Voir les logs", onClick: () => navigate(`/instances/${e.instance_id}/launch`) },
+            action: report
+              ? { label: "Crash report", onClick: () => instancesApi.revealFile(e.instance_id, report) }
+              : { label: "Voir les logs", onClick: () => navigate(`/instances/${e.instance_id}/launch`) },
           });
         } else if (session > 0) {
           notify.info({

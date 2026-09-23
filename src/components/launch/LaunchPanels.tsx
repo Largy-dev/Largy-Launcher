@@ -160,7 +160,7 @@ export function CrashCard({ analysis, logs, onDismiss, onOpenFolder, onRelaunch 
             </Button>
             <Button size="sm" variant="outline" onClick={onOpenFolder} className="gap-1.5">
               <FolderOpen aria-hidden="true" />
-              Ouvrir le dossier
+              {analysis.crash_report ? "Voir le crash report" : "Ouvrir les logs"}
             </Button>
           </div>
         </div>

@@ -41,7 +41,12 @@ function Highlight({ text, needle }: { text: string; needle: string }) {
 function LogRow({ line, needle }: { line: ParsedLogLine; needle: string }) {
   const style = LEVEL_STYLE[line.level];
   return (
-    <div className={cn("flex gap-2 px-3 py-px hover:bg-foreground/5", line.level === "error" && "bg-destructive/5")}>
+    <div
+      className={cn(
+        "flex gap-2 px-3 py-px [contain-intrinsic-size:auto_1.25rem] [content-visibility:auto] hover:bg-foreground/5",
+        line.level === "error" && "bg-destructive/5",
+      )}
+    >
       {line.time ? (
         <span className="w-[8ch] shrink-0 text-muted-foreground/60 tabular-nums">{line.time.slice(-8)}</span>
       ) : (

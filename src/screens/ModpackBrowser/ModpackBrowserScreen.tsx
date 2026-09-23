@@ -1,22 +1,25 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { Download, PackageSearch, Search } from "lucide-react";
+import { Download, Loader2, PackageSearch, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/Skeleton";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSettings } from "@/hooks/useSettings";
+import { formatCount } from "@/lib/format";
 import { listItem } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { errorMessage, providersApi, type ModpackSummary, type ProviderId } from "@/services/tauri";
 
 import { ModpackDetailDialog } from "./ModpackDetailDialog";
 
-const PROVIDERS: { id: ProviderId; label: string; color: string }[] = [
-  { id: "ftb", label: "FTB", color: "#e5484d" },
-  { id: "curseforge", label: "CurseForge", color: "#f16436" },
+const PROVIDERS: { id: ProviderId; label: string; color: string; pageSize: number }[] = [
+  { id: "modrinth", label: "Modrinth", color: "#1bd96a", pageSize: 24 },
+  { id: "ftb", label: "FTB", color: "#e5484d", pageSize: 0 },
+  { id: "curseforge", label: "CurseForge", color: "#f16436", pageSize: 25 },
 ];
 
 function ModpackCard({ pack, index, onSelect }: { pack: ModpackSummary; index: number; onSelect: () => void }) {
@@ -57,7 +60,11 @@ function ModpackCard({ pack, index, onSelect }: { pack: ModpackSummary; index: n
         )}
         <div className="min-w-0">
           <h3 className="truncate font-bold">{pack.name}</h3>
-          {pack.author && <p className="truncate text-xs text-muted-foreground">par {pack.author}</p>}
+          <p className="truncate text-xs text-muted-foreground">
+            {pack.author && `par ${pack.author}`}
+            {pack.author && pack.downloads ? " · " : ""}
+            {pack.downloads ? `${formatCount(pack.downloads)} téléchargements` : ""}
+          </p>
         </div>
         <p className="line-clamp-2 text-xs text-muted-foreground">{pack.summary}</p>
       </div>
@@ -68,11 +75,26 @@ function ModpackCard({ pack, index, onSelect }: { pack: ModpackSummary; index: n
 function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (pack: ModpackSummary) => void }) {
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
+  const pageSize = PROVIDERS.find((p) => p.id === provider)?.pageSize ?? 0;
 
-  const { data, isLoading, isError, error } = useQuery({
+  const {
+    data: pages,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["modpack-search", provider, query],
-    queryFn: () => providersApi.search(provider, query),
+    queryFn: ({ pageParam }) => providersApi.search(provider, query, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last, all) => (pageSize > 0 && last.length >= pageSize ? all.length * pageSize : undefined),
   });
+  const data = useMemo(() => {
+    const seen = new Set<string>();
+    return (pages?.pages.flat() ?? []).filter((p) => !seen.has(p.id) && !!seen.add(p.id));
+  }, [pages]);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -118,21 +140,29 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
           className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
         >
           {data.map((pack, index) => (
-            <ModpackCard key={pack.id} pack={pack} index={index} onSelect={() => onSelect(pack)} />
+            <ModpackCard key={pack.id} pack={pack} index={index % 24} onSelect={() => onSelect(pack)} />
           ))}
         </motion.div>
+      )}
+      {hasNextPage && (
+        <div className="mt-5 flex justify-center">
+          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="gap-1.5">
+            {isFetchingNextPage && <Loader2 className="animate-spin" aria-hidden="true" />}
+            Charger plus
+          </Button>
+        </div>
       )}
     </div>
   );
 }
 
 export function ModpackBrowserScreen() {
-  const [provider, setProvider] = useState<ProviderId>("ftb");
+  const [provider, setProvider] = useState<ProviderId>("modrinth");
   const [selected, setSelected] = useState<ModpackSummary | null>(null);
   const { data: settings } = useSettings();
   const curseforgeEnabled = !!settings?.curseforge_api_key.trim();
-  const providers = curseforgeEnabled ? PROVIDERS : PROVIDERS.filter((p) => p.id === "ftb");
-  const active = curseforgeEnabled ? provider : "ftb";
+  const providers = curseforgeEnabled ? PROVIDERS : PROVIDERS.filter((p) => p.id !== "curseforge");
+  const active = providers.some((p) => p.id === provider) ? provider : "modrinth";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -141,33 +171,31 @@ export function ModpackBrowserScreen() {
         title="Modpacks"
         description={
           curseforgeEnabled
-            ? "Des centaines d'aventures prêtes à jouer, installées en un clic."
-            : "Des modpacks FTB prêts à jouer. Ajoute une clé CurseForge dans Paramètres › Avancé pour en débloquer plus."
+            ? "Des milliers d'aventures prêtes à jouer, installées en un clic."
+            : "Des milliers de modpacks prêts à jouer. Ajoute une clé CurseForge dans Paramètres › Avancé pour en débloquer plus."
         }
         action={
-          providers.length > 1 && (
-            <div className="glass flex rounded-xl p-1">
-              {providers.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setProvider(p.id)}
-                  className={cn(
-                    "relative rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors",
-                    active === p.id ? "text-white" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {active === p.id && (
-                    <motion.span
-                      layoutId="provider-tab"
-                      className="absolute inset-0 rounded-lg"
-                      style={{ backgroundColor: p.color }}
-                    />
-                  )}
-                  <span className="relative">{p.label}</span>
-                </button>
-              ))}
-            </div>
-          )
+          <div className="glass flex rounded-xl p-1">
+            {providers.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setProvider(p.id)}
+                className={cn(
+                  "relative rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors",
+                  active === p.id ? "text-white" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {active === p.id && (
+                  <motion.span
+                    layoutId="provider-tab"
+                    className="absolute inset-0 rounded-lg"
+                    style={{ backgroundColor: p.color }}
+                  />
+                )}
+                <span className="relative">{p.label}</span>
+              </button>
+            ))}
+          </div>
         }
       />
 

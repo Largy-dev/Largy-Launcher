@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/lib/notify";
-import { errorMessage, launchApi, type Instance } from "@/services/tauri";
+import { errorMessage, instancesApi, isCancelled, launchApi, type Instance } from "@/services/tauri";
 import { runtimeOf, useAppStore } from "@/store/appStore";
 
 /**
@@ -55,7 +55,7 @@ export function useLaunchInstance(instance: Instance | undefined) {
       await launchApi.launch(instance.id);
     } catch (e) {
       setRunning(instance.id, false);
-      notify.error({ title: `Impossible de lancer ${instance.name}`, message: errorMessage(e) });
+      if (!isCancelled(e)) notify.error({ title: `Impossible de lancer ${instance.name}`, message: errorMessage(e) });
     }
   }
 
@@ -69,9 +69,15 @@ export function useLaunchInstance(instance: Instance | undefined) {
     }
   }
 
+  async function cancelInstall() {
+    if (!instance) return;
+    await instancesApi.cancelInstall(instance.id).catch(() => {});
+  }
+
   return {
     play,
     stop,
+    cancelInstall,
     running,
     preparing,
     phase: runtime.phase,
