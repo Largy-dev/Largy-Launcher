@@ -40,9 +40,16 @@ import {
   errorMessage,
   openLauncherLogs,
   settingsApi,
+  type CloseBehavior,
   type GlobalSettings,
   type LauncherBehavior,
 } from "@/services/tauri";
+
+const CLOSE_BEHAVIORS: { value: CloseBehavior; label: string }[] = [
+  { value: "ask", label: "Demander" },
+  { value: "tray", label: "Réduire" },
+  { value: "quit", label: "Quitter" },
+];
 
 const BEHAVIORS: { value: LauncherBehavior; label: string }[] = [
   { value: "keep_open", label: "Rester ouvert" },
@@ -267,9 +274,20 @@ export function GlobalSettingsScreen() {
                 }
               />
             </SettingSection>
-            <SettingSection title="Pendant le jeu">
+            <SettingSection title="Fenêtre du launcher">
               <SettingRow
-                label="Fenêtre du launcher"
+                label="Bouton de fermeture"
+                description="Réduire : le launcher reste dans la zone de notification (près de l'horloge) et continue de compter ton temps de jeu."
+                control={
+                  <ChoiceGroup
+                    value={form.on_close}
+                    options={CLOSE_BEHAVIORS}
+                    onChange={(v) => update("on_close", v)}
+                  />
+                }
+              />
+              <SettingRow
+                label="Quand le jeu démarre"
                 description="Masquée : elle réapparaît automatiquement quand le jeu se ferme."
                 control={
                   <ChoiceGroup

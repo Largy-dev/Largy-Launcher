@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { save } from "@tauri-apps/plugin-dialog";
-import { Archive, Copy, FolderArchive, Loader2, PackageOpen, Wrench } from "lucide-react";
+import { Archive, Copy, FolderArchive, Loader2, PackageOpen, Trash2, Wrench } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingRow, SettingSection } from "@/components/settings/SettingsKit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export function InstanceActions({ instance }: { instance: Instance }) {
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [copyName, setCopyName] = useState(`${instance.name} (copie)`.slice(0, 64));
   const [includeSaves, setIncludeSaves] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const duplicate = useMutation({
     mutationFn: () => instancesApi.duplicate(instance.id, copyName),
@@ -65,6 +67,18 @@ export function InstanceActions({ instance }: { instance: Instance }) {
     onError: (e) => {
       if (!isCancelled(e)) notify.error({ title: "Réparation impossible", message: errorMessage(e) });
     },
+  });
+
+  const remove = useMutation({
+    mutationFn: () => instancesApi.delete(instance.id),
+    onSuccess: () => {
+      setConfirmDelete(false);
+      queryClient.removeQueries({ queryKey: ["instance", instance.id] });
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      notify.success({ title: `${instance.name} supprimée`, history: false });
+      navigate("/");
+    },
+    onError: (e) => notify.error({ title: "Suppression impossible", message: errorMessage(e) }),
   });
 
   const backup = useMutation({
@@ -160,6 +174,37 @@ export function InstanceActions({ instance }: { instance: Instance }) {
           }
         />
       </SettingSection>
+
+      <SettingSection title="Zone de danger">
+        <SettingRow
+          label="Supprimer l'instance"
+          description="Supprime définitivement ses mods, réglages et mondes. Pense à sauvegarder tes mondes avant."
+          control={
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5"
+              disabled={busy}
+              title={busy ? "Ferme le jeu avant de supprimer l'instance" : undefined}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 aria-hidden="true" />
+              Supprimer
+            </Button>
+          }
+        />
+      </SettingSection>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Supprimer « ${instance.name} » ?`}
+        description="Tous ses fichiers, y compris les mondes, seront supprimés définitivement. Les sauvegardes de mondes sont conservées."
+        confirmLabel="Supprimer définitivement"
+        destructive
+        pending={remove.isPending}
+        onConfirm={() => remove.mutate()}
+      />
 
       <Dialog open={duplicateOpen} onOpenChange={setDuplicateOpen}>
         <DialogContent className="sm:max-w-md">

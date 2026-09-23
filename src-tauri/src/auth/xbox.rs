@@ -28,9 +28,8 @@ pub async fn authenticate_xbl(client: &reqwest::Client, ms_access_token: &str) -
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .json(&body)
         .send()
-        .await?
-        .error_for_status()
-        .map_err(|e| AppError::Auth(format!("authentification Xbox Live échouée: {e}")))?
+        .await
+        .map(|r| super::check_status(r, "authentification Xbox Live"))??
         .json()
         .await?;
 

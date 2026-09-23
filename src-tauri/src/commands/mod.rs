@@ -73,6 +73,35 @@ pub async fn java_probe(path: String) -> AppResult<JavaInstallation> {
     Ok(JavaInstallation { path, version, major, source: "system" })
 }
 
+/// Answer to the "close the window?" prompt: `tray` hides the window (the
+/// launcher keeps running in the notification area), `quit` exits. With
+/// `remember`, the choice becomes the setting and the prompt won't return.
+#[tauri::command]
+pub fn app_close_action(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    action: crate::settings::CloseBehavior,
+    remember: bool,
+) -> AppResult<()> {
+    use crate::settings::CloseBehavior;
+    use tauri::Manager;
+    if remember && action != CloseBehavior::Ask {
+        let mut settings = state.settings.read().clone();
+        settings.on_close = action;
+        settings.save(&state.paths)?;
+        *state.settings.write() = settings;
+    }
+    match action {
+        CloseBehavior::Quit => app.exit(0),
+        _ => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Opens the folder holding the launcher's own log files.
 #[tauri::command]
 pub fn open_launcher_logs(state: State<'_, AppState>) -> AppResult<()> {

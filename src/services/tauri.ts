@@ -76,6 +76,7 @@ export interface InstanceSettingsInput {
 }
 
 export type LauncherBehavior = "keep_open" | "minimize" | "hide";
+export type CloseBehavior = "ask" | "tray" | "quit";
 
 export interface GlobalSettings {
   default_min_memory_mb: number;
@@ -87,6 +88,7 @@ export interface GlobalSettings {
   offline_mode: boolean;
   offline_username: string;
   on_game_launch: LauncherBehavior;
+  on_close: CloseBehavior;
 }
 
 export interface MinecraftProfile {
@@ -260,6 +262,11 @@ export function onLaunchPhase(handler: (e: LaunchPhaseEvent) => void): Promise<U
   return listen<LaunchPhaseEvent>("launch-phase", (e) => handler(e.payload));
 }
 
+/** The window's close button was pressed and the user hasn't chosen what it does yet. */
+export function onCloseRequested(handler: () => void): Promise<UnlistenFn> {
+  return listen("close-requested", () => handler());
+}
+
 export function onInstancesChanged(handler: () => void): Promise<UnlistenFn> {
   return listen("instances-changed", () => handler());
 }
@@ -288,6 +295,11 @@ export const javaApi = {
   list: () => invoke<JavaInstallation[]>("java_list_installations"),
   probe: (path: string) => invoke<JavaInstallation>("java_probe", { path }),
 };
+
+/** Reduce to the notification area (`tray`) or exit (`quit`), optionally remembering the choice. */
+export function closeApp(action: Exclude<CloseBehavior, "ask">, remember: boolean): Promise<void> {
+  return invoke<void>("app_close_action", { action, remember });
+}
 
 export function openLauncherLogs(): Promise<void> {
   return invoke<void>("open_launcher_logs");

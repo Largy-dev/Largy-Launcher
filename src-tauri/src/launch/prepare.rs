@@ -89,17 +89,10 @@ pub(super) async fn resolve_account(state: &AppState, settings: &GlobalSettings)
     if !crate::auth::needs_refresh(&current, crate::auth::now_unix()) {
         return Ok(current);
     }
-    match crate::auth::refresh_account(&state.paths, &state.client, &settings.azure_client_id, &current.profile.id).await {
-        Ok(refreshed) => {
-            *state.active_account.write() = Some(refreshed.clone());
-            Ok(refreshed)
-        }
-        Err(AppError::Network(e)) => {
-            tracing::warn!("token refresh failed ({e}); launching with the cached session");
-            Ok(current)
-        }
-        Err(e) => Err(e),
-    }
+    let refreshed =
+        crate::auth::refresh_or_keep(&state.paths, &state.client, &settings.azure_client_id, current).await?;
+    *state.active_account.write() = Some(refreshed.clone());
+    Ok(refreshed)
 }
 
 /// Picks the Java to run: instance override, then global override, then the

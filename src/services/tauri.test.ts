@@ -51,6 +51,7 @@ describe("settingsApi", () => {
       offline_mode: false,
       offline_username: "",
       on_game_launch: "keep_open" as const,
+      on_close: "ask" as const,
     };
     await settingsApi.update(settings);
     expect(invokeMock).toHaveBeenCalledWith("settings_update", { settings });

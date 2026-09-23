@@ -35,9 +35,8 @@ pub async fn login_with_xbox(
         .post("https://api.minecraftservices.com/authentication/login_with_xbox")
         .json(&body)
         .send()
-        .await?
-        .error_for_status()
-        .map_err(|e| AppError::Auth(format!("connexion Minecraft Services échouée: {e}")))?
+        .await
+        .map(|r| super::check_status(r, "connexion à Minecraft Services"))??
         .json()
         .await?;
 
@@ -76,11 +75,7 @@ pub async fn fetch_profile(client: &reqwest::Client, mc_access_token: &str) -> A
         ));
     }
 
-    let body: serde_json::Value = response
-        .error_for_status()
-        .map_err(|e| AppError::Auth(format!("récupération du profil échouée: {e}")))?
-        .json()
-        .await?;
+    let body: serde_json::Value = super::check_status(response, "récupération du profil")?.json().await?;
 
     parse_profile_response(&body)
 }

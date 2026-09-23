@@ -50,6 +50,20 @@ pub struct GlobalSettings {
     /// What the launcher window does once a game is running.
     #[serde(default)]
     pub on_game_launch: LauncherBehavior,
+    /// What closing the window does. Reducing to the tray keeps play-time
+    /// tracking and crash reports working for games still running.
+    #[serde(default)]
+    pub on_close: CloseBehavior,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseBehavior {
+    /// Ask the first time (the answer can be remembered).
+    #[default]
+    Ask,
+    Tray,
+    Quit,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +88,7 @@ impl Default for GlobalSettings {
             offline_mode: false,
             offline_username: String::new(),
             on_game_launch: LauncherBehavior::KeepOpen,
+            on_close: CloseBehavior::Ask,
         }
     }
 }

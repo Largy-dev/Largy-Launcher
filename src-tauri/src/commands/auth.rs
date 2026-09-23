@@ -22,7 +22,9 @@ pub async fn auth_complete_login(state: State<'_, AppState>, device: DeviceCodeI
     if let Some(previous) = state.login_cancel.lock().replace(cancel.clone()) {
         previous.notify_one();
     }
-    let result = auth::complete_login(&state.paths, &state.client, &client_id(&state), &device, &cancel).await;
+    let result = auth::complete_login(&state.paths, &state.client, &client_id(&state), &device, &cancel)
+        .await
+        .inspect_err(|e| tracing::warn!("login failed: {e}"));
     {
         let mut slot = state.login_cancel.lock();
         if slot.as_ref().is_some_and(|c| Arc::ptr_eq(c, &cancel)) {
@@ -44,7 +46,9 @@ pub fn auth_cancel_login(state: State<'_, AppState>) {
 
 #[tauri::command]
 pub async fn auth_try_silent_login(state: State<'_, AppState>) -> AppResult<Option<AccountView>> {
-    let session = auth::try_silent_login(&state.paths, &state.client, &client_id(&state)).await?;
+    let session = auth::try_silent_login(&state.paths, &state.client, &client_id(&state))
+        .await
+        .inspect_err(|e| tracing::warn!("silent login failed: {e}"))?;
     let view = session.as_ref().map(auth::AccountSession::view);
     if let Some(session) = session {
         *state.active_account.write() = Some(session);
@@ -54,7 +58,9 @@ pub async fn auth_try_silent_login(state: State<'_, AppState>) -> AppResult<Opti
 
 #[tauri::command]
 pub async fn auth_switch_account(state: State<'_, AppState>, account_id: String) -> AppResult<AccountView> {
-    let session = auth::switch_account(&state.paths, &state.client, &client_id(&state), &account_id).await?;
+    let session = auth::switch_account(&state.paths, &state.client, &client_id(&state), &account_id)
+        .await
+        .inspect_err(|e| tracing::warn!("account switch failed: {e}"))?;
     let view = session.view();
     *state.active_account.write() = Some(session);
     Ok(view)

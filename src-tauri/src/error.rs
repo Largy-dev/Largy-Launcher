@@ -40,6 +40,10 @@ pub enum AppError {
     #[error("opération annulée")]
     Cancelled,
 
+    /// A service answered 429: retrying immediately would only make it worse.
+    #[error("{0}")]
+    RateLimited(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -71,6 +75,7 @@ impl Serialize for AppError {
             AppError::Download(_) => "download",
             AppError::Launch(_) => "launch",
             AppError::Cancelled => "cancelled",
+            AppError::RateLimited(_) => "rate_limited",
             AppError::Other(_) => "other",
         };
         let mut state = serializer.serialize_struct("AppError", 2)?;

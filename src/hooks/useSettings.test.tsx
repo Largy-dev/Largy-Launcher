@@ -32,6 +32,7 @@ describe("useSettings", () => {
       offline_mode: false,
       offline_username: "",
       on_game_launch: "keep_open",
+      on_close: "ask",
     });
 
     const { result } = renderHook(() => useSettings(), { wrapper });

@@ -18,7 +18,24 @@ use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
 use crate::util::fs::write_atomic;
 use ms_oauth::{DeviceCodeInfo, PollOutcome};
-use token_store::TokenStore;
+use token_store::{CachedMinecraftToken, TokenStore};
+
+/// Turns an HTTP error status into an [`AppError`]: 429 becomes
+/// [`AppError::RateLimited`] (callers fall back to a cached session).
+pub(crate) fn check_status(response: reqwest::Response, what: &str) -> AppResult<reqwest::Response> {
+    let status = response.status();
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(AppError::RateLimited(format!(
+            "{what} : trop de connexions en peu de temps, réessaie dans quelques minutes."
+        )));
+    }
+    response.error_for_status().map_err(|e| AppError::Auth(format!("{what} échouée : {e}")))
+}
+
+/// Errors after which the cached session is still the best thing to use.
+fn is_transient(err: &AppError) -> bool {
+    matches!(err, AppError::Network(_) | AppError::RateLimited(_))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MinecraftProfile {
@@ -46,7 +63,10 @@ pub struct AccountView {
 
 impl AccountSession {
     pub fn view(&self) -> AccountView {
-        AccountView { profile: self.profile.clone(), offline: self.minecraft_access_token == CACHED_TOKEN }
+        AccountView {
+            profile: self.profile.clone(),
+            offline: self.minecraft_access_token == CACHED_TOKEN || self.expires_at <= now_unix(),
+        }
     }
 }
 
@@ -139,6 +159,7 @@ pub async fn complete_login(
             PollOutcome::Success(tokens) => {
                 let session = finish_chain(client, &tokens.access_token).await?;
                 TokenStore::save_refresh_token(&session.profile.id, &tokens.refresh_token)?;
+                remember_minecraft_token(&session);
                 let mut file = load_accounts(paths)?;
                 file.upsert(&session.profile);
                 save_accounts(paths, &file)?;
@@ -160,32 +181,73 @@ pub async fn refresh_account(
     let tokens = ms_oauth::refresh_token(client, azure_client_id, &refresh).await?;
     TokenStore::save_refresh_token(account_id, &tokens.refresh_token)?;
     let session = finish_chain(client, &tokens.access_token).await?;
+    remember_minecraft_token(&session);
     let mut file = load_accounts(paths)?;
     file.upsert(&session.profile);
     save_accounts(paths, &file)?;
     Ok(session)
 }
 
-/// A session rebuilt from stored metadata when the network is unreachable.
-fn cached_session(meta: &AccountMeta) -> AccountSession {
-    AccountSession {
-        profile: MinecraftProfile { id: meta.id.clone(), name: meta.name.clone() },
-        minecraft_access_token: CACHED_TOKEN.to_string(),
-        expires_at: 0,
-        xuid: None,
+fn remember_minecraft_token(session: &AccountSession) {
+    let cached = CachedMinecraftToken {
+        token: session.minecraft_access_token.clone(),
+        expires_at: session.expires_at,
+        xuid: session.xuid.clone(),
+    };
+    if let Err(e) = TokenStore::save_minecraft_token(&session.profile.id, &cached) {
+        tracing::warn!("could not cache the Minecraft token: {e}");
     }
 }
 
+/// The session stored for `meta`: its cached Minecraft token when there is
+/// one (possibly expired), else an offline placeholder.
+fn cached_session(meta: &AccountMeta) -> AccountSession {
+    let profile = MinecraftProfile { id: meta.id.clone(), name: meta.name.clone() };
+    match TokenStore::load_minecraft_token(&meta.id) {
+        Some(cached) => AccountSession {
+            profile,
+            minecraft_access_token: cached.token,
+            expires_at: cached.expires_at,
+            xuid: cached.xuid,
+        },
+        None => AccountSession { profile, minecraft_access_token: CACHED_TOKEN.to_string(), expires_at: 0, xuid: None },
+    }
+}
+
+/// Uses the cached Minecraft token while it's valid (no network at all);
+/// otherwise refreshes, falling back to the cached session when Microsoft
+/// or Minecraft Services can't be reached or rate-limit us.
 async fn login_as(
     paths: &AppPaths,
     client: &reqwest::Client,
     azure_client_id: &str,
     meta: &AccountMeta,
 ) -> AppResult<AccountSession> {
+    let cached = cached_session(meta);
+    if cached.minecraft_access_token != CACHED_TOKEN && !needs_refresh(&cached, now_unix()) {
+        return Ok(cached);
+    }
     match refresh_account(paths, client, azure_client_id, &meta.id).await {
-        Err(AppError::Network(e)) => {
-            tracing::warn!("offline: using cached profile for {} ({e})", meta.name);
-            Ok(cached_session(meta))
+        Err(e) if is_transient(&e) => {
+            tracing::warn!("using cached session for {} ({e})", meta.name);
+            Ok(cached)
+        }
+        other => other,
+    }
+}
+
+/// Refreshes an account whose token is about to expire, keeping the current
+/// session when the network is down or the service rate-limits us.
+pub async fn refresh_or_keep(
+    paths: &AppPaths,
+    client: &reqwest::Client,
+    azure_client_id: &str,
+    current: AccountSession,
+) -> AppResult<AccountSession> {
+    match refresh_account(paths, client, azure_client_id, &current.profile.id).await {
+        Err(e) if is_transient(&e) => {
+            tracing::warn!("token refresh failed ({e}); launching with the cached session");
+            Ok(current)
         }
         other => other,
     }
@@ -402,6 +464,7 @@ mod tests {
     fn cached_session_is_reported_as_offline() {
         let session = cached_session(&AccountMeta { id: "a".into(), name: "Steve".into() });
         assert!(session.view().offline);
-        assert!(!fixture_session(0).view().offline);
+        assert!(!fixture_session(now_unix() + 3600).view().offline);
+        assert!(fixture_session(0).view().offline, "an expired token is offline-only");
     }
 }

@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { InstallWarningsDialog } from "@/components/InstallWarningsDialog";
 import { ActivityBar } from "@/components/shell/ActivityBar";
 import { AmbientBackground } from "@/components/shell/AmbientBackground";
+import { CloseDialog } from "@/components/shell/CloseDialog";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { useAppEvents } from "@/hooks/useAppEvents";
 import { pageTransition, reducedMotionFor } from "@/lib/motion";
@@ -51,6 +52,7 @@ function AppShell() {
         <ActivityBar />
         <AnimatedOutlet />
       </main>
+      <CloseDialog />
     </div>
   );
 }
