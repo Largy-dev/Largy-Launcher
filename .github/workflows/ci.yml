@@ -5,9 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
-    runs-on: windows-latest
+    # Type-check, lint, format and unit tests are platform-independent:
+    # Linux runners start faster and cost half the minutes of Windows ones.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +34,9 @@ jobs:
       - run: npm test
 
   backend:
+    # Windows-only crate features (keyring's windows-native backend).
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 

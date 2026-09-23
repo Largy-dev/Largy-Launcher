@@ -9,11 +9,31 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      # A tag that doesn't match the app's own version would publish an
+      # installer (and an updater manifest) announcing the wrong version.
+      - name: Check tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $conf = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if ($pkg -ne $tag -or $conf -ne $tag -or $cargo -ne $tag) {
+            Write-Error "Tag v$tag but package.json=$pkg, tauri.conf.json=$conf, Cargo.toml=$cargo"
+            exit 1
+          }
 
       - uses: actions/setup-node@v4
         with:
