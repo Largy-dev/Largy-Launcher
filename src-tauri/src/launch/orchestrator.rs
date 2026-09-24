@@ -8,6 +8,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
+use crate::discord::GameActivity;
 use crate::download::Verify;
 use crate::error::{AppError, AppResult};
 use crate::instances;
@@ -64,10 +65,24 @@ fn apply_window_behavior(app: &AppHandle, behavior: LauncherBehavior, game_start
     }
 }
 
-pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &str) -> AppResult<()> {
+/// Launches an instance; `server` (`host[:port]`) joins that server for this
+/// launch only, over the instance's own auto-join setting.
+pub async fn launch_instance(
+    app: &AppHandle,
+    state: &AppState,
+    instance_id: &str,
+    server: Option<String>,
+) -> AppResult<()> {
+    let server = server.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    if let Some(server) = &server {
+        crate::servers::validate_address(server)?;
+    }
     let (mut registration, kill) = register(state, instance_id)?;
 
-    let instance = instances::get(&state.paths, instance_id)?;
+    let mut instance = instances::get(&state.paths, instance_id)?;
+    if server.is_some() {
+        instance.auto_join_server = server;
+    }
     let settings = state.settings.read().clone();
 
     emit_phase(app, instance_id, LaunchPhase::Auth);
@@ -97,6 +112,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     }
     emit_phase(app, instance_id, LaunchPhase::Running);
     apply_window_behavior(app, settings.on_game_launch, true, false);
+    state.discord.game_started(instance_id, GameActivity::for_instance(&instance, crate::auth::now_unix()));
 
     let app_for_wait = app.clone();
     let state_running = state.running.clone();
@@ -105,6 +121,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
     let behavior = settings.on_game_launch;
     let argfile = prepared.ctx.argfile_path();
     let started = std::time::Instant::now();
+    let discord = state.discord.clone();
     tokio::spawn(async move {
         let (status, killed) = tokio::select! {
             status = child.wait() => (status, false),
@@ -125,6 +142,7 @@ pub async fn launch_instance(app: &AppHandle, state: &AppState, instance_id: &st
             running.remove(&instance_id_owned);
             !running.is_empty()
         };
+        discord.game_stopped(&instance_id_owned);
         if let Err(e) = instances::add_play_time(&paths, &instance_id_owned, started.elapsed().as_secs()) {
             tracing::warn!("failed to record play time for {instance_id_owned}: {e}");
         }

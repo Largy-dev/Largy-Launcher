@@ -11,6 +11,7 @@ use tauri::AppHandle;
 use tokio::sync::Notify;
 
 use crate::auth::AccountSession;
+use crate::discord::DiscordPresence;
 use crate::download::DownloadManager;
 use crate::error::{AppError, AppResult};
 use crate::java::JavaManager;
@@ -44,6 +45,10 @@ pub struct AppState {
     /// Modpack installs/updates in flight, keyed by instance id (or pack
     /// install token), each cancellable from the UI.
     pub installs: Mutex<HashMap<String, Arc<Notify>>>,
+    /// Instance a desktop shortcut asked to launch at startup, until the UI
+    /// picks it up.
+    pub pending_launch: Mutex<Option<String>>,
+    pub discord: Arc<DiscordPresence>,
 }
 
 /// Shared HTTP client. Connect/read timeouts (not a total timeout — a
@@ -76,6 +81,7 @@ impl AppState {
         let java = JavaManager::new(meta.clone());
         let settings = GlobalSettings::load(&app_paths)?;
         let curseforge_api_key = Arc::new(RwLock::new(settings.curseforge_api_key.clone()));
+        let discord = Arc::new(DiscordPresence::new(settings.discord_rich_presence));
 
         let mut providers = ProviderRegistry::new();
         providers.register(Box::new(ModrinthProvider::new(client.clone(), app_paths.cache_dir().join("modrinth"))));
@@ -101,6 +107,8 @@ impl AppState {
             system: Mutex::new(sysinfo::System::new()),
             login_cancel: Mutex::new(None),
             installs: Mutex::new(HashMap::new()),
+            pending_launch: Mutex::new(None),
+            discord,
         })
     }
 

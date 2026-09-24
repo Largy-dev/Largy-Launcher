@@ -89,6 +89,7 @@ export interface GlobalSettings {
   offline_username: string;
   on_game_launch: LauncherBehavior;
   on_close: CloseBehavior;
+  discord_rich_presence: boolean;
 }
 
 export interface MinecraftProfile {
@@ -271,6 +272,11 @@ export function onInstancesChanged(handler: () => void): Promise<UnlistenFn> {
   return listen("instances-changed", () => handler());
 }
 
+/** A desktop shortcut was opened while the launcher was already running. */
+export function onLaunchRequest(handler: (instanceId: string) => void): Promise<UnlistenFn> {
+  return listen<string>("launch-request", (e) => handler(e.payload));
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -333,6 +339,8 @@ export const providersApi = {
     invoke<ModpackDetails>("providers_get_modpack", { provider, packId }),
   getVersions: (provider: ProviderId, packId: string) =>
     invoke<ModpackVersionSummary[]>("providers_get_versions", { provider, packId }),
+  getChangelog: (provider: ProviderId, packId: string, versionId: string) =>
+    invoke<string | null>("providers_get_changelog", { provider, packId, versionId }),
 };
 
 export const instancesApi = {
@@ -371,10 +379,25 @@ export const instancesApi = {
   export: (id: string, dest: string, includeSaves: boolean) =>
     invoke<ExportSummary>("instances_export", { id, dest, includeSaves }),
   backupWorlds: (id: string) => invoke<string | null>("instances_backup_worlds", { id }),
+  /** Puts a « play this instance » shortcut on the desktop; resolves to its path. */
+  createShortcut: (id: string) => invoke<string>("instances_create_shortcut", { id }),
+  screenshots: (id: string) => invoke<Screenshot[]>("instance_screenshots_list", { id }),
+  deleteScreenshot: (id: string, fileName: string) => invoke<void>("instance_screenshots_delete", { id, fileName }),
 };
 
+export interface Screenshot {
+  file_name: string;
+  path: string;
+  size: number;
+  taken_at: number;
+}
+
 export const launchApi = {
-  launch: (instanceId: string) => invoke<void>("launch_instance", { instanceId }),
+  /** `server` (`host[:port]`) joins that server for this launch only. */
+  launch: (instanceId: string, server?: string) =>
+    invoke<void>("launch_instance", { instanceId, server: server ?? null }),
+  /** Instance a desktop shortcut asked to launch at startup, handed over once. */
+  takePendingLaunch: () => invoke<string | null>("take_pending_launch"),
   /** Stops the game — or cancels a launch still preparing. */
   stop: (instanceId: string) => invoke<void>("stop_instance", { instanceId }),
   repair: (instanceId: string) => invoke<void>("repair_instance", { instanceId }),

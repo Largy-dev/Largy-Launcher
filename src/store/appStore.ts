@@ -30,6 +30,8 @@ interface AppStore {
   setActiveInstanceId: (id: string | null) => void;
 
   account: AccountSession | null;
+  /** The startup silent login has settled — `account` is meaningful from then on. */
+  authReady: boolean;
   setAccount: (account: AccountSession | null) => void;
 
   downloadProgress: DownloadProgress | null;
@@ -66,7 +68,8 @@ export const useAppStore = create<AppStore>((set) => {
     setActiveInstanceId: (id) => set({ activeInstanceId: id }),
 
     account: null,
-    setAccount: (account) => set({ account }),
+    authReady: false,
+    setAccount: (account) => set({ account, authReady: true }),
 
     downloadProgress: null,
     downloadRate: 0,

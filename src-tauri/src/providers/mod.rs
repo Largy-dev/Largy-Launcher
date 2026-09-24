@@ -170,6 +170,12 @@ pub trait ModpackProvider: Send + Sync {
     async fn get_versions(&self, pack_id: &str) -> Result<Vec<ModpackVersionSummary>, ProviderError>;
     async fn resolve_version(&self, pack_id: &str, version_id: &str) -> Result<ResolvedModpackVersion, ProviderError>;
 
+    /// Release notes of one version as plain text or Markdown; `None` when
+    /// the author didn't write any.
+    async fn get_changelog(&self, _pack_id: &str, _version_id: &str) -> Result<Option<String>, ProviderError> {
+        Ok(None)
+    }
+
     async fn resolve_file_download(&self, file: &ModpackFileRef) -> Result<FileDownloadInfo, ProviderError> {
         match (&file.direct_url, &file.browser_url) {
             (Some(url), _) => Ok(FileDownloadInfo::Direct { url: url.clone() }),

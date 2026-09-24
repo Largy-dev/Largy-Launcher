@@ -91,7 +91,7 @@ export function LaunchProgressScreen() {
             logs={runtime.logs}
             onDismiss={() => clearCrashAnalysis(instance.id)}
             onOpenFolder={openCrashDetails}
-            onRelaunch={play}
+            onRelaunch={() => play()}
           />
         )}
       </AnimatePresence>

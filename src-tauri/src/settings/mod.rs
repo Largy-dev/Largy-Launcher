@@ -54,6 +54,13 @@ pub struct GlobalSettings {
     /// tracking and crash reports working for games still running.
     #[serde(default)]
     pub on_close: CloseBehavior,
+    /// Shows the instance being played on the player's Discord profile.
+    #[serde(default = "default_true")]
+    pub discord_rich_presence: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +96,7 @@ impl Default for GlobalSettings {
             offline_username: String::new(),
             on_game_launch: LauncherBehavior::KeepOpen,
             on_close: CloseBehavior::Ask,
+            discord_rich_presence: true,
         }
     }
 }

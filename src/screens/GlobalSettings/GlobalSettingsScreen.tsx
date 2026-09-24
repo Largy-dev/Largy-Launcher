@@ -28,6 +28,7 @@ import {
 } from "@/components/settings/SettingsKit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { useSystemMemory } from "@/hooks/useInstanceInfo";
 import { useSettings } from "@/hooks/useSettings";
@@ -294,6 +295,18 @@ export function GlobalSettingsScreen() {
                     value={form.on_game_launch}
                     options={BEHAVIORS}
                     onChange={(v) => update("on_game_launch", v)}
+                  />
+                }
+              />
+            </SettingSection>
+            <SettingSection title="Discord">
+              <SettingRow
+                label="Afficher ma partie sur Discord"
+                description="Tes amis voient l'instance à laquelle tu joues et depuis combien de temps (Discord doit être ouvert)."
+                control={
+                  <Switch
+                    checked={form.discord_rich_presence}
+                    onCheckedChange={(v) => update("discord_rich_presence", v)}
                   />
                 }
               />

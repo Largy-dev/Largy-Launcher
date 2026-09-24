@@ -75,6 +75,11 @@ impl AppPaths {
         self.root.join("launcher-logs")
     }
 
+    /// The local skin library.
+    pub fn skins_dir(&self) -> PathBuf {
+        self.root.join("skins")
+    }
+
     pub fn backups_dir(&self, instance_id: &str) -> PathBuf {
         self.root.join("backups").join(instance_id)
     }

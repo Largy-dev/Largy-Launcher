@@ -35,3 +35,13 @@ pub async fn providers_get_versions(
 ) -> AppResult<Vec<ModpackVersionSummary>> {
     Ok(get_provider(&state, &provider)?.get_versions(&pack_id).await?)
 }
+
+#[tauri::command]
+pub async fn providers_get_changelog(
+    state: State<'_, AppState>,
+    provider: String,
+    pack_id: String,
+    version_id: String,
+) -> AppResult<Option<String>> {
+    Ok(get_provider(&state, &provider)?.get_changelog(&pack_id, &version_id).await?)
+}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { save } from "@tauri-apps/plugin-dialog";
-import { Archive, Copy, FolderArchive, Loader2, PackageOpen, Trash2, Wrench } from "lucide-react";
+import { Archive, Copy, FolderArchive, Loader2, MonitorUp, PackageOpen, Trash2, Wrench } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingRow, SettingSection } from "@/components/settings/SettingsKit";
@@ -21,7 +21,7 @@ import { notify } from "@/lib/notify";
 import { errorMessage, instancesApi, isCancelled, launchApi, type Instance } from "@/services/tauri";
 import { runtimeOf, useAppStore } from "@/store/appStore";
 
-/** Maintenance actions for one instance: duplicate, export, repair, back up worlds. */
+/** Maintenance actions for one instance: duplicate, shortcut, export, repair, back up worlds. */
 export function InstanceActions({ instance }: { instance: Instance }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -93,6 +93,17 @@ export function InstanceActions({ instance }: { instance: Instance }) {
     onError: (e) => notify.error({ title: "Sauvegarde impossible", message: errorMessage(e) }),
   });
 
+  const shortcut = useMutation({
+    mutationFn: () => instancesApi.createShortcut(instance.id),
+    onSuccess: () =>
+      notify.success({
+        title: "Raccourci créé sur le bureau",
+        message: `Double-clique dessus pour lancer ${instance.name} directement.`,
+        history: false,
+      }),
+    onError: (e) => notify.error({ title: "Raccourci impossible", message: errorMessage(e) }),
+  });
+
   const spin = (pending: boolean) => pending && <Loader2 className="animate-spin" aria-hidden="true" />;
 
   return (
@@ -105,6 +116,22 @@ export function InstanceActions({ instance }: { instance: Instance }) {
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setDuplicateOpen(true)}>
               <Copy aria-hidden="true" />
               Dupliquer
+            </Button>
+          }
+        />
+        <SettingRow
+          label="Raccourci sur le bureau"
+          description="Lance cette instance en un double-clic, sans passer par le launcher."
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={shortcut.isPending}
+              onClick={() => shortcut.mutate()}
+            >
+              {spin(shortcut.isPending) || <MonitorUp aria-hidden="true" />}
+              Créer
             </Button>
           }
         />

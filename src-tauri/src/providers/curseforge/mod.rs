@@ -257,6 +257,16 @@ impl ModpackProvider for CurseForgeProvider {
             .collect())
     }
 
+    async fn get_changelog(&self, pack_id: &str, version_id: &str) -> Result<Option<String>, ProviderError> {
+        let response: ItemResponse<String> =
+            match self.get(&format!("/mods/{pack_id}/files/{version_id}/changelog"), &[]).await {
+                Err(ProviderError::NotFound(_)) => return Ok(None),
+                other => other?,
+            };
+        let text = crate::util::html::html_to_text(&response.data);
+        Ok((!text.trim().is_empty()).then_some(text))
+    }
+
     async fn resolve_version(&self, pack_id: &str, version_id: &str) -> Result<ResolvedModpackVersion, ProviderError> {
         let file: ItemResponse<CfFile> = self.get(&format!("/mods/{pack_id}/files/{version_id}"), &[]).await?;
         let file = file.data;

@@ -8,6 +8,7 @@ pub mod content;
 pub mod export;
 pub mod import;
 pub mod mods;
+pub mod screenshots;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

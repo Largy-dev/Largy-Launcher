@@ -30,6 +30,8 @@ import {
   type ProviderId,
 } from "@/services/tauri";
 
+import { ModpackChangelog } from "./ModpackChangelog";
+
 interface ModpackDetailDialogProps {
   provider: ProviderId;
   pack: ModpackSummary | null;
@@ -224,6 +226,8 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
               </div>
             )}
           </div>
+
+          {pack && versionId && <ModpackChangelog provider={provider} packId={pack.id} versionId={versionId} />}
         </div>
 
         <DialogFooter>

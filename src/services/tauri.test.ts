@@ -52,6 +52,7 @@ describe("settingsApi", () => {
       offline_username: "",
       on_game_launch: "keep_open" as const,
       on_close: "ask" as const,
+      discord_rich_presence: true,
     };
     await settingsApi.update(settings);
     expect(invokeMock).toHaveBeenCalledWith("settings_update", { settings });
@@ -136,7 +137,7 @@ describe("instancesApi", () => {
 describe("launchApi", () => {
   it("launch/stop/isRunning all camelCase instanceId", async () => {
     await launchApi.launch("abc");
-    expect(invokeMock).toHaveBeenCalledWith("launch_instance", { instanceId: "abc" });
+    expect(invokeMock).toHaveBeenCalledWith("launch_instance", { instanceId: "abc", server: null });
 
     await launchApi.stop("abc");
     expect(invokeMock).toHaveBeenCalledWith("stop_instance", { instanceId: "abc" });

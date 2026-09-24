@@ -246,6 +246,21 @@ impl ModpackProvider for FtbProvider {
         Ok(versions)
     }
 
+    async fn get_changelog(&self, pack_id: &str, version_id: &str) -> Result<Option<String>, ProviderError> {
+        #[derive(Deserialize)]
+        struct Changelog {
+            #[serde(default)]
+            content: String,
+        }
+        let response = self.client.get(format!("{BASE}/modpack/{pack_id}/{version_id}/changelog")).send().await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let changelog: Changelog = response.error_for_status()?.json().await?;
+        let text = crate::util::html::html_to_text(&changelog.content);
+        Ok((!text.trim().is_empty()).then_some(text))
+    }
+
     async fn resolve_version(
         &self,
         pack_id: &str,

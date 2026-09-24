@@ -183,3 +183,28 @@ fn open_in_file_manager(path: &Path) {
         let _ = std::process::Command::new("xdg-open").arg(path).spawn();
     }
 }
+
+/// Puts a "play this instance" shortcut on the desktop; returns its path.
+#[tauri::command]
+pub fn instances_create_shortcut(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<String> {
+    use tauri::Manager;
+    let instance = instances::get(&state.paths, &id)?;
+    let desktop = app.path().desktop_dir().map_err(|e| AppError::Other(format!("bureau introuvable : {e}")))?;
+    let path = crate::shortcuts::create_shortcut(&desktop, &instance.id, &instance.name)?;
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
+pub fn instance_screenshots_list(
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<Vec<crate::instances::screenshots::Screenshot>> {
+    let instance = instances::get(&state.paths, &id)?;
+    crate::instances::screenshots::list(&instance.directory)
+}
+
+#[tauri::command]
+pub fn instance_screenshots_delete(state: State<'_, AppState>, id: String, file_name: String) -> AppResult<()> {
+    let instance = instances::get(&state.paths, &id)?;
+    crate::instances::screenshots::delete(&instance.directory, &file_name)
+}

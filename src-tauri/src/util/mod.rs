@@ -2,6 +2,7 @@
 //! rather than duplicated per call site.
 
 pub mod fs;
+pub mod html;
 pub mod http_cache;
 pub mod placeholders;
 pub mod version;

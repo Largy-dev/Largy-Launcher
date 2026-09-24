@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { ArrowLeft, Check, Coffee, FolderOpen, Gamepad2, Info, Loader2, MemoryStick, Puzzle } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Coffee,
+  FolderOpen,
+  Gamepad2,
+  Images,
+  Info,
+  Loader2,
+  MemoryStick,
+  Puzzle,
+  Server,
+} from "lucide-react";
 
 import { InstanceActions } from "@/components/instance/InstanceActions";
 import { InstanceIcon } from "@/components/instance/InstanceIcon";
@@ -32,11 +44,16 @@ import { cn } from "@/lib/utils";
 import { errorMessage, instancesApi, type Instance } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
-type TabId = "general" | "game" | "memory" | "java";
+import { ScreenshotsTab } from "./ScreenshotsTab";
+import { ServersTab } from "./ServersTab";
+
+type TabId = "general" | "game" | "servers" | "screenshots" | "memory" | "java";
 
 const TABS: SettingsTab<TabId>[] = [
   { id: "general", label: "Général", icon: Info, description: "Nom, emplacement, outils et statistiques." },
   { id: "game", label: "Jeu", icon: Gamepad2, description: "Fenêtre du jeu et connexion directe à un serveur." },
+  { id: "servers", label: "Serveurs", icon: Server, description: "Tes serveurs multijoueur, leur statut en direct." },
+  { id: "screenshots", label: "Captures", icon: Images, description: "Les captures d'écran prises en jeu (F2)." },
   { id: "memory", label: "Mémoire", icon: MemoryStick, description: "La RAM allouée au jeu, avec un conseil adapté." },
   { id: "java", label: "Java", icon: Coffee, description: "Version de Java, optimisations et arguments de la JVM." },
 ];
@@ -275,6 +292,10 @@ export function InstanceSettingsScreen() {
             />
           </SettingSection>
         )}
+
+        {tab === "servers" && <ServersTab instance={instance} />}
+
+        {tab === "screenshots" && <ScreenshotsTab instance={instance} />}
 
         {tab === "memory" && (
           <SettingSection>

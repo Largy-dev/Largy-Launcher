@@ -33,6 +33,7 @@ describe("useSettings", () => {
       offline_username: "",
       on_game_launch: "keep_open",
       on_close: "ask",
+      discord_rich_presence: true,
     });
 
     const { result } = renderHook(() => useSettings(), { wrapper });

@@ -11,6 +11,7 @@ import {
   LogOut,
   Palette,
   Settings,
+  Shirt,
   UserPlus,
   UserRound,
 } from "lucide-react";
@@ -40,6 +41,7 @@ import { NotificationCenter } from "./NotificationCenter";
 const NAV_ITEMS = [
   { to: "/", label: "Instances", icon: LayoutGrid },
   { to: "/modpacks", label: "Modpacks", icon: Blocks },
+  { to: "/skins", label: "Skins", icon: Shirt },
   { to: "/settings", label: "Paramètres", icon: Settings },
 ];
 
@@ -137,6 +139,10 @@ function AccountCard() {
         <DropdownMenuItem onClick={() => navigate("/settings?tab=account")} className="gap-2">
           <UserRound className="size-4" aria-hidden="true" />
           Mon compte
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/skins")} className="gap-2">
+          <Shirt className="size-4" aria-hidden="true" />
+          Mon skin
         </DropdownMenuItem>
         {others.map((other) => (
           <DropdownMenuItem key={other.id} onClick={() => switchTo.mutate(other.id)} className="gap-2">

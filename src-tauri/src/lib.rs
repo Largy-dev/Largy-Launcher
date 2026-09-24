@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod commands;
+pub mod discord;
 pub mod download;
 pub mod error;
 pub mod instances;
@@ -10,7 +11,10 @@ pub mod modloaders;
 pub mod paths;
 pub mod process_ext;
 pub mod providers;
+pub mod servers;
 pub mod settings;
+pub mod shortcuts;
+pub mod skins;
 pub mod state;
 pub mod util;
 
@@ -81,7 +85,12 @@ fn init_logging(paths: &paths::AppPaths) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            show_main_window(app);
+            if let Some(id) = shortcuts::launch_arg(&args) {
+                let _ = app.emit("launch-request", id);
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -90,6 +99,7 @@ pub fn run() {
             init_logging(&paths::AppPaths::new(app.handle()));
             tracing::info!("Largy Launcher {} starting", env!("CARGO_PKG_VERSION"));
             let state = AppState::new(app.handle())?;
+            *state.pending_launch.lock() = shortcuts::launch_arg(std::env::args());
             app.manage(state);
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -134,12 +144,22 @@ pub fn run() {
             commands::auth::auth_list_accounts,
             commands::auth::auth_logout,
             commands::auth::auth_get_active_account,
+            commands::skins::skins_get_profile,
+            commands::skins::skins_upload,
+            commands::skins::skins_reset,
+            commands::skins::skins_set_cape,
+            commands::skins::skins_read_file,
+            commands::skins::skins_library_list,
+            commands::skins::skins_library_add,
+            commands::skins::skins_library_remove,
+            commands::skins::skins_library_apply,
             commands::settings::settings_get,
             commands::settings::settings_update,
             commands::minecraft::minecraft_list_versions,
             commands::providers::providers_search,
             commands::providers::providers_get_modpack,
             commands::providers::providers_get_versions,
+            commands::providers::providers_get_changelog,
             commands::instances::instances_list,
             commands::instances::instances_get,
             commands::instances::instances_create,
@@ -149,6 +169,14 @@ pub fn run() {
             commands::instances::instances_update_settings,
             commands::instances::instances_open_folder,
             commands::instances::instances_reveal_file,
+            commands::instances::instances_create_shortcut,
+            commands::instances::instance_screenshots_list,
+            commands::instances::instance_screenshots_delete,
+            commands::servers::instance_servers_list,
+            commands::servers::instance_servers_add,
+            commands::servers::instance_servers_update,
+            commands::servers::instance_servers_remove,
+            commands::servers::server_ping,
             commands::modpacks::instances_install_modpack,
             commands::modpacks::instances_cancel_install,
             commands::modpacks::instances_update_modpack,
@@ -164,6 +192,7 @@ pub fn run() {
             commands::mods::content_search,
             commands::mods::content_install,
             commands::launch::launch_instance,
+            commands::launch::take_pending_launch,
             commands::launch::stop_instance,
             commands::launch::repair_instance,
             commands::launch::is_instance_running,

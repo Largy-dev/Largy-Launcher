@@ -231,6 +231,11 @@ impl ModpackProvider for ModrinthProvider {
             .await?;
         resolve_mrpack(&mrpack, &self.cache_dir.join(format!("{version_id}-extracted"))).await
     }
+
+    async fn get_changelog(&self, _pack_id: &str, version_id: &str) -> Result<Option<String>, ProviderError> {
+        let version = self.api.version(version_id).await?;
+        Ok(version.changelog.filter(|c| !c.trim().is_empty()))
+    }
 }
 
 #[cfg(test)]

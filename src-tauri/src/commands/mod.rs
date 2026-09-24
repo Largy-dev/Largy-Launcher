@@ -9,7 +9,9 @@ pub mod minecraft;
 pub mod modpacks;
 pub mod mods;
 pub mod providers;
+pub mod servers;
 pub mod settings;
+pub mod skins;
 
 use tauri::State;
 

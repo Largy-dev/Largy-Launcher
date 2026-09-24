@@ -110,6 +110,8 @@ pub struct Version {
     pub version_type: String,
     #[serde(default)]
     pub date_published: String,
+    #[serde(default)]
+    pub changelog: Option<String>,
 }
 
 impl Version {
