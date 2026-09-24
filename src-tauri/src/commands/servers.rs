@@ -70,3 +70,29 @@ pub async fn servers_prepare_instance(
     super::instances::instances_changed(&app);
     Ok(result)
 }
+
+/// Links a freshly installed modpack instance to its catalog server: the
+/// server joins the multiplayer list and is joined on launch.
+#[tauri::command]
+pub fn servers_attach_instance(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    featured_id: String,
+    address: String,
+) -> AppResult<instances::Instance> {
+    servers::validate_address(&address)?;
+    if !servers::featured::is_slug(&featured_id) {
+        return Err(crate::error::AppError::Other("serveur inconnu".to_string()));
+    }
+    let mut instance = instances::get(&state.paths, &instance_id)?;
+    let address = address.trim().to_string();
+    if !servers::list(&instance.directory)?.iter().any(|s| s.address == address) {
+        servers::add(&instance.directory, &instance.name, &address)?;
+    }
+    instance.auto_join_server = Some(address);
+    instance.featured_server = Some(featured_id);
+    instances::save(&instance)?;
+    super::instances::instances_changed(&app);
+    Ok(instance)
+}

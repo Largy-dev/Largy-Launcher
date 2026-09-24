@@ -53,6 +53,16 @@ export interface FeaturedServer {
   minecraft_version: string;
   website: string | null;
   required_mods: string[];
+  /** Modded servers: the exact modpack version to install instead of the Fabric presets. */
+  modpack: ServerModpack | null;
+}
+
+export interface ServerModpack {
+  provider: "ftb" | "modrinth" | "curseforge";
+  pack_id: string;
+  version_id: string;
+  name: string;
+  version_name: string;
 }
 
 export interface ServerCatalog {
@@ -81,4 +91,7 @@ export const catalogApi = {
   load: () => invoke<ServerCatalog>("featured_servers"),
   /** Creates a Fabric instance for the server: mods, shaders, server list, auto-join. */
   prepare: (spec: PrepareSpec) => invoke<PrepareResult>("servers_prepare_instance", { spec }),
+  /** Links an installed modpack instance to its server: server list + auto-join. */
+  attach: (instanceId: string, featuredId: string, address: string) =>
+    invoke<Instance>("servers_attach_instance", { instanceId, featuredId, address }),
 };

@@ -6,6 +6,7 @@ import { ExternalLink, Loader2, Play, Plus, Search, Server, Settings2, Signal, U
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { EmptyState } from "@/components/EmptyState";
+import { LOADER_META } from "@/components/instance/LoaderBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { Motd } from "@/components/servers/Motd";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,10 @@ interface ServerCardProps {
   address: string;
   description?: string;
   tags?: string[];
-  version: string;
+  /** What the game runs on, e.g. « Minecraft 26.3 · Fabric » or the modpack. */
+  stack: string;
+  /** Label of the button that sets the instance up. */
+  prepareLabel?: string;
   website?: string | null;
   index: number;
   /** The instance already prepared for this server, if any. */
@@ -37,7 +41,8 @@ function ServerCard({
   address,
   description,
   tags,
-  version,
+  stack,
+  prepareLabel = "Préparer",
   website,
   index,
   instance,
@@ -119,7 +124,7 @@ function ServerCard({
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <span className="text-xs text-muted-foreground">Minecraft {version} · Fabric</span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{stack}</span>
         {instance ? (
           <div className="flex gap-1.5">
             <Button
@@ -140,7 +145,7 @@ function ServerCard({
           onPrepare && (
             <Button size="sm" variant="outline" className="gap-1.5" onClick={onPrepare}>
               <Wrench aria-hidden="true" />
-              Préparer
+              {prepareLabel}
             </Button>
           )
         )}
@@ -228,7 +233,7 @@ export function ServerBrowserScreen() {
                 key={instance.id}
                 name={instance.name}
                 address={instance.auto_join_server!}
-                version={instance.minecraft_version}
+                stack={`Minecraft ${instance.minecraft_version} · ${LOADER_META[instance.loader].label}`}
                 index={index}
                 instance={instance}
               />
@@ -260,7 +265,12 @@ export function ServerBrowserScreen() {
                 address={server.address}
                 description={server.description}
                 tags={server.tags}
-                version={server.minecraft_version}
+                stack={
+                  server.modpack
+                    ? `${server.modpack.name} ${server.modpack.version_name}`
+                    : `Minecraft ${server.minecraft_version} · Fabric`
+                }
+                prepareLabel={server.modpack ? "Installer" : "Préparer"}
                 website={server.website}
                 index={index}
                 instance={preparedFor(server.id)}

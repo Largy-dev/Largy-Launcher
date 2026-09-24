@@ -47,6 +47,33 @@ pub struct FeaturedServer {
     /// Mods the server itself needs (e.g. a voice chat), always installed.
     #[serde(default)]
     pub required_mods: Vec<String>,
+    /// Modded servers: the exact modpack version to install instead of the
+    /// Fabric presets.
+    #[serde(default)]
+    pub modpack: Option<ServerModpack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ServerModpack {
+    /// `ftb`, `modrinth` or `curseforge`.
+    pub provider: String,
+    pub pack_id: String,
+    pub version_id: String,
+    pub name: String,
+    /// Version as the pack author names it (e.g. `1.18.1`).
+    pub version_name: String,
+}
+
+impl ServerModpack {
+    fn is_valid(&self) -> bool {
+        let id = |v: &str| {
+            (1..=64).contains(&v.len()) && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        };
+        ["ftb", "modrinth", "curseforge"].contains(&self.provider.as_str())
+            && id(&self.pack_id)
+            && id(&self.version_id)
+            && !self.name.trim().is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -87,6 +114,7 @@ impl Catalog {
                 && is_minecraft_version(&s.minecraft_version)
                 && s.required_mods.iter().all(|m| is_slug(m))
                 && s.website.as_deref().is_none_or(|w| w.starts_with("https://"))
+                && s.modpack.as_ref().is_none_or(ServerModpack::is_valid)
         });
         Ok(catalog)
     }
@@ -143,6 +171,21 @@ mod tests {
         let catalog = Catalog::parse(json).unwrap();
         assert!(catalog.presets.is_empty());
         assert_eq!(catalog.servers.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), vec!["ok"]);
+    }
+
+    #[test]
+    fn modpack_servers_need_a_known_provider_and_plain_ids() {
+        let server = |provider: &str, version: &str| {
+            format!(
+                r#"{{ "id": "s", "name": "S", "address": "s.net", "description": "", "minecraft_version": "1.21.1",
+                     "modpack": {{ "provider": "{provider}", "pack_id": "126", "version_id": "{version}",
+                                   "name": "Pack", "version_name": "1.0" }} }}"#
+            )
+        };
+        let catalog = |entry: String| Catalog::parse(&format!(r#"{{ "schema": 1, "presets": [], "servers": [{entry}] }}"#));
+        assert_eq!(catalog(server("ftb", "100337")).unwrap().servers.len(), 1);
+        assert!(catalog(server("evil", "100337")).unwrap().servers.is_empty());
+        assert!(catalog(server("ftb", "../x")).unwrap().servers.is_empty());
     }
 
     #[test]
