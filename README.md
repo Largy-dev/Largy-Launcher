@@ -54,13 +54,15 @@ démarrage et l'installe en un clic.
 | **Lancement suivi en direct** | Étapes, vitesse de téléchargement et temps restant, puis RAM et processeur pendant la partie. Un lancement peut être annulé à tout moment. |
 | **La bonne quantité de RAM** | Une mémoire conseillée par instance, selon le loader, le nombre de mods et la RAM de ton PC. |
 | **Directement sur ton serveur** | Rejoins un serveur dès le lancement, choisis la taille de la fenêtre ou le plein écran. |
+| **Tes serveurs en direct** | La liste Multijoueur de chaque instance avec joueurs connectés, ping et MOTD en couleurs, et un bouton pour rejoindre en un clic. |
+| **Raccourci sur le bureau** | Lance une instance en un double-clic, sans passer par le launcher. |
 | **Même sans internet** | Une instance déjà installée se lance hors connexion, avec ton compte Microsoft (en solo). |
 
 ### Modpacks et mods
 
 | | |
 |---|---|
-| **Modpacks Modrinth, FTB et CurseForge** | Parcours des milliers de packs et installe-les en un clic. Une mise à jour sauvegarde d'abord tes mondes et garde tes options de jeu. |
+| **Modpacks Modrinth, FTB et CurseForge** | Parcours des milliers de packs et installe-les en un clic. Les nouveautés de chaque version s'affichent avant la mise à jour, qui sauvegarde d'abord tes mondes et garde tes options de jeu. |
 | **Mods, resource packs et shaders** | Cherche dans le catalogue Modrinth : seul ce qui est compatible avec ton instance s'affiche, et les dépendances s'installent toutes seules. |
 | **Mises à jour des mods** | Le launcher repère les mods qui ont une version plus récente et les met à jour en un clic. |
 | **Import et export** | Glisse un `.mrpack`, un zip CurseForge ou une instance Prism/MultiMC sur la fenêtre pour l'importer. Exporte n'importe quelle instance en `.mrpack` pour la partager. |
@@ -70,6 +72,9 @@ démarrage et l'installe en un clic.
 
 | | |
 |---|---|
+| **Skins et capes** | Aperçu 3D de ton skin, import d'un PNG, bibliothèque pour changer de skin en un clic, choix de la cape. |
+| **Captures d'écran** | Toutes tes captures (F2) par instance, en grand, à copier ou supprimer. |
+| **Discord** | Tes amis voient à quoi tu joues et depuis combien de temps. |
 | **Plusieurs comptes** | Connecte plusieurs comptes Microsoft et passe de l'un à l'autre depuis la barre latérale. Un mode hors-ligne existe aussi pour jouer sans compte. |
 | **Toujours là** | Réduis le launcher dans la zone de notification : il continue de compter ton temps de jeu et de surveiller les crashs. |
 | **Comprendre un crash** | Logs colorés et filtrables, diagnostic clair des causes fréquentes (mémoire, mods incompatibles, pilote graphique, Java…) et accès direct au crash report. |
