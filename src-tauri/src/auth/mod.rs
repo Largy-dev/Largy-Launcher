@@ -368,6 +368,25 @@ fn valid_username(name: &str) -> bool {
     (1..=16).contains(&name.chars().count()) && !name.chars().any(char::is_whitespace)
 }
 
+/// Name used in offline mode when the player didn't pick one.
+pub const DEFAULT_OFFLINE_NAME: &str = "Steve";
+
+/// The name to play offline with: the configured one, or [`DEFAULT_OFFLINE_NAME`]
+/// when it's empty — unless a Microsoft account is connected, where an empty
+/// name almost always means offline mode was left on by mistake.
+pub fn offline_name(configured: &str, microsoft_account: bool) -> AppResult<String> {
+    let name = configured.trim();
+    match (name.is_empty(), microsoft_account) {
+        (false, _) => Ok(name.to_string()),
+        (true, false) => Ok(DEFAULT_OFFLINE_NAME.to_string()),
+        (true, true) => Err(AppError::Auth(
+            "Le mode hors-ligne est activé sans pseudo alors qu'un compte Microsoft est connecté. Vérifie \
+             Paramètres › Compte : désactive le mode hors-ligne pour jouer avec ton compte, ou choisis un pseudo."
+                .to_string(),
+        )),
+    }
+}
+
 /// Builds a local, network-free session for [`GlobalSettings::offline_mode`].
 /// Only valid on singleplayer or servers explicitly running in offline mode.
 pub fn offline_session(username: &str) -> AppResult<AccountSession> {
@@ -404,6 +423,14 @@ mod tests {
     fn offline_uuid_differs_per_username_but_is_stable() {
         assert_eq!(offline_uuid("Alice"), offline_uuid("Alice"));
         assert_ne!(offline_uuid("Alice"), offline_uuid("Bob"));
+    }
+
+    #[test]
+    fn offline_name_falls_back_to_steve_only_without_a_microsoft_account() {
+        assert_eq!(offline_name("  Alex ", true).unwrap(), "Alex");
+        assert_eq!(offline_name("", false).unwrap(), DEFAULT_OFFLINE_NAME);
+        assert_eq!(offline_name("   ", false).unwrap(), DEFAULT_OFFLINE_NAME);
+        assert!(offline_name("", true).is_err());
     }
 
     #[test]

@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/lib/notify";
-import { errorMessage, instancesApi, isCancelled, launchApi, type Instance } from "@/services/tauri";
+import { errorMessage, instancesApi, isAppError, isCancelled, launchApi, type Instance } from "@/services/tauri";
 import { runtimeOf, useAppStore } from "@/store/appStore";
 
 /**
@@ -18,13 +18,27 @@ export function usePlayInstance() {
   const setActiveInstanceId = useAppStore((s) => s.setActiveInstanceId);
   const { data: settings } = useSettings();
   const canPlay = !!account || !!settings?.offline_mode;
+  // Offline mode left on with no name while a Microsoft account is connected:
+  // almost always a mistake, so ask rather than play under a made-up name.
+  const offlineMisconfigured = !!account && !!settings?.offline_mode && !settings.offline_username.trim();
+  const openAccountSettings = { label: "Paramètres", onClick: () => navigate("/settings?tab=account") };
 
   return async function play(instance: Instance, server?: string) {
+    if (offlineMisconfigured) {
+      notify.warning({
+        title: "Vérifie tes paramètres de compte",
+        message:
+          "Le mode hors-ligne est activé sans pseudo alors que ton compte Microsoft est connecté. Désactive-le pour jouer avec ton compte, ou choisis un pseudo.",
+        action: openAccountSettings,
+        history: false,
+      });
+      return;
+    }
     if (!canPlay) {
       notify.warning({
         title: "Connexion requise",
         message: "Connecte-toi avec ton compte Microsoft, ou active le Mode Hors-ligne dans Paramètres › Compte.",
-        action: { label: "Paramètres", onClick: () => navigate("/settings?tab=account") },
+        action: openAccountSettings,
         history: false,
       });
       return;
@@ -42,7 +56,13 @@ export function usePlayInstance() {
       await launchApi.launch(instance.id, server);
     } catch (e) {
       setRunning(instance.id, false);
-      if (!isCancelled(e)) notify.error({ title: `Impossible de lancer ${instance.name}`, message: errorMessage(e) });
+      if (!isCancelled(e)) {
+        notify.error({
+          title: `Impossible de lancer ${instance.name}`,
+          message: errorMessage(e),
+          action: isAppError(e) && e.kind === "auth" ? openAccountSettings : undefined,
+        });
+      }
     }
   };
 }

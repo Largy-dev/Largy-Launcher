@@ -122,7 +122,7 @@ export function AccountTab({ form, update }: FormTabProps) {
         {form.offline_mode && (
           <SettingRow
             label="Pseudo hors-ligne"
-            description="16 caractères max, sans espace. Toujours le même UUID pour ce pseudo."
+            description="16 caractères max, sans espace. Vide = Steve. Toujours le même UUID pour ce pseudo."
             control={
               <Input
                 className="w-56"

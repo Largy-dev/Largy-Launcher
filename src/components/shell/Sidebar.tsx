@@ -100,7 +100,7 @@ function AccountCard() {
             <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{settings.offline_username || "Joueur"}</p>
+            <p className="truncate text-sm font-medium">{settings.offline_username.trim() || "Steve"}</p>
             <p className="text-[0.68rem] text-warning">Hors-ligne</p>
           </div>
         </button>

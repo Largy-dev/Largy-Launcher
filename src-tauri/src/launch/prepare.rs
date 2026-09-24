@@ -77,7 +77,9 @@ fn legacy_server_args(server: &str) -> Vec<String> {
 /// singleplayer, which is what "play offline" means for a Microsoft account.
 pub(super) async fn resolve_account(state: &AppState, settings: &GlobalSettings) -> AppResult<AccountSession> {
     if settings.offline_mode {
-        return crate::auth::offline_session(&settings.offline_username);
+        let microsoft_account = state.active_account.read().is_some();
+        let name = crate::auth::offline_name(&settings.offline_username, microsoft_account)?;
+        return crate::auth::offline_session(&name);
     }
     let current = state.active_account.read().clone().ok_or_else(|| {
         AppError::Auth(
