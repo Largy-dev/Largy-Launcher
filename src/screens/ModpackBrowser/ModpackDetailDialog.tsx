@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Loader2, MemoryStick, PackageSearch } from "lucide-react";
+import { ArrowRight, Loader2, MemoryStick, PackageSearch, Sparkles } from "lucide-react";
 
 import { LoaderBadge } from "@/components/instance/LoaderBadge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,9 @@ interface ModpackDetailDialogProps {
    * instance instead of creating a new one — used for the "update available"
    * flow on an already-installed modpack. */
   updateInstanceId?: string;
+  /** Opens another provider's copy of the pack instead — offered when a
+   * CurseForge pack is also published by FTB. */
+  onSwitchPack?: (provider: ProviderId, pack: ModpackSummary) => void;
 }
 
 interface InstallVars {
@@ -50,7 +53,13 @@ interface InstallVars {
   instanceName: string;
 }
 
-export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstanceId }: ModpackDetailDialogProps) {
+export function ModpackDetailDialog({
+  provider,
+  pack,
+  onOpenChange,
+  updateInstanceId,
+  onSwitchPack,
+}: ModpackDetailDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [pickedVersionId, setVersionId] = useState("");
@@ -63,6 +72,15 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
     queryFn: () => providersApi.getVersions(provider, pack!.id),
     enabled: pack !== null,
   });
+  // FTB mirrors its own packs' files, so its copy installs without the
+  // manual downloads some CurseForge authors impose.
+  const ftbQuery = useQuery({
+    queryKey: ["ftb-equivalent", pack?.id],
+    queryFn: () => providersApi.ftbEquivalent(Number(pack!.id), pack!.name),
+    enabled: pack !== null && provider === "curseforge" && !isUpdate && !!onSwitchPack,
+    staleTime: Infinity,
+  });
+  const ftbPack = ftbQuery.data;
   // Newest version preselected: it's what most people want to install.
   const versionId = pickedVersionId || versionsQuery.data?.[0]?.id || "";
 
@@ -180,6 +198,27 @@ export function ModpackDetailDialog({ provider, pack, onOpenChange, updateInstan
         </DialogDescription>
 
         <div className="space-y-4">
+          {ftbPack && onSwitchPack && (
+            <div className="flex items-center gap-3 rounded-xl border border-[#e5484d]/40 bg-[#e5484d]/10 p-3">
+              <Sparkles className="size-4 shrink-0 text-[#e5484d]" aria-hidden="true" />
+              <p className="flex-1 text-xs">
+                Ce pack est publié par FTB : l'installer depuis FTB évite les fichiers à télécharger à la main.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 gap-1.5"
+                onClick={() => {
+                  setVersionId("");
+                  onSwitchPack("ftb", ftbPack);
+                }}
+              >
+                Voir sur FTB
+                <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+
           {!isUpdate && (
             <div className="space-y-1.5">
               <Label htmlFor="modpack-instance-name">Nom de l'instance</Label>

@@ -8,5 +8,7 @@ fn main() {
         println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}", manifest.display());
     }
+    // Baked into the binary by `option_env!` (see providers/curseforge).
+    println!("cargo:rerun-if-env-changed=CURSEFORGE_API_KEY");
     tauri_build::build()
 }

@@ -33,6 +33,35 @@ impl FtbProvider {
         }
         Ok(response.error_for_status()?.json().await?)
     }
+
+    /// Fetches the first `limit` packs of a search result concurrently, but
+    /// keeps them in the API's own order (popularity / relevance), not in
+    /// whatever order responses land. Packs that fail to load are skipped.
+    async fn fetch_ranked(&self, ids: Vec<u64>, limit: usize) -> Vec<FtbPackResponse> {
+        let mut set = JoinSet::new();
+        for (rank, id) in ids.into_iter().take(limit).enumerate() {
+            let client = self.client.clone();
+            set.spawn(async move {
+                let pack = client
+                    .get(format!("{BASE}/modpack/{id}"))
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json::<FtbPackResponse>()
+                    .await?;
+                Ok::<_, reqwest::Error>((rank, pack))
+            });
+        }
+
+        let mut ranked = Vec::new();
+        while let Some(result) = set.join_next().await {
+            if let Ok(Ok(entry)) = result {
+                ranked.push(entry);
+            }
+        }
+        ranked.sort_by_key(|(rank, _)| *rank);
+        ranked.into_iter().map(|(_, pack)| pack).collect()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +104,15 @@ struct FtbPackResponse {
     authors: Vec<FtbAuthor>,
     #[serde(default)]
     versions: Vec<FtbVersionRef>,
+    #[serde(default)]
+    meta: Option<FtbMeta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FtbMeta {
+    /// Set on FTB packs also published on CurseForge.
+    #[serde(rename = "curseforgeProjectId", default)]
+    curseforge_project_id: Option<u64>,
 }
 
 impl FtbPackResponse {
@@ -177,31 +215,28 @@ impl ModpackProvider for FtbProvider {
             response.packs
         };
 
-        // Fetched concurrently, but reassembled in the API's own order (by
-        // popularity / relevance), not in whatever order responses land.
-        let mut set = JoinSet::new();
-        for (rank, id) in ids.into_iter().take(24).enumerate() {
-            let client = self.client.clone();
-            set.spawn(async move {
-                let pack = client
-                    .get(format!("{BASE}/modpack/{id}"))
-                    .send()
-                    .await?
-                    .error_for_status()?
-                    .json::<FtbPackResponse>()
-                    .await?;
-                Ok::<_, reqwest::Error>((rank, pack))
-            });
-        }
+        Ok(self.fetch_ranked(ids, 24).await.iter().map(FtbPackResponse::to_summary).collect())
+    }
 
-        let mut ranked = Vec::new();
-        while let Some(result) = set.join_next().await {
-            if let Ok(Ok(entry)) = result {
-                ranked.push(entry);
-            }
-        }
-        ranked.sort_by_key(|(rank, _)| *rank);
-        Ok(ranked.into_iter().map(|(_, pack)| pack.to_summary()).collect())
+    async fn find_curseforge_equivalent(
+        &self,
+        curseforge_id: u64,
+        name: &str,
+    ) -> Result<Option<ModpackSummary>, ProviderError> {
+        let response: SearchResponse = self
+            .client
+            .get(format!("{BASE}/modpack/search/8"))
+            .query(&[("term", name.trim())])
+            .send()
+            .await?
+            .json()
+            .await?;
+        Ok(self
+            .fetch_ranked(response.packs, 8)
+            .await
+            .iter()
+            .find(|p| p.meta.as_ref().and_then(|m| m.curseforge_project_id) == Some(curseforge_id))
+            .map(FtbPackResponse::to_summary))
     }
 
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {
@@ -291,7 +326,7 @@ impl ModpackProvider for FtbProvider {
                 warnings.push(InstallWarning {
                     file_name: f.name.clone(),
                     message: "Chemin de fichier refusé (sort du dossier de l'instance).".to_string(),
-                    browser_url: None,
+                    ..Default::default()
                 });
                 continue;
             }
@@ -346,12 +381,22 @@ mod tests {
             ],
             authors: vec![FtbAuthor { name: "Larry".to_string() }],
             versions: Vec::new(),
+            meta: None,
         };
         let summary = pack.to_summary();
         assert_eq!(summary.id, "42");
         assert_eq!(summary.provider, "ftb");
         assert_eq!(summary.author, "Larry");
         assert_eq!(summary.icon_url, Some("square.png".to_string()));
+    }
+
+    #[test]
+    fn meta_exposes_the_curseforge_project_id() {
+        let pack: FtbPackResponse = serde_json::from_str(
+            r#"{"id": 126, "name": "D", "meta": {"supportsWorlds": true, "curseforgeProjectId": 1103362}}"#,
+        )
+        .unwrap();
+        assert_eq!(pack.meta.and_then(|m| m.curseforge_project_id), Some(1103362));
     }
 
     #[test]

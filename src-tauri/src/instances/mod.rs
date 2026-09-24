@@ -7,6 +7,7 @@ pub mod backup;
 pub mod content;
 pub mod export;
 pub mod import;
+pub mod manual_downloads;
 pub mod mods;
 pub mod screenshots;
 

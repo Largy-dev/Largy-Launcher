@@ -5,11 +5,11 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::download::DownloadItem;
 use crate::error::{AppError, AppResult};
-use crate::instances::{self, backup, export, import, CreateInstanceInput, Instance, ModpackRef};
+use crate::instances::{self, backup, export, import, manual_downloads, CreateInstanceInput, Instance, ModpackRef};
 use crate::providers::curseforge::CurseForgeProvider;
 use crate::providers::modrinth::{self, ModrinthApi};
 use crate::providers::{FileDownloadInfo, InstallWarning, ModpackProvider, ResolvedModpackVersion};
@@ -53,7 +53,7 @@ async fn download_and_track_files(
         warnings.push(InstallWarning {
             file_name: item.dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             message: format!("Téléchargement impossible : {error}"),
-            browser_url: None,
+            ..Default::default()
         });
     }
     let mut installed_files: Vec<PathBuf> = items
@@ -110,11 +110,13 @@ async fn resolve_download_items(
                 file_name: expected_filename,
                 message: "L'auteur a désactivé le téléchargement automatique pour ce fichier.".to_string(),
                 browser_url: Some(browser_url),
+                path: Some(file.path.clone()),
+                sha1: file.sha1.clone(),
             }),
             Err(e) => warnings.push(InstallWarning {
                 file_name: file.path.display().to_string(),
                 message: e.to_string(),
-                browser_url: None,
+                ..Default::default()
             }),
         }
     }
@@ -275,6 +277,37 @@ pub async fn instances_update_modpack(
     Ok(InstanceInstallResult { instance, warnings })
 }
 
+/// Moves hand-downloaded modpack files from the Downloads folder into the
+/// instance and records them as modpack files, so the next update replaces
+/// them like any other. Polled while the "installation incomplète" dialog
+/// is open; returns the paths now in place.
+#[tauri::command]
+pub async fn instances_collect_manual_downloads(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    files: Vec<manual_downloads::ManualFile>,
+) -> AppResult<Vec<PathBuf>> {
+    let downloads = app
+        .path()
+        .download_dir()
+        .map_err(|e| AppError::Instance(format!("dossier Téléchargements introuvable: {e}")))?;
+    let paths = state.paths.clone();
+    let id = instance_id.clone();
+    let mut instance = spawn_blocking(move || instances::get(&paths, &id)).await?;
+    let placed = manual_downloads::collect(&downloads, &instance.directory, &files).await?;
+
+    if let Some(modpack) = &mut instance.modpack {
+        let missing: Vec<PathBuf> = placed.iter().filter(|p| !modpack.installed_files.contains(p)).cloned().collect();
+        if !missing.is_empty() {
+            modpack.installed_files.extend(missing);
+            modpack.installed_files.sort();
+            spawn_blocking(move || instances::save(&instance)).await?;
+        }
+    }
+    Ok(placed)
+}
+
 /// Creates an instance from a local `.mrpack`, CurseForge zip or Prism /
 /// MultiMC export.
 #[tauri::command]
@@ -407,7 +440,7 @@ mod tests {
             loader_version: String::new(),
             files,
             overrides_dirs: Vec::new(),
-            warnings: vec![InstallWarning { file_name: "x".into(), message: "m".into(), browser_url: None }],
+            warnings: vec![InstallWarning { file_name: "x".into(), message: "m".into(), ..Default::default() }],
             pack_name: None,
         }
     }

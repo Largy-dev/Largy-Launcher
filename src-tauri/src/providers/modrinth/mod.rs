@@ -94,7 +94,7 @@ pub async fn resolve_mrpack(mrpack: &Path, extract_dir: &Path) -> Result<Resolve
             warnings.push(InstallWarning {
                 file_name: file.path.clone(),
                 message: "Chemin de fichier refusé (sort du dossier de l'instance).".to_string(),
-                browser_url: None,
+                ..Default::default()
             });
             continue;
         };
@@ -102,7 +102,7 @@ pub async fn resolve_mrpack(mrpack: &Path, extract_dir: &Path) -> Result<Resolve
             warnings.push(InstallWarning {
                 file_name: file.path.clone(),
                 message: "Source de téléchargement non autorisée par le format Modrinth.".to_string(),
-                browser_url: None,
+                ..Default::default()
             });
             continue;
         };

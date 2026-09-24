@@ -1,6 +1,6 @@
 //! CurseForge modpacks via the official Core API (`api.curseforge.com`).
-//! Requires a personal API key from https://console.curseforge.com/ — set it
-//! in Paramètres. Modpacks are distributed as a zip (`manifest.json` +
+//! Release builds embed the launcher's own API key (see [`builtin_key`]); a
+//! player can still use their own from Paramètres. Modpacks are distributed as a zip (`manifest.json` +
 //! `overrides/`): `resolve_version` downloads and unpacks it, then looks up
 //! every referenced file in two batched requests (files, then their
 //! projects — for the target folder and the manual-download page).
@@ -30,6 +30,14 @@ const MODPACK_CLASS_ID: u32 = 4471;
 const MAX_VERSION_PAGES: u32 = 4;
 const BATCH: usize = 500;
 
+/// Largy Launcher's own CurseForge API key, injected at compile time from
+/// the `CURSEFORGE_API_KEY` environment variable (a GitHub Actions secret
+/// for release builds) — never committed. Local builds without it fall back
+/// to the key the player enters in Paramètres.
+pub fn builtin_key() -> Option<&'static str> {
+    option_env!("CURSEFORGE_API_KEY").map(str::trim).filter(|k| !k.is_empty())
+}
+
 pub struct CurseForgeProvider {
     client: reqwest::Client,
     api_key: Arc<RwLock<String>>,
@@ -41,16 +49,20 @@ impl CurseForgeProvider {
         Self { client, api_key, cache_dir }
     }
 
+    /// The player's own key when set, otherwise the one baked into release
+    /// builds.
     fn key(&self) -> Result<String, ProviderError> {
-        let key = self.api_key.read().clone();
-        if key.trim().is_empty() {
-            return Err(ProviderError::Other(
+        let key = self.api_key.read().trim().to_string();
+        if !key.is_empty() {
+            return Ok(key);
+        }
+        builtin_key().map(str::to_string).ok_or_else(|| {
+            ProviderError::Other(
                 "Clé API CurseForge manquante. Ouvre Paramètres et renseigne ta clé depuis \
                  console.curseforge.com pour utiliser CurseForge."
                     .to_string(),
-            ));
-        }
-        Ok(key)
+            )
+        })
     }
 
     async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, String)]) -> Result<T, ProviderError> {
@@ -165,6 +177,7 @@ fn build_file_refs(
                 file_name: format!("projet {} / fichier {}", entry.project_id, entry.file_id),
                 message: "Fichier introuvable sur CurseForge (supprimé par son auteur ?).".to_string(),
                 browser_url: project.and_then(|p| p.links.website_url.clone()),
+                ..Default::default()
             });
             continue;
         };

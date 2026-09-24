@@ -54,6 +54,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # Baked into the binary (option_env!) so the CurseForge tab works
+          # with no setup; never committed to the repo.
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Largy Launcher ${{ github.ref_name }}"

@@ -45,3 +45,27 @@ pub async fn providers_get_changelog(
 ) -> AppResult<Option<String>> {
     Ok(get_provider(&state, &provider)?.get_changelog(&pack_id, &version_id).await?)
 }
+
+/// Whether this build ships the launcher's own CurseForge API key — the
+/// CurseForge tab then works without the player entering one.
+#[tauri::command]
+pub fn providers_curseforge_builtin_key() -> bool {
+    crate::providers::curseforge::builtin_key().is_some()
+}
+
+/// The FTB-published copy of a CurseForge pack, if there is one. Best
+/// effort: a failed lookup just means no suggestion.
+#[tauri::command]
+pub async fn providers_ftb_equivalent(
+    state: State<'_, AppState>,
+    curseforge_id: u64,
+    name: String,
+) -> AppResult<Option<ModpackSummary>> {
+    let Some(ftb) = state.providers.get("ftb") else {
+        return Ok(None);
+    };
+    Ok(ftb.find_curseforge_equivalent(curseforge_id, &name).await.unwrap_or_else(|e| {
+        tracing::debug!("FTB equivalent lookup failed: {e}");
+        None
+    }))
+}

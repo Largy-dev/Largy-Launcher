@@ -174,6 +174,9 @@ export interface InstallWarning {
   file_name: string;
   message: string;
   browser_url: string | null;
+  /** Instance-relative destination of a file to download by hand. */
+  path?: string | null;
+  sha1?: string | null;
 }
 
 export interface InstanceInstallResult {
@@ -365,6 +368,11 @@ export const providersApi = {
     invoke<ModpackVersionSummary[]>("providers_get_versions", { provider, packId }),
   getChangelog: (provider: ProviderId, packId: string, versionId: string) =>
     invoke<string | null>("providers_get_changelog", { provider, packId, versionId }),
+  /** Whether this build ships its own CurseForge API key. */
+  curseforgeBuiltinKey: () => invoke<boolean>("providers_curseforge_builtin_key"),
+  /** The FTB-published copy of a CurseForge pack, if any. */
+  ftbEquivalent: (curseforgeId: number, name: string) =>
+    invoke<ModpackSummary | null>("providers_ftb_equivalent", { curseforgeId, name }),
 };
 
 export const instancesApi = {
@@ -407,6 +415,9 @@ export const instancesApi = {
   updateModpack: (instanceId: string, versionId: string) =>
     invoke<InstanceInstallResult>("instances_update_modpack", { instanceId, versionId }),
   import: (path: string) => invoke<InstanceInstallResult>("instances_import", { path }),
+  /** Moves hand-downloaded files from Downloads into the instance; resolves to the paths now in place. */
+  collectManualDownloads: (instanceId: string, files: { path: string; sha1: string | null }[]) =>
+    invoke<string[]>("instances_collect_manual_downloads", { instanceId, files }),
   export: (id: string, dest: string, includeSaves: boolean) =>
     invoke<ExportSummary>("instances_export", { id, dest, includeSaves }),
   backupWorlds: (id: string) => invoke<string | null>("instances_backup_worlds", { id }),

@@ -95,11 +95,17 @@ pub struct ModpackFileRef {
 /// One file that didn't make it into the instance automatically — kept
 /// structured so the frontend can offer real actions (open the download
 /// page, open the folder).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct InstallWarning {
     pub file_name: String,
     pub message: String,
     pub browser_url: Option<String>,
+    /// Instance-relative destination of a file the player has to download
+    /// by hand — lets the launcher pick it up from their Downloads folder.
+    #[serde(default)]
+    pub path: Option<PathBuf>,
+    #[serde(default)]
+    pub sha1: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +179,16 @@ pub trait ModpackProvider: Send + Sync {
     /// Release notes of one version as plain text or Markdown; `None` when
     /// the author didn't write any.
     async fn get_changelog(&self, _pack_id: &str, _version_id: &str) -> Result<Option<String>, ProviderError> {
+        Ok(None)
+    }
+
+    /// The same pack published by this provider, given its CurseForge
+    /// project id and name — only FTB knows the mapping.
+    async fn find_curseforge_equivalent(
+        &self,
+        _curseforge_id: u64,
+        _name: &str,
+    ) -> Result<Option<ModpackSummary>, ProviderError> {
         Ok(None)
     }
 

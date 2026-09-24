@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { useSystemMemory } from "@/hooks/useInstanceInfo";
-import { useSettings } from "@/hooks/useSettings";
+import { useCurseforgeBuiltinKey, useSettings } from "@/hooks/useSettings";
 import { formatBytes, formatGb } from "@/lib/format";
 import { parseJvmArgs } from "@/lib/jvmArgs";
 import { notify } from "@/lib/notify";
@@ -190,6 +190,7 @@ export function GlobalSettingsScreen() {
   const [params, setParams] = useSearchParams();
   const tab: TabId = isTab(params.get("tab")) ? (params.get("tab") as TabId) : "appearance";
   const { data: settings } = useSettings();
+  const curseforgeBuiltin = useCurseforgeBuiltinKey();
   const { data: memory } = useSystemMemory();
   const [form, setForm] = useState<GlobalSettings | null>(null);
 
@@ -350,7 +351,11 @@ export function GlobalSettingsScreen() {
           <SettingSection>
             <SettingRow
               label="Clé API CurseForge"
-              description="Gratuite, depuis console.curseforge.com — active l'onglet CurseForge dans Modpacks."
+              description={
+                curseforgeBuiltin
+                  ? "Facultative : le launcher a déjà la sienne. Renseigne la tienne (console.curseforge.com) pour l'utiliser à la place."
+                  : "Gratuite, depuis console.curseforge.com — active l'onglet CurseForge dans Modpacks."
+              }
               control={
                 <Input
                   className="w-72"

@@ -97,19 +97,16 @@ démarrage et l'installe en un clic.
 ## Questions fréquentes
 
 <details>
-<summary><b>Je ne vois pas l'onglet CurseForge.</b></summary>
+<summary><b>Faut-il une clé CurseForge ?</b></summary>
 
 <br>
 
-CurseForge demande une clé personnelle, gratuite :
+Non : le launcher a sa propre clé, l'onglet CurseForge marche sans rien configurer. Si tu
+préfères utiliser la tienne (gratuite, sur [console.curseforge.com](https://console.curseforge.com/)),
+colle-la dans **Paramètres › Avancé › Clé API CurseForge**.
 
-1. Va sur [console.curseforge.com](https://console.curseforge.com/) et connecte-toi.
-2. Génère une clé API (section **API Keys**).
-3. Colle-la dans **Paramètres › Avancé › Clé API CurseForge**.
-
-L'onglet apparaît aussitôt. Cette clé est personnelle : ne la partage pas (les
-[conditions de CurseForge](https://support.curseforge.com/support/solutions/articles/9000207405)
-l'interdisent). Modrinth et FTB fonctionnent sans clé.
+Si tu compiles le launcher toi-même, l'onglet n'apparaît qu'avec une clé : renseigne la tienne
+dans les paramètres, ou définis la variable d'environnement `CURSEFORGE_API_KEY` avant le build.
 </details>
 
 <details>
@@ -118,8 +115,12 @@ l'interdisent). Modrinth et FTB fonctionnent sans clé.
 <br>
 
 Certains auteurs CurseForge interdisent le téléchargement par les launchers. Le launcher liste ces
-fichiers avec un lien vers leur page et un bouton pour ouvrir le dossier `mods` : télécharge-les,
-glisse-les dedans, c'est prêt.
+fichiers avec un lien vers leur page : télécharge-les avec ton navigateur, et tant que la fenêtre
+reste ouverte, le launcher les repère dans ton dossier Téléchargements, vérifie leur empreinte et
+les range tout seul dans l'instance.
+
+Pour un pack publié par FTB (Direwolf20, FTB Skies…), la fiche CurseForge propose directement la
+version FTB, qui s'installe sans aucun fichier manuel.
 </details>
 
 <details>

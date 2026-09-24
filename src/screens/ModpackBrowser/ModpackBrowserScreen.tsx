@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/Skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSettings } from "@/hooks/useSettings";
+import { useCurseforgeEnabled } from "@/hooks/useSettings";
 import { formatCount } from "@/lib/format";
 import { listItem } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -159,8 +159,7 @@ function ModpackGrid({ provider, onSelect }: { provider: ProviderId; onSelect: (
 export function ModpackBrowserScreen() {
   const [provider, setProvider] = useState<ProviderId>("modrinth");
   const [selected, setSelected] = useState<ModpackSummary | null>(null);
-  const { data: settings } = useSettings();
-  const curseforgeEnabled = !!settings?.curseforge_api_key.trim();
+  const curseforgeEnabled = useCurseforgeEnabled();
   const providers = curseforgeEnabled ? PROVIDERS : PROVIDERS.filter((p) => p.id !== "curseforge");
   const active = providers.some((p) => p.id === provider) ? provider : "modrinth";
 
@@ -201,7 +200,15 @@ export function ModpackBrowserScreen() {
 
       <ModpackGrid key={active} provider={active} onSelect={setSelected} />
 
-      <ModpackDetailDialog provider={active} pack={selected} onOpenChange={(open) => !open && setSelected(null)} />
+      <ModpackDetailDialog
+        provider={active}
+        pack={selected}
+        onOpenChange={(open) => !open && setSelected(null)}
+        onSwitchPack={(next, pack) => {
+          setProvider(next);
+          setSelected(pack);
+        }}
+      />
     </div>
   );
 }
