@@ -110,7 +110,7 @@ export function InstanceListScreen() {
     return [...(instances ?? [])]
       .filter((i) => loaderFilter === "all" || i.loader === loaderFilter)
       .filter((i) => !needle || i.name.toLowerCase().includes(needle) || i.minecraft_version.includes(needle))
-      .sort(SORTS[sort].compare);
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || SORTS[sort].compare(a, b));
   }, [instances, loaderFilter, search, sort]);
 
   const newButton = (

@@ -42,6 +42,11 @@ export interface ModpackRef {
   installed_files: string[];
 }
 
+export interface PlaySession {
+  started_at: number;
+  duration_seconds: number;
+}
+
 export interface Instance {
   id: string;
   name: string;
@@ -64,6 +69,11 @@ export interface Instance {
   auto_join_server: string | null;
   /** Catalog server this instance was prepared for (menu Serveurs). */
   featured_server: string | null;
+  pinned: boolean;
+  protected: boolean;
+  notes: string;
+  /** Most recent play sessions, newest first. */
+  sessions: PlaySession[];
 }
 
 export interface InstanceSettingsInput {
@@ -80,6 +90,13 @@ export interface InstanceSettingsInput {
 export type LauncherBehavior = "keep_open" | "minimize" | "hide";
 export type CloseBehavior = "ask" | "tray" | "quit";
 
+export interface JvmPreset {
+  name: string;
+  min_memory_mb: number;
+  max_memory_mb: number;
+  extra_jvm_args: string[];
+}
+
 export interface GlobalSettings {
   default_min_memory_mb: number;
   default_max_memory_mb: number;
@@ -92,6 +109,7 @@ export interface GlobalSettings {
   on_game_launch: LauncherBehavior;
   on_close: CloseBehavior;
   discord_rich_presence: boolean;
+  jvm_presets: JvmPreset[];
 }
 
 export interface MinecraftProfile {
@@ -328,6 +346,10 @@ export const auth = {
 export const settingsApi = {
   get: () => invoke<GlobalSettings>("settings_get"),
   update: (settings: GlobalSettings) => invoke<GlobalSettings>("settings_update", { settings }),
+  /** Size in bytes of the downloaded Forge/NeoForge installer jars. */
+  installerCacheSize: () => invoke<number>("settings_installer_cache_size"),
+  /** Deletes them; resolves to the number of bytes freed. */
+  clearInstallerCache: () => invoke<number>("settings_clear_installer_cache"),
 };
 
 export const minecraftApi = {
@@ -355,6 +377,13 @@ export const instancesApi = {
   duplicate: (id: string, name: string) => invoke<Instance>("instances_duplicate", { id, name }),
   updateSettings: (id: string, settings: InstanceSettingsInput) =>
     invoke<Instance>("instances_update_settings", { id, settings }),
+  setPinned: (id: string, pinned: boolean) => invoke<Instance>("instances_set_pinned", { id, pinned }),
+  setProtected: (id: string, protected_: boolean) =>
+    invoke<Instance>("instances_set_protected", { id, protected: protected_ }),
+  setNotes: (id: string, notes: string) => invoke<Instance>("instances_set_notes", { id, notes }),
+  /** Copies `sourceId`'s memory/JVM/window/server settings onto `targetId`. */
+  copySettings: (sourceId: string, targetId: string) =>
+    invoke<Instance>("instances_copy_settings", { sourceId, targetId }),
   /** Opens the instance folder, or one of its sub-folders (`mods`, `saves`, `backups`…). */
   openFolder: (id: string, sub?: string) => invoke<void>("instances_open_folder", { id, sub: sub ?? null }),
   revealFile: (id: string, path: string) => invoke<void>("instances_reveal_file", { id, path }),

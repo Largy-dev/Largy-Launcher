@@ -121,6 +121,7 @@ pub async fn launch_instance(
     let behavior = settings.on_game_launch;
     let argfile = prepared.ctx.argfile_path();
     let started = std::time::Instant::now();
+    let started_at_unix = crate::auth::now_unix();
     let discord = state.discord.clone();
     tokio::spawn(async move {
         let (status, killed) = tokio::select! {
@@ -143,8 +144,12 @@ pub async fn launch_instance(
             !running.is_empty()
         };
         discord.game_stopped(&instance_id_owned);
-        if let Err(e) = instances::add_play_time(&paths, &instance_id_owned, started.elapsed().as_secs()) {
+        let played_seconds = started.elapsed().as_secs();
+        if let Err(e) = instances::add_play_time(&paths, &instance_id_owned, played_seconds) {
             tracing::warn!("failed to record play time for {instance_id_owned}: {e}");
+        }
+        if let Err(e) = instances::record_session(&paths, &instance_id_owned, started_at_unix, played_seconds) {
+            tracing::warn!("failed to record session for {instance_id_owned}: {e}");
         }
         let code = status.ok().and_then(|s| s.code());
         let crash_analysis = {

@@ -53,6 +53,7 @@ describe("settingsApi", () => {
       on_game_launch: "keep_open" as const,
       on_close: "ask" as const,
       discord_rich_presence: true,
+      jvm_presets: [],
     };
     await settingsApi.update(settings);
     expect(invokeMock).toHaveBeenCalledWith("settings_update", { settings });

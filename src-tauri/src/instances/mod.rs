@@ -88,7 +88,34 @@ pub struct Instance {
     /// Catalog server (see `servers::featured`) this instance was prepared for.
     #[serde(default)]
     pub featured_server: Option<String>,
+    /// Kept above the fold in every sort order in the instance list.
+    #[serde(default)]
+    pub pinned: bool,
+    /// Blocks [`delete`] until explicitly turned off — a safety net for
+    /// instances the player doesn't want to lose to a stray click.
+    #[serde(default)]
+    pub protected: bool,
+    /// Free-form notes the player writes for themselves.
+    #[serde(default)]
+    pub notes: String,
+    /// Most recent play sessions, newest first, capped to [`MAX_SESSIONS`].
+    #[serde(default)]
+    pub sessions: Vec<PlaySession>,
 }
+
+/// One completed play session, recorded when the game process exits.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PlaySession {
+    pub started_at: i64,
+    pub duration_seconds: u64,
+}
+
+/// How many recent sessions [`record_session`] keeps — enough for a "last few
+/// games" view without the file growing forever over months of play.
+pub const MAX_SESSIONS: usize = 20;
+
+/// Longest a note can be — a personal reminder, not a wiki page.
+pub const MAX_NOTES_LEN: usize = 4000;
 
 fn now_unix() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64
@@ -185,6 +212,10 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         fullscreen: false,
         auto_join_server: None,
         featured_server: None,
+        pinned: false,
+        protected: false,
+        notes: String::new(),
+        sessions: Vec::new(),
     };
 
     save(&instance)?;
@@ -208,6 +239,9 @@ pub fn duplicate(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> 
         created_at: now_unix(),
         last_played_at: None,
         play_time_seconds: 0,
+        pinned: false,
+        protected: false,
+        sessions: Vec::new(),
         ..source
     };
     save(&instance)?;
@@ -216,6 +250,13 @@ pub fn duplicate(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> 
 
 pub fn delete(paths: &AppPaths, id: &str) -> AppResult<()> {
     validate_id(id)?;
+    if let Ok(instance) = get(paths, id) {
+        if instance.protected {
+            return Err(AppError::Instance(
+                "cette instance est protégée contre la suppression — désactive la protection d'abord".to_string(),
+            ));
+        }
+    }
     let dir = paths.instance_dir(id);
     if dir.exists() {
         std::fs::remove_dir_all(dir)?;
@@ -233,6 +274,62 @@ pub fn add_play_time(paths: &AppPaths, id: &str, seconds: u64) -> AppResult<()> 
     let mut instance = get(paths, id)?;
     instance.play_time_seconds = instance.play_time_seconds.saturating_add(seconds);
     save(&instance)
+}
+
+/// Appends one finished session, newest first, trimming to [`MAX_SESSIONS`].
+/// Sessions that ended in under a second (an instant crash) aren't worth
+/// keeping in the history.
+pub fn record_session(paths: &AppPaths, id: &str, started_at: i64, duration_seconds: u64) -> AppResult<()> {
+    if duration_seconds == 0 {
+        return Ok(());
+    }
+    let mut instance = get(paths, id)?;
+    instance.sessions.insert(0, PlaySession { started_at, duration_seconds });
+    instance.sessions.truncate(MAX_SESSIONS);
+    save(&instance)
+}
+
+pub fn set_pinned(paths: &AppPaths, id: &str, pinned: bool) -> AppResult<Instance> {
+    let mut instance = get(paths, id)?;
+    instance.pinned = pinned;
+    save(&instance)?;
+    Ok(instance)
+}
+
+pub fn set_protected(paths: &AppPaths, id: &str, protected: bool) -> AppResult<Instance> {
+    let mut instance = get(paths, id)?;
+    instance.protected = protected;
+    save(&instance)?;
+    Ok(instance)
+}
+
+pub fn set_notes(paths: &AppPaths, id: &str, notes: &str) -> AppResult<Instance> {
+    let trimmed = notes.trim();
+    if trimmed.chars().count() > MAX_NOTES_LEN {
+        return Err(AppError::Instance(format!("les notes ne peuvent pas dépasser {MAX_NOTES_LEN} caractères")));
+    }
+    let mut instance = get(paths, id)?;
+    instance.notes = trimmed.to_string();
+    save(&instance)?;
+    Ok(instance)
+}
+
+/// Copies the launch-affecting settings of `source_id` onto `target_id`
+/// (memory, JVM args, Java, window size, auto-join server) — not its name,
+/// modpack or stats.
+pub fn copy_settings(paths: &AppPaths, source_id: &str, target_id: &str) -> AppResult<Instance> {
+    let source = get(paths, source_id)?;
+    let mut target = get(paths, target_id)?;
+    target.min_memory_mb = source.min_memory_mb;
+    target.max_memory_mb = source.max_memory_mb;
+    target.extra_jvm_args = source.extra_jvm_args;
+    target.java_path = source.java_path;
+    target.window_width = source.window_width;
+    target.window_height = source.window_height;
+    target.fullscreen = source.fullscreen;
+    target.auto_join_server = source.auto_join_server;
+    save(&target)?;
+    Ok(target)
 }
 
 /// Longest name accepted by [`rename`] — keeps cards and the sidebar readable.
@@ -260,163 +357,4 @@ pub fn rename(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_input(name: &str) -> CreateInstanceInput {
-        CreateInstanceInput {
-            name: name.to_string(),
-            minecraft_version: "1.20.1".to_string(),
-            loader: LoaderKind::Vanilla,
-            loader_version: None,
-            modpack: None,
-            icon_url: None,
-        }
-    }
-
-    #[test]
-    fn create_then_get_round_trips_and_creates_subfolders() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-
-        let created = create(&paths, test_input("Demo")).unwrap();
-        let fetched = get(&paths, &created.id).unwrap();
-
-        assert_eq!(fetched.name, "Demo");
-        assert_eq!(fetched.minecraft_version, "1.20.1");
-        for sub in ["mods", "saves", "config", "resourcepacks", "shaderpacks", "natives"] {
-            assert!(created.directory.join(sub).is_dir());
-        }
-    }
-
-    #[test]
-    fn list_sorts_newest_first_and_skips_unreadable_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-
-        let mut first = create(&paths, test_input("First")).unwrap();
-        first.created_at = 100;
-        save(&first).unwrap();
-
-        let mut second = create(&paths, test_input("Second")).unwrap();
-        second.created_at = 200;
-        save(&second).unwrap();
-
-        // An instance folder with a corrupt instance.json must not break listing.
-        let broken_dir = paths.instances_dir().join("broken");
-        std::fs::create_dir_all(&broken_dir).unwrap();
-        std::fs::write(broken_dir.join("instance.json"), "not json").unwrap();
-
-        let listed = list(&paths).unwrap();
-        assert_eq!(listed.len(), 2);
-        assert_eq!(listed[0].name, "Second");
-        assert_eq!(listed[1].name, "First");
-    }
-
-    #[test]
-    fn get_missing_instance_returns_instance_error() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        assert!(matches!(get(&paths, "does-not-exist"), Err(AppError::Instance(_))));
-    }
-
-    #[test]
-    fn delete_removes_the_instance_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        let created = create(&paths, test_input("ToDelete")).unwrap();
-
-        delete(&paths, &created.id).unwrap();
-
-        assert!(!created.directory.exists());
-        assert!(get(&paths, &created.id).is_err());
-    }
-
-    #[test]
-    fn touch_last_played_updates_and_persists_the_timestamp() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        let created = create(&paths, test_input("Played")).unwrap();
-        assert!(created.last_played_at.is_none());
-
-        touch_last_played(&paths, &created.id).unwrap();
-
-        let fetched = get(&paths, &created.id).unwrap();
-        assert!(fetched.last_played_at.is_some());
-    }
-
-    #[test]
-    fn add_play_time_accumulates_across_sessions() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        let created = create(&paths, test_input("Timed")).unwrap();
-        assert_eq!(created.play_time_seconds, 0);
-
-        add_play_time(&paths, &created.id, 90).unwrap();
-        add_play_time(&paths, &created.id, 30).unwrap();
-
-        assert_eq!(get(&paths, &created.id).unwrap().play_time_seconds, 120);
-    }
-
-    #[test]
-    fn instances_saved_before_play_time_existed_default_to_zero() {
-        let json = r#"{"id":"a","name":"Old","minecraft_version":"1.20.1","loader":"vanilla",
-            "loader_version":null,"directory":"x"}"#;
-        let instance: Instance = serde_json::from_str(json).unwrap();
-        assert_eq!(instance.play_time_seconds, 0);
-    }
-
-    #[test]
-    fn ids_that_could_escape_the_instances_folder_are_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        create(&paths, test_input("Survivor")).unwrap();
-
-        for bad in ["", ".", "..", "../x", "a/b", "a\\b"] {
-            assert!(delete(&paths, bad).is_err(), "{bad:?} should be rejected");
-            assert!(get(&paths, bad).is_err());
-        }
-        assert_eq!(list(&paths).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn duplicate_copies_files_under_a_new_id_and_resets_stats() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        let mut source = create(&paths, test_input("Original")).unwrap();
-        source.play_time_seconds = 99;
-        save(&source).unwrap();
-        std::fs::write(source.directory.join("mods/a.jar"), b"jar").unwrap();
-
-        let copy = duplicate(&paths, &source.id, "Copie").unwrap();
-
-        assert_ne!(copy.id, source.id);
-        assert_eq!(copy.name, "Copie");
-        assert_eq!(copy.play_time_seconds, 0);
-        assert_eq!(std::fs::read(copy.directory.join("mods/a.jar")).unwrap(), b"jar");
-        assert_eq!(get(&paths, &copy.id).unwrap().directory, paths.instance_dir(&copy.id));
-    }
-
-    #[test]
-    fn rename_trims_and_persists_the_new_name() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        let created = create(&paths, test_input("Before")).unwrap();
-
-        let renamed = rename(&paths, &created.id, "  After  ").unwrap();
-
-        assert_eq!(renamed.name, "After");
-        assert_eq!(get(&paths, &created.id).unwrap().name, "After");
-    }
-
-    #[test]
-    fn rename_rejects_empty_and_too_long_names() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = AppPaths::from_root(dir.path().to_path_buf());
-        let created = create(&paths, test_input("Keep")).unwrap();
-
-        assert!(rename(&paths, &created.id, "   ").is_err());
-        assert!(rename(&paths, &created.id, &"x".repeat(MAX_NAME_LEN + 1)).is_err());
-        assert_eq!(get(&paths, &created.id).unwrap().name, "Keep");
-    }
-}
+mod tests;

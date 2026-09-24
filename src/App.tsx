@@ -7,9 +7,11 @@ import { InstallWarningsDialog } from "@/components/InstallWarningsDialog";
 import { ActivityBar } from "@/components/shell/ActivityBar";
 import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { CloseDialog } from "@/components/shell/CloseDialog";
+import { CommandPalette } from "@/components/shell/CommandPalette";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { useAppEvents } from "@/hooks/useAppEvents";
 import { useLaunchRequests } from "@/hooks/useLaunchRequests";
+import { usePlaytimeReminder } from "@/hooks/usePlaytimeReminder";
 import { pageTransition, reducedMotionFor } from "@/lib/motion";
 import { resolveDark } from "@/lib/theme";
 import { InstanceListScreen } from "@/screens/InstanceList/InstanceListScreen";
@@ -47,6 +49,7 @@ function AnimatedOutlet() {
 function AppShell() {
   useAppEvents();
   useLaunchRequests();
+  usePlaytimeReminder();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden text-foreground">
@@ -57,6 +60,7 @@ function AppShell() {
         <AnimatedOutlet />
       </main>
       <CloseDialog />
+      <CommandPalette />
     </div>
   );
 }

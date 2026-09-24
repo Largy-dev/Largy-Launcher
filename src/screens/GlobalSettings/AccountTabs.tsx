@@ -141,7 +141,7 @@ export function AccountTab({ form, update }: FormTabProps) {
 }
 
 const NOTIFICATION_ROWS: {
-  key: Exclude<keyof NotificationPreferences, "native">;
+  key: Exclude<keyof NotificationPreferences, "native" | "playtimeReminder">;
   label: string;
   description: string;
 }[] = [
@@ -154,6 +154,8 @@ const NOTIFICATION_ROWS: {
 export function NotificationsTab() {
   const notifications = usePreferences((s) => s.notifications);
   const setNotifications = usePreferences((s) => s.setNotifications);
+  const reminderMinutes = usePreferences((s) => s.playtimeReminderMinutes);
+  const setPrefs = usePreferences((s) => s.set);
 
   return (
     <>
@@ -177,6 +179,29 @@ export function NotificationsTab() {
             }
           />
         ))}
+        <SettingRow
+          label="Rappel de temps de jeu"
+          description="Une notification pendant que tu joues, à intervalle régulier."
+          control={
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                className="w-16"
+                min={5}
+                step={5}
+                disabled={!notifications.native || !notifications.playtimeReminder}
+                value={reminderMinutes}
+                onChange={(e) => setPrefs({ playtimeReminderMinutes: Math.max(5, Number(e.target.value) || 5) })}
+              />
+              <span className="text-xs text-muted-foreground">min</span>
+              <Switch
+                disabled={!notifications.native}
+                checked={notifications.playtimeReminder}
+                onCheckedChange={(playtimeReminder) => setNotifications({ playtimeReminder })}
+              />
+            </div>
+          }
+        />
       </SettingSection>
       <div className="flex justify-end">
         <Button

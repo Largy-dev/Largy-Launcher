@@ -2,7 +2,18 @@ import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { FolderOpen, MoreHorizontal, Puzzle, RefreshCw, Settings2, Timer, Trash2 } from "lucide-react";
+import {
+  FolderOpen,
+  Lock,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Puzzle,
+  RefreshCw,
+  Settings2,
+  Timer,
+  Trash2,
+} from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { InstanceIcon } from "@/components/instance/InstanceIcon";
@@ -38,9 +49,35 @@ function useModpackUpdate(instance: Instance) {
   return !!modpack && !!latest && latest.id !== modpack.version_id ? latest : null;
 }
 
-function StatusChips({ running, updateAvailable }: { running: boolean; updateAvailable: boolean }) {
+function StatusChips({
+  running,
+  updateAvailable,
+  pinned,
+  protected: isProtected,
+}: {
+  running: boolean;
+  updateAvailable: boolean;
+  pinned: boolean;
+  protected: boolean;
+}) {
   return (
     <div className="flex gap-1.5">
+      {pinned && (
+        <span
+          className="flex size-5 items-center justify-center rounded-full bg-black/40 text-white shadow"
+          title="Épinglée"
+        >
+          <Pin className="size-2.5" aria-hidden="true" />
+        </span>
+      )}
+      {isProtected && (
+        <span
+          className="flex size-5 items-center justify-center rounded-full bg-black/40 text-white shadow"
+          title="Protégée contre la suppression"
+        >
+          <Lock className="size-2.5" aria-hidden="true" />
+        </span>
+      )}
       {running && (
         <span className="flex items-center gap-1 rounded-full bg-success/90 px-2 py-0.5 text-[0.65rem] font-bold text-white shadow">
           <span className="size-1.5 animate-pulse rounded-full bg-white" aria-hidden="true" />
@@ -83,6 +120,12 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
     onError: (e) => notify.error({ title: "Suppression impossible", message: errorMessage(e) }),
   });
 
+  const pinMutation = useMutation({
+    mutationFn: () => instancesApi.setPinned(instance.id, !instance.pinned),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["instances"] }),
+    onError: (e) => notify.error({ title: "Action impossible", message: errorMessage(e) }),
+  });
+
   const openDetail = () => navigate(running ? `/instances/${instance.id}/launch` : `/instances/${instance.id}`);
   const meta =
     instance.play_time_seconds > 0
@@ -113,6 +156,14 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
           <FolderOpen className="size-4" aria-hidden="true" />
           Ouvrir le dossier
         </DropdownMenuItem>
+        <DropdownMenuItem className="gap-2" onClick={() => pinMutation.mutate()}>
+          {instance.pinned ? (
+            <PinOff className="size-4" aria-hidden="true" />
+          ) : (
+            <Pin className="size-4" aria-hidden="true" />
+          )}
+          {instance.pinned ? "Détacher" : "Épingler en haut"}
+        </DropdownMenuItem>
         {update && (
           <DropdownMenuItem className="gap-2 text-info" disabled={running} onClick={() => setUpdating(true)}>
             <RefreshCw className="size-4" aria-hidden="true" />
@@ -120,7 +171,12 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="gap-2 text-destructive" disabled={running} onClick={() => setConfirmDelete(true)}>
+        <DropdownMenuItem
+          className="gap-2 text-destructive"
+          disabled={running || instance.protected}
+          title={instance.protected ? "Instance protégée — retire la protection dans ses réglages" : undefined}
+          onClick={() => setConfirmDelete(true)}
+        >
           <Trash2 className="size-4" aria-hidden="true" />
           Supprimer
         </DropdownMenuItem>
@@ -169,7 +225,12 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
               />
             )}
             <div className="absolute top-2.5 right-2.5">
-              <StatusChips running={running} updateAvailable={!!update} />
+              <StatusChips
+                running={running}
+                updateAvailable={!!update}
+                pinned={instance.pinned}
+                protected={instance.protected}
+              />
             </div>
             {installing && (
               <div className="absolute inset-x-0 bottom-0 h-1.5 bg-black/30">
@@ -213,7 +274,12 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="truncate text-sm font-bold">{instance.name}</h3>
-              <StatusChips running={running} updateAvailable={!!update} />
+              <StatusChips
+                running={running}
+                updateAvailable={!!update}
+                pinned={instance.pinned}
+                protected={instance.protected}
+              />
             </div>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
               <LoaderBadge loader={instance.loader} className="h-4 px-1.5 text-[0.62rem]" />

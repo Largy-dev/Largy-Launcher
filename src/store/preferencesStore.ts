@@ -14,6 +14,8 @@ export interface NotificationPreferences {
   crash: boolean;
   installDone: boolean;
   updates: boolean;
+  /** Reminds the player every `playtimeReminderMinutes` while a game runs. */
+  playtimeReminder: boolean;
 }
 
 export interface LogPreferences {
@@ -36,6 +38,8 @@ export interface Preferences {
   instanceSort: InstanceSort;
   uiScale: number;
   notifications: NotificationPreferences;
+  /** Minutes of continuous play between two playtime reminders. */
+  playtimeReminderMinutes: number;
   logs: LogPreferences;
 }
 
@@ -49,7 +53,15 @@ export const DEFAULT_PREFERENCES: Preferences = {
   cardDensity: "grid",
   instanceSort: "recent",
   uiScale: 100,
-  notifications: { native: true, gameExit: true, crash: true, installDone: true, updates: true },
+  notifications: {
+    native: true,
+    gameExit: true,
+    crash: true,
+    installDone: true,
+    updates: true,
+    playtimeReminder: false,
+  },
+  playtimeReminderMinutes: 60,
   logs: { autoScroll: true, wrap: true },
 };
 
@@ -98,7 +110,13 @@ export const usePreferences = create<PreferencesStore>()(
       setNotifications: (patch) => set((s) => ({ notifications: { ...s.notifications, ...patch } })),
       setLogs: (patch) => set((s) => ({ logs: { ...s.logs, ...patch } })),
       reset: () => set(DEFAULT_PREFERENCES),
-      resetAppearance: () => set((s) => ({ ...DEFAULT_PREFERENCES, notifications: s.notifications, logs: s.logs })),
+      resetAppearance: () =>
+        set((s) => ({
+          ...DEFAULT_PREFERENCES,
+          notifications: s.notifications,
+          playtimeReminderMinutes: s.playtimeReminderMinutes,
+          logs: s.logs,
+        })),
     }),
     {
       name: PREFERENCES_STORAGE_KEY,

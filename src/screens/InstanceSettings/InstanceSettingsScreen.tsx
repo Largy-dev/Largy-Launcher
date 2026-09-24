@@ -44,6 +44,8 @@ import { cn } from "@/lib/utils";
 import { errorMessage, instancesApi, type Instance } from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
+import { JvmPresetsSection } from "./JvmPresetsSection";
+import { OrganizationSection } from "./OrganizationSection";
 import { ScreenshotsTab } from "./ScreenshotsTab";
 import { ServersTab } from "./ServersTab";
 
@@ -240,6 +242,7 @@ export function InstanceSettingsScreen() {
                 ))}
               </div>
             </SettingSection>
+            <OrganizationSection instance={instance} />
             <InstanceActions instance={instance} />
           </>
         )}
@@ -385,6 +388,12 @@ export function InstanceSettingsScreen() {
                 );
               })}
             </SettingSection>
+            <JvmPresetsSection
+              minMb={draft.minMb}
+              maxMb={draft.maxMb ?? defaultMax}
+              args={args}
+              onApply={(preset) => patch({ minMb: preset.minMb, maxMb: preset.maxMb, jvmArgs: preset.jvmArgs })}
+            />
             <SettingSection title="Arguments personnalisés">
               <div className="p-4">
                 <Textarea

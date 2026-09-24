@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/Skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { formatBytes } from "@/lib/format";
@@ -31,6 +32,12 @@ function prettyModName(fileName: string): string {
 }
 
 type Filter = "all" | "enabled" | "disabled";
+type Sort = "name" | "size";
+
+const SORTS: Record<Sort, { label: string; compare: (a: ModEntry, b: ModEntry) => number }> = {
+  name: { label: "Nom", compare: (a, b) => prettyModName(a.file_name).localeCompare(prettyModName(b.file_name), "fr") },
+  size: { label: "Taille", compare: (a, b) => b.size - a.size },
+};
 
 export function InstanceModsScreen() {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +46,7 @@ export function InstanceModsScreen() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [sort, setSort] = useState<Sort>("name");
   const [toDelete, setToDelete] = useState<ModEntry | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
@@ -114,8 +122,9 @@ export function InstanceModsScreen() {
     const needle = search.trim().toLowerCase();
     return mods
       .filter((m) => filter === "all" || (filter === "enabled") === m.enabled)
-      .filter((m) => !needle || m.file_name.toLowerCase().includes(needle));
-  }, [mods, filter, search]);
+      .filter((m) => !needle || m.file_name.toLowerCase().includes(needle))
+      .sort(SORTS[sort].compare);
+  }, [mods, filter, search, sort]);
 
   const filters: { value: Filter; label: string; count: number }[] = [
     { value: "all", label: "Tous", count: mods.length },
@@ -221,7 +230,19 @@ export function InstanceModsScreen() {
                 </button>
               ))}
             </div>
-            <div className="relative ml-auto">
+            <Select value={sort} onValueChange={(v) => setSort(v as Sort)}>
+              <SelectTrigger size="sm" className="ml-auto w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(SORTS).map(([value, { label }]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative">
               <Search
                 className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"

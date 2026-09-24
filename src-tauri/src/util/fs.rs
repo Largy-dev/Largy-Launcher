@@ -104,6 +104,19 @@ pub fn copy_tree(src: &Path, dest: &Path) -> AppResult<()> {
     Ok(())
 }
 
+/// Total size in bytes of every file under `path` — 0 if it doesn't exist.
+/// Used to show how much a cache folder is worth clearing before doing it.
+pub fn dir_size(path: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else { return 0 };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(ft) if ft.is_dir() => dir_size(&entry.path()),
+            _ => entry.metadata().map(|m| m.len()).unwrap_or(0),
+        })
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +173,16 @@ mod tests {
         assert_eq!(copied, vec![PathBuf::from("config/a.toml"), PathBuf::from("options.txt")]);
         assert_eq!(std::fs::read(dest.path().join("options.txt")).unwrap(), b"user");
         assert_eq!(std::fs::read(dest.path().join("config/a.toml")).unwrap(), b"pack");
+    }
+
+    #[test]
+    fn dir_size_sums_nested_files_and_ignores_missing_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.jar"), b"1234").unwrap();
+        std::fs::create_dir_all(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub/b.jar"), b"123").unwrap();
+
+        assert_eq!(dir_size(dir.path()), 7);
+        assert_eq!(dir_size(&dir.path().join("does-not-exist")), 0);
     }
 }

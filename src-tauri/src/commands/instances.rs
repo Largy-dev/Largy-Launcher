@@ -134,6 +134,27 @@ pub fn instances_update_settings(
     Ok(instance)
 }
 
+#[tauri::command]
+pub fn instances_set_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> AppResult<Instance> {
+    instances::set_pinned(&state.paths, &id, pinned)
+}
+
+#[tauri::command]
+pub fn instances_set_protected(state: State<'_, AppState>, id: String, protected: bool) -> AppResult<Instance> {
+    instances::set_protected(&state.paths, &id, protected)
+}
+
+#[tauri::command]
+pub fn instances_set_notes(state: State<'_, AppState>, id: String, notes: String) -> AppResult<Instance> {
+    instances::set_notes(&state.paths, &id, &notes)
+}
+
+/// Copies `source_id`'s memory/JVM/window/server settings onto `target_id`.
+#[tauri::command]
+pub fn instances_copy_settings(state: State<'_, AppState>, source_id: String, target_id: String) -> AppResult<Instance> {
+    instances::copy_settings(&state.paths, &source_id, &target_id)
+}
+
 /// Opens the instance folder, or one of its sub-folders (`mods`, `saves`,
 /// `logs`, ...) — created on demand.
 #[tauri::command]

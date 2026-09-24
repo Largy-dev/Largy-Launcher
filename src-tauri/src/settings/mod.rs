@@ -57,6 +57,20 @@ pub struct GlobalSettings {
     /// Shows the instance being played on the player's Discord profile.
     #[serde(default = "default_true")]
     pub discord_rich_presence: bool,
+    /// Named memory/JVM combinations the player saved from an instance's
+    /// settings, reusable across any other instance.
+    #[serde(default)]
+    pub jvm_presets: Vec<JvmPreset>,
+}
+
+/// A reusable, user-named memory/JVM combination — distinct from the fixed
+/// one-click optimizations in `lib/jvmPresets.ts` on the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JvmPreset {
+    pub name: String,
+    pub min_memory_mb: u32,
+    pub max_memory_mb: u32,
+    pub extra_jvm_args: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -97,6 +111,7 @@ impl Default for GlobalSettings {
             on_game_launch: LauncherBehavior::KeepOpen,
             on_close: CloseBehavior::Ask,
             discord_rich_presence: true,
+            jvm_presets: Vec::new(),
         }
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -11,6 +11,7 @@ import {
   Info,
   Loader2,
   Palette,
+  Trash2,
   UserRound,
   Wrench,
 } from "lucide-react";
@@ -32,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { useSystemMemory } from "@/hooks/useInstanceInfo";
 import { useSettings } from "@/hooks/useSettings";
-import { formatGb } from "@/lib/format";
+import { formatBytes, formatGb } from "@/lib/format";
 import { parseJvmArgs } from "@/lib/jvmArgs";
 import { notify } from "@/lib/notify";
 import { adviseRam } from "@/lib/ramAdvice";
@@ -149,6 +150,38 @@ function AboutTab() {
         />
       )}
     </SettingSection>
+  );
+}
+
+function InstallerCacheRow() {
+  const queryClient = useQueryClient();
+  const { data: size } = useQuery({ queryKey: ["installer-cache-size"], queryFn: settingsApi.installerCacheSize });
+  const clear = useMutation({
+    mutationFn: settingsApi.clearInstallerCache,
+    onSuccess: (freed) => {
+      queryClient.setQueryData(["installer-cache-size"], 0);
+      notify.success({ title: `${formatBytes(freed)} libérés`, history: false });
+    },
+    onError: (e) => notify.error({ title: "Nettoyage impossible", message: errorMessage(e) }),
+  });
+
+  return (
+    <SettingRow
+      label="Cache des installateurs"
+      description="Fichiers Forge/NeoForge téléchargés lors des installations — retéléchargés automatiquement au besoin."
+      control={
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={!size || clear.isPending}
+          onClick={() => clear.mutate()}
+        >
+          {clear.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
+          Vider {size ? `(${formatBytes(size)})` : ""}
+        </Button>
+      }
+    />
   );
 }
 
@@ -338,6 +371,7 @@ export function GlobalSettingsScreen() {
                 </Button>
               }
             />
+            <InstallerCacheRow />
           </SettingSection>
         )}
       </SettingsLayout>
