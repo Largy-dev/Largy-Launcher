@@ -54,6 +54,7 @@ démarrage et l'installe en un clic.
 | **Lancement suivi en direct** | Étapes, vitesse de téléchargement et temps restant, puis RAM et processeur pendant la partie. Un lancement peut être annulé à tout moment. |
 | **La bonne quantité de RAM** | Une mémoire conseillée par instance, selon le loader, le nombre de mods et la RAM de ton PC. |
 | **Directement sur ton serveur** | Rejoins un serveur dès le lancement, choisis la taille de la fenêtre ou le plein écran. |
+| **Serveurs populaires** | Hypixel, CubeCraft, Wynncraft, 2b2t… prêts à jouer : la bonne version et les mods utiles (performances, shaders) s'installent en un clic, et le jeu se connecte directement au serveur. |
 | **Tes serveurs en direct** | La liste Multijoueur de chaque instance avec joueurs connectés, ping et MOTD en couleurs, et un bouton pour rejoindre en un clic. |
 | **Raccourci sur le bureau** | Lance une instance en un double-clic, sans passer par le launcher. |
 | **Même sans internet** | Une instance déjà installée se lance hors connexion, avec ton compte Microsoft (en solo). |
