@@ -177,6 +177,8 @@ pub fn run() {
             commands::servers::instance_servers_update,
             commands::servers::instance_servers_remove,
             commands::servers::server_ping,
+            commands::servers::featured_servers,
+            commands::servers::servers_prepare_instance,
             commands::modpacks::instances_install_modpack,
             commands::modpacks::instances_cancel_install,
             commands::modpacks::instances_update_modpack,

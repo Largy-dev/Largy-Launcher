@@ -85,6 +85,9 @@ pub struct Instance {
     /// `host[:port]` to join straight from the main menu.
     #[serde(default)]
     pub auto_join_server: Option<String>,
+    /// Catalog server (see `servers::featured`) this instance was prepared for.
+    #[serde(default)]
+    pub featured_server: Option<String>,
 }
 
 fn now_unix() -> i64 {
@@ -181,6 +184,7 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         window_height: None,
         fullscreen: false,
         auto_join_server: None,
+        featured_server: None,
     };
 
     save(&instance)?;

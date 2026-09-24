@@ -10,6 +10,7 @@ import {
   LogIn,
   LogOut,
   Palette,
+  Server,
   Settings,
   Shirt,
   UserPlus,
@@ -41,6 +42,7 @@ import { NotificationCenter } from "./NotificationCenter";
 const NAV_ITEMS = [
   { to: "/", label: "Instances", icon: LayoutGrid },
   { to: "/modpacks", label: "Modpacks", icon: Blocks },
+  { to: "/servers", label: "Serveurs", icon: Server },
   { to: "/skins", label: "Skins", icon: Shirt },
   { to: "/settings", label: "Paramètres", icon: Settings },
 ];

@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "presets": [
+    {
+      "id": "performance",
+      "label": "Performances",
+      "description": "Plus d'images par seconde et moins de mémoire : Sodium, Lithium, FerriteCore, EntityCulling, ImmediatelyFast.",
+      "default": true,
+      "mods": ["sodium", "lithium", "ferrite-core", "entityculling", "immediatelyfast"],
+      "shaders": []
+    },
+    {
+      "id": "shaders",
+      "label": "Shaders",
+      "description": "Iris et le shader Complementary Reimagined, activé d'office. Demande une bonne carte graphique.",
+      "default": false,
+      "mods": ["sodium", "iris"],
+      "shaders": ["complementary-reimagined"]
+    },
+    {
+      "id": "comfort",
+      "label": "Confort",
+      "description": "Mod Menu pour régler tes mods et Zoomify pour zoomer (touche C).",
+      "default": false,
+      "mods": ["modmenu", "zoomify"],
+      "shaders": []
+    }
+  ],
+  "servers": [
+    {
+      "id": "hypixel",
+      "name": "Hypixel",
+      "address": "mc.hypixel.net",
+      "description": "Le plus grand serveur de mini-jeux : SkyBlock, BedWars, SkyWars, Murder Mystery et des dizaines d'autres.",
+      "tags": ["Mini-jeux", "Skyblock", "BedWars"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://hypixel.net",
+      "required_mods": []
+    },
+    {
+      "id": "cubecraft",
+      "name": "CubeCraft",
+      "address": "play.cubecraft.net",
+      "description": "Mini-jeux rapides et accessibles : EggWars, SkyWars, Parkour, Block Wars et plus.",
+      "tags": ["Mini-jeux", "SkyWars", "EggWars"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://www.cubecraft.net",
+      "required_mods": []
+    },
+    {
+      "id": "wynncraft",
+      "name": "Wynncraft",
+      "address": "play.wynncraft.com",
+      "description": "Le MMORPG de Minecraft : un immense monde, des quêtes, des donjons et des classes, sans aucun mod à installer.",
+      "tags": ["MMORPG", "Aventure", "Quêtes"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://wynncraft.com",
+      "required_mods": []
+    },
+    {
+      "id": "manacube",
+      "name": "ManaCube",
+      "address": "play.manacube.com",
+      "description": "Réseau varié depuis 2013 : Parkour, Skyblock, Survie, Prison, Earth, KitPvP et Créatif.",
+      "tags": ["Skyblock", "Parkour", "Survie"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://manacube.com",
+      "required_mods": []
+    },
+    {
+      "id": "complex",
+      "name": "Complex Gaming",
+      "address": "hub.mc-complex.com",
+      "description": "Skyblock, Survie, Factions, Prison, Lifesteal… un mode pour chaque envie.",
+      "tags": ["Survie", "Skyblock", "Factions"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://www.mc-complex.com",
+      "required_mods": []
+    },
+    {
+      "id": "pikanetwork",
+      "name": "PikaNetwork",
+      "address": "play.pika-network.net",
+      "description": "BedWars, SkyWars, OP Factions, Prison et Survie, avec une grosse communauté active.",
+      "tags": ["BedWars", "Factions", "Prison"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://pika-network.net",
+      "required_mods": []
+    },
+    {
+      "id": "jartex",
+      "name": "JartexNetwork",
+      "address": "jartexnetwork.com",
+      "description": "Mini-jeux et modes classiques : BedWars, SkyWars, Survie, Factions, Skyblock.",
+      "tags": ["Mini-jeux", "BedWars", "Survie"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://jartexnetwork.com",
+      "required_mods": []
+    },
+    {
+      "id": "mccentral",
+      "name": "MCCentral",
+      "address": "mccentral.org",
+      "description": "Serveur historique : Skyblock, Prison, Survie, Factions, Creative et mini-jeux.",
+      "tags": ["Skyblock", "Prison", "Survie"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://mccentral.org",
+      "required_mods": []
+    },
+    {
+      "id": "minemen",
+      "name": "Minemen Club",
+      "address": "minemen.club",
+      "description": "La référence du PvP compétitif : duels, classements et tournois.",
+      "tags": ["PvP", "Duels", "Compétitif"],
+      "language": "en",
+      "minecraft_version": "26.3",
+      "website": "https://minemen.club",
+      "required_mods": []
+    },
+    {
+      "id": "2b2t",
+      "name": "2b2t",
+      "address": "2b2t.org",
+      "description": "Le plus vieux serveur anarchique : aucune règle, aucune remise à zéro depuis 2010. Prévois de la patience pour la file d'attente.",
+      "tags": ["Anarchie", "Survie", "Vanilla"],
+      "language": "en",
+      "minecraft_version": "26.2",
+      "website": "https://2b2t.org",
+      "required_mods": []
+    }
+  ]
+}

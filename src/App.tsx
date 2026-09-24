@@ -18,6 +18,7 @@ import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScr
 import { InstanceSettingsScreen } from "@/screens/InstanceSettings/InstanceSettingsScreen";
 import { InstanceModsScreen } from "@/screens/InstanceMods/InstanceModsScreen";
 import { LaunchProgressScreen } from "@/screens/LaunchProgress/LaunchProgressScreen";
+import { ServerBrowserScreen } from "@/screens/ServerBrowser/ServerBrowserScreen";
 import { SkinsScreen } from "@/screens/Skins/SkinsScreen";
 import { usePreferences } from "@/store/preferencesStore";
 
@@ -67,6 +68,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <InstanceListScreen /> },
       { path: "modpacks", element: <ModpackBrowserScreen /> },
+      { path: "servers", element: <ServerBrowserScreen /> },
       { path: "skins", element: <SkinsScreen /> },
       { path: "settings", element: <GlobalSettingsScreen /> },
       { path: "instances/:id", element: <InstanceSettingsScreen /> },

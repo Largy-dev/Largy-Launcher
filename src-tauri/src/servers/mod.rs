@@ -2,8 +2,10 @@
 //! (uncompressed NBT), read and edited in place so the launcher and the
 //! in-game list always agree, plus a status ping ([`ping`]).
 
+pub mod featured;
 mod motd;
 pub mod ping;
+pub mod prepare;
 
 use std::collections::HashMap;
 use std::path::Path;

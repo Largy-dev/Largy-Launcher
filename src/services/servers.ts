@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { Instance } from "./tauri";
+
 /** One entry of an instance's `servers.dat`, in the in-game order. */
 export interface ServerEntry {
   name: string;
@@ -27,4 +29,56 @@ export const serversApi = {
     invoke<void>("instance_servers_update", { instanceId, index, name, address }),
   remove: (instanceId: string, index: number) => invoke<void>("instance_servers_remove", { instanceId, index }),
   ping: (address: string) => invoke<ServerStatus>("server_ping", { address }),
+};
+
+/** A pack of client mods offered when preparing a server instance. */
+export interface ServerPreset {
+  id: string;
+  label: string;
+  description: string;
+  default: boolean;
+  /** Modrinth slugs (Fabric mods). */
+  mods: string[];
+  /** Modrinth shader pack slugs; the first is switched on. */
+  shaders: string[];
+}
+
+export interface FeaturedServer {
+  id: string;
+  name: string;
+  address: string;
+  description: string;
+  tags: string[];
+  language: string;
+  minecraft_version: string;
+  website: string | null;
+  required_mods: string[];
+}
+
+export interface ServerCatalog {
+  schema: number;
+  presets: ServerPreset[];
+  servers: FeaturedServer[];
+}
+
+export interface PrepareSpec {
+  /** Catalog id, or `custom` for a server the player typed in. */
+  featured_id: string;
+  name: string;
+  address: string;
+  minecraft_version: string;
+  mods: string[];
+  shaders: string[];
+  icon: string | null;
+}
+
+export interface PrepareResult {
+  instance: Instance;
+  warnings: string[];
+}
+
+export const catalogApi = {
+  load: () => invoke<ServerCatalog>("featured_servers"),
+  /** Creates a Fabric instance for the server: mods, shaders, server list, auto-join. */
+  prepare: (spec: PrepareSpec) => invoke<PrepareResult>("servers_prepare_instance", { spec }),
 };

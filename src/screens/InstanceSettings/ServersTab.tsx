@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlayInstance } from "@/hooks/useLaunchInstance";
+import { useServerStatus } from "@/hooks/useServerStatus";
 import { motdPlainText } from "@/lib/motd";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -40,12 +41,7 @@ function ServerRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const status = useQuery({
-    queryKey: ["server-ping", server.address],
-    queryFn: () => serversApi.ping(server.address),
-    staleTime: 60 * 1000,
-    retry: false,
-  });
+  const status = useServerStatus(server.address);
   const icon = status.data?.favicon ?? (server.icon ? `data:image/png;base64,${server.icon}` : null);
 
   return (

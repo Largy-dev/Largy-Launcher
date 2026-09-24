@@ -52,3 +52,21 @@ pub fn instance_servers_remove(state: State<'_, AppState>, instance_id: String, 
 pub async fn server_ping(address: String) -> AppResult<ServerStatus> {
     servers::ping::ping(&address).await
 }
+
+/// The "Serveurs" catalog (online copy, or the one built into the app).
+#[tauri::command]
+pub async fn featured_servers(state: State<'_, AppState>) -> AppResult<servers::featured::Catalog> {
+    Ok(servers::featured::load(&state.client).await)
+}
+
+/// Creates a Fabric instance ready for one server: mods, shaders, server list.
+#[tauri::command]
+pub async fn servers_prepare_instance(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    spec: servers::prepare::PrepareSpec,
+) -> AppResult<servers::prepare::PrepareResult> {
+    let result = servers::prepare::prepare(&state, spec).await?;
+    super::instances::instances_changed(&app);
+    Ok(result)
+}

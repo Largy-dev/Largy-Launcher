@@ -62,6 +62,8 @@ export interface Instance {
   window_height: number | null;
   fullscreen: boolean;
   auto_join_server: string | null;
+  /** Catalog server this instance was prepared for (menu Serveurs). */
+  featured_server: string | null;
 }
 
 export interface InstanceSettingsInput {
