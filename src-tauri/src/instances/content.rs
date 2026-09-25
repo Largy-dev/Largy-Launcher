@@ -105,6 +105,32 @@ async fn hash_folder(dir: &Path) -> AppResult<HashMap<String, String>> {
     Ok(out)
 }
 
+/// Downloads the primary file of exactly `version`, without its dependencies.
+/// Returns the file name written.
+pub async fn install_exact(
+    downloader: &DownloadManager,
+    instance: &Instance,
+    version: &Version,
+    kind: ContentKind,
+) -> AppResult<String> {
+    let file = version
+        .primary_file()
+        .ok_or_else(|| AppError::Provider(format!("la version {} n'a pas de fichier", version.name)))?;
+    if !is_plain_file_name(&file.filename) {
+        return Err(AppError::Provider(format!("nom de fichier refusé: {}", file.filename)));
+    }
+    let target = instance.directory.join(kind.folder()).join(&file.filename);
+    downloader
+        .ensure_file(&DownloadItem {
+            url: file.url.clone(),
+            dest: target,
+            sha1: Some(file.hashes.sha1.clone()),
+            size: (file.size > 0).then_some(file.size),
+        })
+        .await?;
+    Ok(file.filename.clone())
+}
+
 /// Installs a project and, for mods, every required dependency not already
 /// present. Returns the file names written.
 pub async fn install(
@@ -128,22 +154,7 @@ pub async fn install(
     let mut seen: HashSet<String> = HashSet::from([project_id.to_string()]);
     let mut written = Vec::new();
     while let Some(version) = queue.pop_front() {
-        let file = version
-            .primary_file()
-            .ok_or_else(|| AppError::Provider(format!("la version {} n'a pas de fichier", version.name)))?;
-        if !is_plain_file_name(&file.filename) {
-            return Err(AppError::Provider(format!("nom de fichier refusé: {}", file.filename)));
-        }
-        let target = instance.directory.join(kind.folder()).join(&file.filename);
-        downloader
-            .ensure_file(&DownloadItem {
-                url: file.url.clone(),
-                dest: target,
-                sha1: Some(file.hashes.sha1.clone()),
-                size: (file.size > 0).then_some(file.size),
-            })
-            .await?;
-        written.push(file.filename.clone());
+        written.push(install_exact(downloader, instance, &version, kind).await?);
 
         if kind != ContentKind::Mod {
             continue;

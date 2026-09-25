@@ -137,8 +137,8 @@ export function PrepareServerDialog({ target, presets, onOpenChange }: PrepareSe
         icon,
         vars.name,
       );
-      const instance = await catalogApi.attach(result.instance.id, vars.server.id, vars.server.address);
-      return { ...result, instance };
+      const attached = await catalogApi.attach(result.instance.id, vars.server.id, vars.server.address);
+      return { instance: attached.instance, warnings: [...result.warnings, ...attached.warnings] };
     },
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });

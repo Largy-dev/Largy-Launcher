@@ -62,7 +62,22 @@ pub struct ServerModpack {
     pub name: String,
     /// Version as the pack author names it (e.g. `1.18.1`).
     pub version_name: String,
+    /// Mods the server adds on top of the pack, installed after it.
+    #[serde(default)]
+    pub extra_mods: Vec<ExtraMod>,
 }
+
+/// One exact Modrinth version added to a server's modpack. Only its own file
+/// is installed: the pack already ships what it depends on.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExtraMod {
+    /// Modrinth slug, for messages.
+    pub project: String,
+    pub version_id: String,
+}
+
+/// Extra mods one modpack server may add.
+const MAX_EXTRA_MODS: usize = 10;
 
 impl ServerModpack {
     fn is_valid(&self) -> bool {
@@ -73,6 +88,8 @@ impl ServerModpack {
             && id(&self.pack_id)
             && id(&self.version_id)
             && !self.name.trim().is_empty()
+            && self.extra_mods.len() <= MAX_EXTRA_MODS
+            && self.extra_mods.iter().all(|m| is_slug(&m.project) && id(&m.version_id))
     }
 }
 
@@ -186,6 +203,23 @@ mod tests {
         assert_eq!(catalog(server("ftb", "100337")).unwrap().servers.len(), 1);
         assert!(catalog(server("evil", "100337")).unwrap().servers.is_empty());
         assert!(catalog(server("ftb", "../x")).unwrap().servers.is_empty());
+    }
+
+    #[test]
+    fn extra_mods_need_a_slug_and_a_plain_version_id() {
+        let server = |project: &str, version: &str| {
+            format!(
+                r#"{{ "schema": 1, "presets": [], "servers": [{{ "id": "s", "name": "S", "address": "s.net",
+                     "description": "", "minecraft_version": "1.21.1",
+                     "modpack": {{ "provider": "ftb", "pack_id": "126", "version_id": "100516", "name": "Pack",
+                                   "version_name": "1.22.0",
+                                   "extra_mods": [{{ "project": "{project}", "version_id": "{version}" }}] }} }}] }}"#
+            )
+        };
+        let kept = |json: String| Catalog::parse(&json).unwrap().servers.len();
+        assert_eq!(kept(server("rsinfinitybooster", "1OFYdaiQ")), 1);
+        assert_eq!(kept(server("RS/x", "1OFYdaiQ")), 0);
+        assert_eq!(kept(server("rsinfinitybooster", "../x")), 0);
     }
 
     #[test]

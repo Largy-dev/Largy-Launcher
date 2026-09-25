@@ -28,10 +28,10 @@
   ],
   "servers": [
     {
-      "id": "boomgy",
-      "name": "Boomgy",
+      "id": "boomgy-1-22",
+      "name": "Boomgy 1.22",
       "address": "boomgy.lcmc.pro",
-      "description": "Serveur moddé sous FTB Presents Direwolf20 1.21 : le modpack, dans la version du serveur, s'installe tout seul.",
+      "description": "Serveur moddé sous FTB Presents Direwolf20 1.21 (+ RSInfinityBooster) : le modpack, dans la version du serveur, s'installe tout seul.",
       "tags": ["Moddé", "FTB", "Direwolf20"],
       "language": "fr",
       "minecraft_version": "1.21.1",
@@ -39,9 +39,12 @@
       "modpack": {
         "provider": "ftb",
         "pack_id": "126",
-        "version_id": "100337",
+        "version_id": "100516",
         "name": "FTB Presents Direwolf20 1.21",
-        "version_name": "1.18.1"
+        "version_name": "1.22.0",
+        "extra_mods": [
+          { "project": "rsinfinitybooster", "version_id": "1OFYdaiQ" }
+        ]
       }
     },
     {

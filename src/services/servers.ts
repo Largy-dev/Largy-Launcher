@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { Instance } from "./tauri";
+import type { Instance, InstanceInstallResult } from "./tauri";
 
 /** One entry of an instance's `servers.dat`, in the in-game order. */
 export interface ServerEntry {
@@ -63,6 +63,8 @@ export interface ServerModpack {
   version_id: string;
   name: string;
   version_name: string;
+  /** Exact Modrinth versions the server adds on top of the pack. */
+  extra_mods?: { project: string; version_id: string }[];
 }
 
 export interface ServerCatalog {
@@ -91,7 +93,7 @@ export const catalogApi = {
   load: () => invoke<ServerCatalog>("featured_servers"),
   /** Creates a Fabric instance for the server: mods, shaders, server list, auto-join. */
   prepare: (spec: PrepareSpec) => invoke<PrepareResult>("servers_prepare_instance", { spec }),
-  /** Links an installed modpack instance to its server: server list + auto-join. */
+  /** Links an installed modpack instance to its server: server list, auto-join, the server's extra mods. */
   attach: (instanceId: string, featuredId: string, address: string) =>
-    invoke<Instance>("servers_attach_instance", { instanceId, featuredId, address }),
+    invoke<InstanceInstallResult>("servers_attach_instance", { instanceId, featuredId, address }),
 };
