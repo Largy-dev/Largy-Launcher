@@ -98,6 +98,7 @@ pub async fn launch_instance(
     }
     registration.armed = false;
 
+    logs::emit_launcher_lines(app, instance_id, &prepared.jvm_notes);
     let log_buffer = logs::new_log_buffer();
     let log_task = logs::stream_output(
         app,

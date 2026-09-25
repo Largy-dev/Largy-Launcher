@@ -22,6 +22,7 @@ import { PlayButton } from "@/components/instance/PlayButton";
 import { MemorySlider } from "@/components/MemorySlider";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  JvmArgWarnings,
   SettingRow,
   SettingSection,
   SettingsLayout,
@@ -36,7 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useModCount, useRamAdvice, useSystemMemory } from "@/hooks/useInstanceInfo";
 import { useSettings } from "@/hooks/useSettings";
 import { formatDuration, formatGb, formatRelative } from "@/lib/format";
-import { parseJvmArgs } from "@/lib/jvmArgs";
+import { jvmArgIssues, parseJvmArgs } from "@/lib/jvmArgs";
 import { JVM_PRESETS, isPresetActive, togglePreset } from "@/lib/jvmPresets";
 import { notify } from "@/lib/notify";
 import { minecraftMinor } from "@/lib/ramAdvice";
@@ -405,6 +406,10 @@ export function InstanceSettingsScreen() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   Ajoutés après les arguments par défaut du launcher. La mémoire se règle dans l'onglet Mémoire.
                 </p>
+                <JvmArgWarnings
+                  className="mt-2"
+                  issues={jvmArgIssues([...(settings?.default_jvm_args ?? []), ...args], minor)}
+                />
               </div>
             </SettingSection>
           </>

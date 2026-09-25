@@ -134,6 +134,8 @@ async fn resolve_java(
 pub(super) struct Prepared {
     pub ctx: LaunchContext,
     pub xml_logs: bool,
+    /// Launcher fixes to the user's JVM arguments, echoed in the console.
+    pub jvm_notes: Vec<String>,
 }
 
 pub(super) async fn prepare(
@@ -277,13 +279,14 @@ pub(super) async fn prepare(
         // drivers that special-case `minecraft.exe` in their heap dumps.
         extra_jvm_args.push("-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump".to_string());
     }
-    extra_jvm_args.extend(settings.default_jvm_args.iter().cloned());
-    extra_jvm_args.extend(instance.extra_jvm_args.iter().cloned());
-
     let (min_memory_mb, max_memory_mb) = sanitize_memory(
         instance.min_memory_mb.unwrap_or(settings.default_min_memory_mb),
         instance.max_memory_mb.unwrap_or(settings.default_max_memory_mb),
     );
+    let mut user_jvm_args = settings.default_jvm_args.clone();
+    user_jvm_args.extend(instance.extra_jvm_args.iter().cloned());
+    let (user_jvm_args, jvm_notes) = super::jvm_args::sanitize(user_jvm_args, java_major, min_memory_mb, max_memory_mb);
+    extra_jvm_args.extend(user_jvm_args);
 
     Ok(Prepared {
         ctx: LaunchContext {
@@ -301,6 +304,7 @@ pub(super) async fn prepare(
             raw_game_args,
         },
         xml_logs: prepared.xml_logs,
+        jvm_notes,
     })
 }
 

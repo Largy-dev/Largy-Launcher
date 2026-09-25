@@ -40,6 +40,16 @@ pub struct InstanceLogBatch {
     pub lines: Vec<LogLine>,
 }
 
+/// Lines from the launcher itself (e.g. why a JVM argument was dropped),
+/// shown in the console ahead of the game's own output.
+pub fn emit_launcher_lines(app: &AppHandle, instance_id: &str, lines: &[String]) {
+    if lines.is_empty() {
+        return;
+    }
+    let lines = lines.iter().map(|l| LogLine { line: format!("[Largy Launcher] {l}"), stream: "stderr" }).collect();
+    let _ = app.emit("instance-log", InstanceLogBatch { instance_id: instance_id.to_string(), lines });
+}
+
 /// Starts one reader per stream plus a batching emitter. The returned handle
 /// completes once both streams hit EOF and the last batch was sent — await
 /// it before reporting the exit so no log line arrives after the exit event.

@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { JavaPicker } from "@/components/settings/JavaPicker";
 import {
   ChoiceGroup,
+  JvmArgWarnings,
   SettingRow,
   SettingSection,
   SettingsLayout,
@@ -34,7 +35,7 @@ import { useAppVersion } from "@/hooks/useAppVersion";
 import { useSystemMemory } from "@/hooks/useInstanceInfo";
 import { useCurseforgeBuiltinKey, useSettings } from "@/hooks/useSettings";
 import { formatBytes, formatGb } from "@/lib/format";
-import { parseJvmArgs } from "@/lib/jvmArgs";
+import { jvmArgIssues, parseJvmArgs } from "@/lib/jvmArgs";
 import { notify } from "@/lib/notify";
 import { adviseRam } from "@/lib/ramAdvice";
 import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
@@ -308,6 +309,7 @@ export function GlobalSettingsScreen() {
                   />
                 }
               />
+              <JvmArgWarnings className="px-4 pb-3.5" issues={jvmArgIssues(form.default_jvm_args)} />
             </SettingSection>
             <SettingSection title="Fenêtre du launcher">
               <SettingRow

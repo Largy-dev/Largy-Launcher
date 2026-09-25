@@ -3,6 +3,7 @@
 //! log streaming in [`logs`].
 
 pub mod crash_detect;
+mod jvm_args;
 pub mod logs;
 pub mod orchestrator;
 mod prepare;

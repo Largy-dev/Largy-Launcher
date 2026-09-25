@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useBlocker } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Loader2, type LucideIcon } from "lucide-react";
+import { Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -114,6 +114,21 @@ export function SettingRow({ label, description, control, stacked }: SettingRowP
       </div>
       {control && <div className={cn(!stacked && "shrink-0")}>{control}</div>}
     </div>
+  );
+}
+
+/** What the launcher will fix in these JVM arguments at launch, explained. */
+export function JvmArgWarnings({ issues, className }: { issues: string[]; className?: string }) {
+  if (issues.length === 0) return null;
+  return (
+    <ul className={cn("space-y-1 text-xs text-warning", className)}>
+      {issues.map((issue) => (
+        <li key={issue} className="flex gap-1.5">
+          <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          {issue}
+        </li>
+      ))}
+    </ul>
   );
 }
 

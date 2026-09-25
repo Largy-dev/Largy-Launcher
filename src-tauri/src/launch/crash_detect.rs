@@ -30,6 +30,11 @@ const PATTERNS: &[(&str, &str, Option<&str>)] = &[
         Some("Vérifie la RAM et les arguments JVM de l'instance."),
     ),
     (
+        "Multiple garbage collectors selected",
+        "Plusieurs ramasse-miettes (GC) sont activés en même temps dans les arguments JVM.",
+        Some("N'en garde qu'un seul (G1GC ou ZGC) dans les paramètres Java de l'instance."),
+    ),
+    (
         "Unrecognized VM option",
         "Un argument JVM n'est pas reconnu par cette version de Java.",
         Some("Retire l'argument en cause dans les paramètres Java de l'instance."),
@@ -74,6 +79,11 @@ const PATTERNS: &[(&str, &str, Option<&str>)] = &[
         Some("Vérifie que les dépendances de tes mods sont installées."),
     ),
     ("A mod crashed on startup", "Un mod a provoqué un crash au démarrage du jeu.", None),
+    (
+        "Error occurred during initialization of VM",
+        "Java a refusé de démarrer avant même le lancement du jeu.",
+        Some("Vérifie les arguments JVM et la RAM de l'instance : la cause est indiquée juste en dessous dans la console."),
+    ),
 ];
 
 const CRASH_REPORT_MARKER: &str = "Crash report saved to:";

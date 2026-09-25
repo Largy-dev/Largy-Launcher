@@ -4,6 +4,7 @@ import { JVM_PRESETS, isPresetActive, togglePreset } from "./jvmPresets";
 
 const utf8 = JVM_PRESETS.find((p) => p.id === "utf8")!;
 const aikar = JVM_PRESETS.find((p) => p.id === "aikar")!;
+const zgc = JVM_PRESETS.find((p) => p.id === "zgc")!;
 
 describe("togglePreset", () => {
   it("adds a preset's flags after the user's own", () => {
@@ -21,5 +22,11 @@ describe("togglePreset", () => {
   it("does not duplicate a flag the user already had", () => {
     const next = togglePreset(["-XX:+UseG1GC"], aikar);
     expect(next.filter((a) => a === "-XX:+UseG1GC")).toHaveLength(1);
+  });
+
+  it("switching garbage collector drops the other GC preset", () => {
+    const next = togglePreset(togglePreset(["-Dfoo=bar"], aikar), zgc);
+    expect(next).toEqual(["-Dfoo=bar", ...zgc.args]);
+    expect(isPresetActive(next, aikar)).toBe(false);
   });
 });
