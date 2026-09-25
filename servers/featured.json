@@ -42,9 +42,7 @@
         "version_id": "100516",
         "name": "FTB Presents Direwolf20 1.21",
         "version_name": "1.22.0",
-        "extra_mods": [
-          { "project": "rsinfinitybooster", "version_id": "1OFYdaiQ" }
-        ]
+        "extra_mods": [{ "project": "rsinfinitybooster", "version_id": "1OFYdaiQ" }]
       }
     },
     {
