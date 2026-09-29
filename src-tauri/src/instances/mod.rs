@@ -7,6 +7,7 @@ pub mod backup;
 pub mod content;
 pub mod content_curseforge;
 pub mod export;
+pub mod external;
 pub mod import;
 pub mod installed;
 pub mod manual_downloads;
@@ -112,6 +113,9 @@ pub struct Instance {
     /// Most recent play sessions, newest first, capped to [`MAX_SESSIONS`].
     #[serde(default)]
     pub sessions: Vec<PlaySession>,
+    /// [`external::ExternalInstance::id`] this instance was imported from.
+    #[serde(default)]
+    pub imported_from: Option<String>,
 }
 
 /// One completed play session, recorded when the game process exits.
@@ -246,6 +250,7 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         protected: false,
         notes: String::new(),
         sessions: Vec::new(),
+        imported_from: None,
     };
 
     save(&instance)?;
@@ -272,6 +277,7 @@ pub fn duplicate(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> 
         pinned: false,
         protected: false,
         sessions: Vec::new(),
+        imported_from: None,
         ..source
     };
     save(&instance)?;

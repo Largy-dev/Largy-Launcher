@@ -2,15 +2,16 @@ import { useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import {
+  ArrowRightLeft,
   FileDown,
   LayoutGrid,
   LayoutList,
   Loader2,
+  type LucideIcon,
   Plus,
   Rows3,
   Search,
   Sparkles,
-  type LucideIcon,
 } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -20,6 +21,12 @@ import { InstanceHero } from "@/components/instance/InstanceHero";
 import { LOADER_META, LOADER_ORDER } from "@/components/instance/LoaderBadge";
 import { useFeaturedInstance } from "@/components/shell/AmbientBackground";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFileDrop } from "@/hooks/useFileDrop";
@@ -27,10 +34,12 @@ import { useImportInstance } from "@/hooks/useImportInstance";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { installedApi } from "@/services/content";
+import { externalApi } from "@/services/external";
 import { instancesApi, type Instance, type LoaderKind } from "@/services/tauri";
 import { usePreferences, type CardDensity, type InstanceSort } from "@/store/preferencesStore";
 
 import { CreateInstanceDialog } from "./CreateInstanceDialog";
+import { ExternalImportDialog } from "./ExternalImportDialog";
 import { InstanceCard } from "./InstanceCard";
 
 const DENSITIES: { value: CardDensity; label: string; icon: LucideIcon }[] = [
@@ -68,8 +77,36 @@ function StatsLine({ instances }: { instances: Instance[] }) {
   return <p className="text-xs text-muted-foreground tabular-nums">{parts.join(" · ")}</p>;
 }
 
+/** First run: instances already sitting in other launchers, one click away. */
+function ExternalFoundBanner({ onOpen }: { onOpen: () => void }) {
+  const { data } = useQuery({ queryKey: ["external-instances"], queryFn: externalApi.detect, staleTime: 60_000 });
+  const count = data?.filter((e) => !e.already_imported).length ?? 0;
+  if (count === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="glass mb-4 flex w-full items-center gap-3 rounded-2xl p-4 text-left transition-colors hover:bg-primary/5"
+    >
+      <div className="bg-gradient-brand flex size-10 shrink-0 items-center justify-center rounded-xl shadow-glow">
+        <ArrowRightLeft className="size-5 text-primary-foreground" aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">
+          {count} instance{count > 1 ? "s" : ""} trouvée{count > 1 ? "s" : ""} dans tes autres launchers
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Récupère tes mods, réglages et mondes en quelques clics — sans rien toucher à l'original.
+        </p>
+      </div>
+      <span className="text-sm font-semibold text-primary">Importer</span>
+    </button>
+  );
+}
+
 export function InstanceListScreen() {
   const [createOpen, setCreateOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [loaderFilter, setLoaderFilter] = useState<LoaderKind | "all">("all");
   const density = usePreferences((s) => s.cardDensity);
@@ -92,16 +129,30 @@ export function InstanceListScreen() {
 
   const newButton = (
     <div className="flex gap-2">
-      <Button
-        variant="outline"
-        onClick={pickAndImport}
-        disabled={importing}
-        className="gap-1.5"
-        title="Importer un .mrpack, un zip CurseForge ou une instance Prism/MultiMC"
-      >
-        {importing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <FileDown aria-hidden="true" />}
-        Importer
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" disabled={importing} className="gap-1.5">
+            {importing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <FileDown aria-hidden="true" />}
+            Importer
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuItem className="gap-2" onClick={pickAndImport}>
+            <FileDown className="size-3.5" aria-hidden="true" />
+            <span>
+              Un fichier…
+              <span className="block text-xs text-muted-foreground">.mrpack, zip CurseForge, export Prism</span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => setExternalOpen(true)}>
+            <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+            <span>
+              Depuis un autre launcher…
+              <span className="block text-xs text-muted-foreground">Officiel, Prism, CurseForge, Modrinth App</span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
         <Plus aria-hidden="true" />
         Nouvelle instance
@@ -123,6 +174,7 @@ export function InstanceListScreen() {
       ) : !instances || instances.length === 0 ? (
         <>
           <PageHeader eyebrow="Bienvenue" title="Prêt pour l'aventure ?" />
+          <ExternalFoundBanner onOpen={() => setExternalOpen(true)} />
           <EmptyState
             icon={Sparkles}
             title="Aucune instance pour le moment"
@@ -134,76 +186,80 @@ export function InstanceListScreen() {
         <>
           {featured && <InstanceHero instance={featured} />}
 
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="mr-auto">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
               <h2 className="text-lg leading-tight font-bold">Mes instances</h2>
               <StatsLine instances={instances} />
-            </div>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                type="search"
-                placeholder="Rechercher…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-8 w-44 pl-8!"
-              />
-            </div>
-            <Select value={sort} onValueChange={(v) => setPrefs({ instanceSort: v as InstanceSort })}>
-              <SelectTrigger size="sm" className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(SORTS).map(([value, { label }]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="glass flex rounded-lg p-0.5">
-              {DENSITIES.map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  title={label}
-                  aria-pressed={density === value}
-                  onClick={() => setPrefs({ cardDensity: value })}
-                  className={cn(
-                    "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
-                    density === value ? "bg-primary text-primary-foreground" : "hover:text-foreground",
-                  )}
-                >
-                  <Icon className="size-3.5" aria-hidden="true" />
-                </button>
-              ))}
             </div>
             {newButton}
           </div>
 
-          {loadersPresent.length > 1 && (
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {(["all", ...loadersPresent] as const).map((loader) => {
-                const active = loaderFilter === loader;
-                const color = loader === "all" ? "var(--accent-base)" : LOADER_META[loader].color;
-                return (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {loadersPresent.length > 1 && (
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrer par mod loader">
+                {(["all", ...loadersPresent] as const).map((loader) => {
+                  const active = loaderFilter === loader;
+                  const color = loader === "all" ? "var(--accent-base)" : LOADER_META[loader].color;
+                  return (
+                    <button
+                      key={loader}
+                      onClick={() => setLoaderFilter(loader)}
+                      className="rounded-full px-3 py-1 text-xs font-semibold transition-all"
+                      style={{
+                        color: active ? "white" : `color-mix(in oklab, ${color} 80%, var(--foreground))`,
+                        backgroundColor: active ? color : `color-mix(in oklab, ${color} 12%, transparent)`,
+                      }}
+                    >
+                      {loader === "all" ? "Toutes" : LOADER_META[loader].label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  placeholder="Rechercher…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 w-40 pl-8!"
+                />
+              </div>
+              <Select value={sort} onValueChange={(v) => setPrefs({ instanceSort: v as InstanceSort })}>
+                <SelectTrigger size="sm" className="w-40" aria-label="Trier les instances">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(SORTS).map(([value, { label }]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="glass flex rounded-lg p-0.5">
+                {DENSITIES.map(({ value, label, icon: Icon }) => (
                   <button
-                    key={loader}
-                    onClick={() => setLoaderFilter(loader)}
-                    className="rounded-full px-3 py-1 text-xs font-semibold transition-all"
-                    style={{
-                      color: active ? "white" : `color-mix(in oklab, ${color} 80%, var(--foreground))`,
-                      backgroundColor: active ? color : `color-mix(in oklab, ${color} 12%, transparent)`,
-                    }}
+                    key={value}
+                    title={label}
+                    aria-pressed={density === value}
+                    onClick={() => setPrefs({ cardDensity: value })}
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                      density === value ? "bg-primary text-primary-foreground" : "hover:text-foreground",
+                    )}
                   >
-                    {loader === "all" ? "Toutes" : LOADER_META[loader].label}
+                    <Icon className="size-3.5" aria-hidden="true" />
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          )}
+          </div>
 
           {visible.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">Aucune instance ne correspond.</p>
@@ -233,6 +289,7 @@ export function InstanceListScreen() {
         </div>
       )}
       <CreateInstanceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ExternalImportDialog open={externalOpen} onOpenChange={setExternalOpen} />
     </div>
   );
 }

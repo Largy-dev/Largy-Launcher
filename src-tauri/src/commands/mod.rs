@@ -3,6 +3,7 @@
 //! module (`auth`, `instances`, `providers`, ...) — no business logic here.
 
 pub mod auth;
+pub mod external;
 pub mod instances;
 pub mod launch;
 pub mod minecraft;

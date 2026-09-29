@@ -166,6 +166,8 @@ pub fn run() {
             commands::providers::providers_get_changelog,
             commands::providers::providers_curseforge_builtin_key,
             commands::providers::providers_ftb_equivalent,
+            commands::external::external_instances_detect,
+            commands::external::external_instance_import,
             commands::instances::instances_list,
             commands::instances::instances_get,
             commands::instances::instances_create,

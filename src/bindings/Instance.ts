@@ -37,4 +37,8 @@ notes: string,
 /**
  * Most recent play sessions, newest first, capped to [`MAX_SESSIONS`].
  */
-sessions: Array<PlaySession>, };
+sessions: Array<PlaySession>, 
+/**
+ * [`external::ExternalInstance::id`] this instance was imported from.
+ */
+imported_from: string | null, };

@@ -63,11 +63,22 @@ fn cfg_value<'a>(cfg: &'a str, key: &str) -> Option<&'a str> {
     cfg.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix('=')).map(str::trim)
 }
 
-pub fn parse_prism(path: &Path, root: &str) -> AppResult<PrismInstance> {
-    let pack_text = archive::read_text(path, &format!("{root}mmc-pack.json"))?
-        .ok_or_else(|| AppError::Instance("mmc-pack.json introuvable".to_string()))?;
-    let pack: MmcPack = serde_json::from_str(&pack_text)?;
-    let cfg = archive::read_text(path, &format!("{root}instance.cfg"))?.unwrap_or_default();
+/// What a Prism / MultiMC instance is, from its `mmc-pack.json` and
+/// `instance.cfg` texts (zip export or folder alike).
+#[derive(Debug, PartialEq)]
+pub struct PrismMeta {
+    pub name: Option<String>,
+    pub minecraft_version: String,
+    pub loader: LoaderKind,
+    pub loader_version: Option<String>,
+    pub min_memory_mb: Option<u32>,
+    pub max_memory_mb: Option<u32>,
+    /// `lastLaunchTime` (Unix milliseconds).
+    pub last_launch_ms: Option<i64>,
+}
+
+pub fn parse_prism_meta(pack_text: &str, cfg: &str) -> AppResult<PrismMeta> {
+    let pack: MmcPack = serde_json::from_str(pack_text)?;
 
     let version_of = |uid: &str| pack.components.iter().find(|c| c.uid == uid).and_then(|c| c.version.clone());
     let minecraft_version = version_of("net.minecraft")
@@ -82,6 +93,25 @@ pub fn parse_prism(path: &Path, root: &str) -> AppResult<PrismInstance> {
     .find_map(|(uid, kind)| version_of(uid).map(|v| (kind, Some(v))))
     .unwrap_or((LoaderKind::Vanilla, None));
 
+    let overrides_memory = cfg_value(cfg, "OverrideMemory") == Some("true");
+    let memory = |key| overrides_memory.then(|| cfg_value(cfg, key).and_then(|v| v.parse().ok())).flatten();
+    Ok(PrismMeta {
+        name: cfg_value(cfg, "name").map(str::to_string).filter(|n| !n.is_empty()),
+        minecraft_version,
+        loader,
+        loader_version,
+        min_memory_mb: memory("MinMemAlloc"),
+        max_memory_mb: memory("MaxMemAlloc"),
+        last_launch_ms: cfg_value(cfg, "lastLaunchTime").and_then(|v| v.parse().ok()).filter(|&t: &i64| t > 0),
+    })
+}
+
+pub fn parse_prism(path: &Path, root: &str) -> AppResult<PrismInstance> {
+    let pack_text = archive::read_text(path, &format!("{root}mmc-pack.json"))?
+        .ok_or_else(|| AppError::Instance("mmc-pack.json introuvable".to_string()))?;
+    let cfg = archive::read_text(path, &format!("{root}instance.cfg"))?.unwrap_or_default();
+    let meta = parse_prism_meta(&pack_text, &cfg)?;
+
     let names = archive::entry_names(path)?;
     let game_dir_prefix = [".minecraft/", "minecraft/"]
         .iter()
@@ -89,16 +119,13 @@ pub fn parse_prism(path: &Path, root: &str) -> AppResult<PrismInstance> {
         .find(|prefix| names.iter().any(|n| n.starts_with(prefix.as_str())))
         .unwrap_or_else(|| format!("{root}.minecraft/"));
 
-    let overrides_memory = cfg_value(&cfg, "OverrideMemory") == Some("true");
-    let memory = |key| overrides_memory.then(|| cfg_value(&cfg, key).and_then(|v| v.parse().ok())).flatten();
-
     Ok(PrismInstance {
-        name: cfg_value(&cfg, "name").map(str::to_string).filter(|n| !n.is_empty()),
-        minecraft_version,
-        loader,
-        loader_version,
-        min_memory_mb: memory("MinMemAlloc"),
-        max_memory_mb: memory("MaxMemAlloc"),
+        name: meta.name,
+        minecraft_version: meta.minecraft_version,
+        loader: meta.loader,
+        loader_version: meta.loader_version,
+        min_memory_mb: meta.min_memory_mb,
+        max_memory_mb: meta.max_memory_mb,
         game_dir_prefix,
     })
 }
