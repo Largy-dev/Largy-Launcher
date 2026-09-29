@@ -35,7 +35,7 @@ const MAX_ICON_BYTES: usize = 512 * 1024;
 const REMOTE_RECHECK_SECS: i64 = 3 * 24 * 3600;
 
 /// One installed mod, resource pack or shader pack.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct InstalledItem {
     /// File name without the `.disabled` suffix.

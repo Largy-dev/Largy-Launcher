@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowDown, Copy, FolderOpen, Search, WrapText } from "lucide-react";
+import { ArrowDown, Copy, FolderOpen, Loader2, Search, Share2, WrapText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,11 +63,14 @@ function LogRow({ line, needle }: { line: ParsedLogLine; needle: string }) {
 interface LogConsoleProps {
   lines: RawLogLine[];
   onOpenFolder?: () => void;
+  /** Uploads the game log and copies its link (see useShareLog). */
+  onShare?: () => void;
+  sharing?: boolean;
   className?: string;
 }
 
 /** Colored, filterable, searchable game log with smart auto-scroll. */
-export function LogConsole({ lines, onOpenFolder, className }: LogConsoleProps) {
+export function LogConsole({ lines, onOpenFolder, onShare, sharing, className }: LogConsoleProps) {
   const autoScroll = usePreferences((s) => s.logs.autoScroll);
   const wrap = usePreferences((s) => s.logs.wrap);
   const setLogs = usePreferences((s) => s.setLogs);
@@ -170,6 +173,18 @@ export function LogConsole({ lines, onOpenFolder, className }: LogConsoleProps) 
         <Button variant="ghost" size="icon-sm" title="Copier les logs affichés" onClick={copyAll}>
           <Copy aria-hidden="true" />
         </Button>
+        {onShare && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Partager le log (lien mclo.gs copié)"
+            aria-label="Partager le log"
+            disabled={sharing}
+            onClick={onShare}
+          >
+            {sharing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Share2 aria-hidden="true" />}
+          </Button>
+        )}
         {onOpenFolder && (
           <Button variant="ghost" size="icon-sm" title="Ouvrir le dossier de l'instance" onClick={onOpenFolder}>
             <FolderOpen aria-hidden="true" />

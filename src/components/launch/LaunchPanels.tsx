@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { AlertTriangle, Copy, Cpu, FolderOpen, MemoryStick, RotateCcw, Timer, X } from "lucide-react";
+import { AlertTriangle, Copy, Cpu, FolderOpen, Loader2, MemoryStick, RotateCcw, Share2, Timer, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/hooks/useInstanceInfo";
@@ -115,9 +115,11 @@ interface CrashCardProps {
   onDismiss: () => void;
   onOpenFolder: () => void;
   onRelaunch: () => void;
+  onShare: () => void;
+  sharing: boolean;
 }
 
-export function CrashCard({ analysis, logs, onDismiss, onOpenFolder, onRelaunch }: CrashCardProps) {
+export function CrashCard({ analysis, logs, onDismiss, onOpenFolder, onRelaunch, onShare, sharing }: CrashCardProps) {
   async function copyReport() {
     const lines = logs.slice(-300).map((l) => l.line);
     const report = [
@@ -153,6 +155,10 @@ export function CrashCard({ analysis, logs, onDismiss, onOpenFolder, onRelaunch 
             <Button size="sm" onClick={onRelaunch} className="gap-1.5">
               <RotateCcw aria-hidden="true" />
               Relancer
+            </Button>
+            <Button size="sm" variant="outline" onClick={onShare} disabled={sharing} className="gap-1.5">
+              {sharing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Share2 aria-hidden="true" />}
+              Partager pour demander de l'aide
             </Button>
             <Button size="sm" variant="outline" onClick={copyReport} className="gap-1.5">
               <Copy aria-hidden="true" />

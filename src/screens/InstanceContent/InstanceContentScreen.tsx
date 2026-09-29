@@ -2,10 +2,16 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ArrowLeft, Compass, FolderOpen, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Compass, FolderOpen, Gauge, Loader2, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { installedApi, type ContentSummary } from "@/services/content";
@@ -15,6 +21,7 @@ import { ContentBrowserDialog } from "./ContentBrowserDialog";
 import { InstalledList } from "./InstalledList";
 import { KIND_META, WORLDS_META, type ContentTab } from "./kinds";
 import { ModUpdatesDialog } from "./ModUpdatesDialog";
+import { OptimizeDialog } from "./OptimizeDialog";
 import { WorldsTab } from "./WorldsTab";
 
 const TABS: ContentTab[] = ["mod", "resource_pack", "shader", "worlds"];
@@ -43,6 +50,7 @@ export function InstanceContentScreen() {
   const [browse, setBrowse] = useState<{ open: boolean; query?: string; nonce: number }>({ open: false, nonce: 0 });
   const openBrowser = (query?: string) => setBrowse((b) => ({ open: true, query, nonce: b.nonce + 1 }));
   const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [optimizeOpen, setOptimizeOpen] = useState(false);
 
   const { data: instance } = useQuery({
     queryKey: ["instance", instanceId],
@@ -111,29 +119,42 @@ export function InstanceContentScreen() {
             </Button>
             {kind && (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => instancesApi.openFolder(instanceId, KIND_META[kind].folder)}
-                >
-                  <FolderOpen aria-hidden="true" />
-                  Dossier
-                </Button>
                 {kind === "mod" && (
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setUpdatesOpen(true)}>
-                    <RefreshCw aria-hidden="true" />
-                    Mises à jour
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setUpdatesOpen(true)}>
+                      <RefreshCw aria-hidden="true" />
+                      Mises à jour
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOptimizeOpen(true)}>
+                      <Gauge aria-hidden="true" />
+                      Optimiser
+                    </Button>
+                  </>
                 )}
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={pickFiles} disabled={add.isPending}>
-                  {add.isPending ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Plus aria-hidden="true" />
-                  )}
-                  Fichier .{KIND_META[kind].extension}…
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon-sm" aria-label="Plus d'actions">
+                      {add.isPending ? (
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <MoreHorizontal aria-hidden="true" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem className="gap-2" onClick={pickFiles}>
+                      <Plus className="size-3.5" aria-hidden="true" />
+                      Ajouter un fichier .{KIND_META[kind].extension}…
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => instancesApi.openFolder(instanceId, KIND_META[kind].folder)}
+                    >
+                      <FolderOpen className="size-3.5" aria-hidden="true" />
+                      Ouvrir le dossier {KIND_META[kind].folder}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button size="sm" onClick={() => openBrowser()} className="bg-gradient-brand gap-1.5">
                   <Compass aria-hidden="true" />
                   Parcourir
@@ -199,6 +220,7 @@ export function InstanceContentScreen() {
         />
       )}
       <ModUpdatesDialog instanceId={instanceId} open={updatesOpen} onOpenChange={setUpdatesOpen} />
+      {instance && <OptimizeDialog instance={instance} open={optimizeOpen} onOpenChange={setOptimizeOpen} />}
     </div>
   );
 }

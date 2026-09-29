@@ -7,6 +7,7 @@ mod jvm_args;
 pub mod logs;
 pub mod orchestrator;
 mod prepare;
+pub mod share;
 
 use std::process::Stdio;
 use std::sync::Arc;

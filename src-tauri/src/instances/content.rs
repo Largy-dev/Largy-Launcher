@@ -11,6 +11,7 @@ use crate::download::{sha1_of_file, DownloadItem, DownloadManager};
 use crate::error::{AppError, AppResult};
 use crate::instances::installed::cache::RemoteProvider;
 use crate::providers::modrinth::api::{SearchHit, Version};
+use crate::providers::LoaderKind;
 use crate::providers::modrinth::ModrinthApi;
 use crate::util::fs::{is_plain_file_name, validate_file_name};
 
@@ -45,9 +46,19 @@ impl ContentKind {
     }
 }
 
+/// Modrinth loaders whose mods run on the instance: Quilt also loads Fabric
+/// mods, and NeoForge for 1.20.1 is still Forge-compatible.
+pub fn compatible_loaders(instance: &Instance) -> Vec<&'static str> {
+    match instance.loader {
+        LoaderKind::Quilt => vec!["quilt", "fabric"],
+        LoaderKind::NeoForge if instance.minecraft_version == "1.20.1" => vec!["neoforge", "forge"],
+        other => other.modrinth_name().into_iter().collect(),
+    }
+}
+
 fn loader_filter(instance: &Instance, kind: ContentKind) -> Vec<&'static str> {
     match kind {
-        ContentKind::Mod => instance.loader.modrinth_name().into_iter().collect(),
+        ContentKind::Mod => compatible_loaders(instance),
         _ => Vec::new(),
     }
 }
@@ -96,13 +107,14 @@ pub async fn search(
         vec![format!("project_type:{}", kind.project_type())],
         vec![format!("versions:{}", instance.minecraft_version)],
     ];
-    if let Some(loader) = loader_filter(instance, kind).first() {
-        facets.push(vec![format!("categories:{loader}")]);
+    let loaders = loader_filter(instance, kind);
+    if !loaders.is_empty() {
+        facets.push(loaders.iter().map(|l| format!("categories:{l}")).collect());
     }
     Ok(api.search(query, facets, offset, 30).await?.into_iter().map(ContentHit::from).collect())
 }
 
-async fn compatible_version(api: &ModrinthApi, instance: &Instance, kind: ContentKind, project_id: &str) -> AppResult<Version> {
+pub(crate) async fn compatible_version(api: &ModrinthApi, instance: &Instance, kind: ContentKind, project_id: &str) -> AppResult<Version> {
     let loaders = loader_filter(instance, kind);
     let versions = api.project_versions(project_id, &loaders, &[instance.minecraft_version.as_str()]).await?;
     versions
@@ -320,6 +332,21 @@ mod tests {
     fn content_kinds_map_to_modrinth_types_and_folders() {
         assert_eq!(ContentKind::Mod.project_type(), "mod");
         assert_eq!(ContentKind::Shader.folder(), "shaderpacks");
+    }
+
+    #[test]
+    fn quilt_and_neoforge_1_20_1_accept_their_parent_loaders_mods() {
+        let instance = |loader: &str, mc: &str| -> Instance {
+            serde_json::from_value(serde_json::json!({
+                "id": "i", "name": "I", "minecraft_version": mc, "loader": loader,
+                "loader_version": "1", "directory": "/i"
+            }))
+            .unwrap()
+        };
+        assert_eq!(compatible_loaders(&instance("quilt", "1.21.1")), vec!["quilt", "fabric"]);
+        assert_eq!(compatible_loaders(&instance("neoforge", "1.20.1")), vec!["neoforge", "forge"]);
+        assert_eq!(compatible_loaders(&instance("neoforge", "1.21.1")), vec!["neoforge"]);
+        assert!(compatible_loaders(&instance("vanilla", "1.21.1")).is_empty());
     }
 
     #[test]

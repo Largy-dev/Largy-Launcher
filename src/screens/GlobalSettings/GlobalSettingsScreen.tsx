@@ -11,6 +11,7 @@ import {
   Info,
   Loader2,
   Palette,
+  Share2,
   Trash2,
   UserRound,
   Wrench,
@@ -39,6 +40,7 @@ import { jvmArgIssues, parseJvmArgs } from "@/lib/jvmArgs";
 import { notify } from "@/lib/notify";
 import { adviseRam } from "@/lib/ramAdvice";
 import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
+import { useShareLog } from "@/hooks/useShareLog";
 import {
   errorMessage,
   openLauncherLogs,
@@ -183,6 +185,22 @@ function InstallerCacheRow() {
         </Button>
       }
     />
+  );
+}
+
+function ShareLauncherLogButton() {
+  const share = useShareLog();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-1.5"
+      disabled={share.isPending}
+      onClick={() => share.mutate({ source: "launcher" })}
+    >
+      {share.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Share2 aria-hidden="true" />}
+      Partager
+    </Button>
   );
 }
 
@@ -370,12 +388,15 @@ export function GlobalSettingsScreen() {
             />
             <SettingRow
               label="Journal du launcher"
-              description="Utile pour signaler un problème : joins le fichier launcher.log."
+              description="Utile pour signaler un problème : partage-le en un clic (lien copié), ou joins le fichier launcher.log."
               control={
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openLauncherLogs()}>
-                  <FileText aria-hidden="true" />
-                  Ouvrir le dossier
-                </Button>
+                <div className="flex gap-2">
+                  <ShareLauncherLogButton />
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openLauncherLogs()}>
+                    <FileText aria-hidden="true" />
+                    Ouvrir le dossier
+                  </Button>
+                </div>
               }
             />
             <InstallerCacheRow />

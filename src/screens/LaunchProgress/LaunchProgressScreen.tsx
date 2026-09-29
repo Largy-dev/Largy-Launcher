@@ -9,6 +9,7 @@ import { PlayButton } from "@/components/instance/PlayButton";
 import { CrashCard, LiveStatsPanel, TransferPanel } from "@/components/launch/LaunchPanels";
 import { LaunchTimeline } from "@/components/launch/LaunchTimeline";
 import { LogConsole } from "@/components/console/LogConsole";
+import { useShareLog } from "@/hooks/useShareLog";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { useAllocatedRam } from "@/hooks/useInstanceInfo";
@@ -30,6 +31,7 @@ export function LaunchProgressScreen() {
   const clearCrashAnalysis = useAppStore((s) => s.clearCrashAnalysis);
   const { play, running, preparing } = useLaunchInstance(instance);
   const allocated = useAllocatedRam(instance);
+  const share = useShareLog();
 
   if (!instance) {
     return (
@@ -92,6 +94,14 @@ export function LaunchProgressScreen() {
             onDismiss={() => clearCrashAnalysis(instance.id)}
             onOpenFolder={openCrashDetails}
             onRelaunch={() => play()}
+            sharing={share.isPending}
+            onShare={() =>
+              share.mutate(
+                crashAnalysis.crash_report
+                  ? { source: "crash", instanceId: instance.id, crashReport: crashAnalysis.crash_report }
+                  : { source: "game", instanceId: instance.id },
+              )
+            }
           />
         )}
       </AnimatePresence>
@@ -99,6 +109,8 @@ export function LaunchProgressScreen() {
       <LogConsole
         lines={runtime.logs}
         onOpenFolder={() => instancesApi.openFolder(instance.id, "logs")}
+        onShare={() => share.mutate({ source: "game", instanceId: instance.id })}
+        sharing={share.isPending}
         className="min-h-72 flex-1"
       />
     </div>

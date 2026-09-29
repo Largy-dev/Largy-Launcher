@@ -223,3 +223,42 @@ pub async fn instance_mods_apply_updates(
     .await;
     Ok(results.into_iter().filter_map(Result::err).collect())
 }
+
+/// What "Optimiser" would install on this instance.
+#[tauri::command]
+pub async fn instance_optimize_plan(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> AppResult<Vec<crate::instances::optimize::OptimizeItem>> {
+    let instance = instances::get(&state.paths, &instance_id)?;
+    let items = installed_items(&state, &instance, ContentKind::Mod).await?;
+    crate::instances::optimize::plan(&ModrinthApi::new(state.client.clone()), &instance, &items).await
+}
+
+#[derive(Debug, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct OptimizeResult {
+    pub installed: Vec<String>,
+    pub failed: Vec<String>,
+}
+
+/// Installs the chosen performance mods, after a restore point.
+#[tauri::command]
+pub async fn instance_optimize_apply(
+    state: State<'_, AppState>,
+    instance_id: String,
+    slugs: Vec<String>,
+) -> AppResult<OptimizeResult> {
+    ensure_game_closed(&state, &instance_id)?;
+    let instance = instances::get(&state.paths, &instance_id)?;
+    let (paths, before) = (state.paths.clone(), instance.clone());
+    spawn_blocking(move || crate::instances::snapshots::create(&paths, &before, "Avant l'optimisation")).await?;
+    let (installed, failed) = crate::instances::optimize::apply(
+        &ModrinthApi::new(state.client.clone()),
+        &state.downloader,
+        &instance,
+        &slugs,
+    )
+    .await;
+    Ok(OptimizeResult { installed, failed })
+}

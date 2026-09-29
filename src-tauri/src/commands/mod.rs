@@ -107,6 +107,42 @@ pub fn app_close_action(
     Ok(())
 }
 
+/// Uploads a log to mclo.gs (scrubbed of personal details); resolves to its
+/// link. `crash_report` picks a crash report inside the instance, else the
+/// newest one.
+#[tauri::command]
+pub async fn logs_share(
+    state: State<'_, AppState>,
+    source: crate::launch::share::LogSource,
+    instance_id: Option<String>,
+    crash_report: Option<String>,
+) -> AppResult<String> {
+    use crate::launch::share::{self, LogSource};
+    let instance_dir = || -> AppResult<std::path::PathBuf> {
+        let id = instance_id.as_deref().ok_or_else(|| AppError::Other("instance manquante".to_string()))?;
+        Ok(crate::instances::get(&state.paths, id)?.directory)
+    };
+    let path = match source {
+        LogSource::Launcher => state.paths.launcher_logs_dir().join("launcher.log"),
+        LogSource::Game => instance_dir()?.join("logs").join("latest.log"),
+        LogSource::Crash => {
+            let dir = instance_dir()?;
+            match crash_report {
+                Some(report) => {
+                    let file = std::fs::canonicalize(&report)?;
+                    if !file.starts_with(std::fs::canonicalize(&dir)?) {
+                        return Err(AppError::Other("ce fichier n'appartient pas à l'instance".to_string()));
+                    }
+                    file
+                }
+                None => share::newest_crash_report(&dir)
+                    .ok_or_else(|| AppError::Other("aucun crash report pour cette instance".to_string()))?,
+            }
+        }
+    };
+    share::upload_file(&state.client, &path).await
+}
+
 /// Opens the folder holding the launcher's own log files.
 #[tauri::command]
 pub fn open_launcher_logs(state: State<'_, AppState>) -> AppResult<()> {

@@ -10,6 +10,7 @@ pub mod export;
 pub mod import;
 pub mod installed;
 pub mod manual_downloads;
+pub mod optimize;
 pub mod screenshots;
 pub mod snapshots;
 pub mod worlds;
