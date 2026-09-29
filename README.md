@@ -96,7 +96,7 @@ démarrage et l'installe en un clic.
 | ![Conseil de mémoire d'une instance](docs/screenshots/memory.jpg) | ![Paramètres d'apparence](docs/screenshots/settings.jpg) |
 | **Conseil de RAM** adapté à chaque instance | **Personnalisation** appliquée en direct |
 | ![Gestion des mods](docs/screenshots/mods.jpg) | ![Navigateur de modpacks](docs/screenshots/modpacks.jpg) |
-| **Gestion des mods** avec recherche et filtres | **Modpacks** installables en un clic |
+| **Tes mods** : noms, icônes, sources et problèmes détectés | **Modpacks** filtrables par version, loader et catégorie |
 
 ![Accueil en mode clair avec l'accent violet](docs/screenshots/light.jpg)
 
