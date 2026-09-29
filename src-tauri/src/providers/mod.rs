@@ -12,7 +12,8 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum LoaderKind {
     Vanilla,
@@ -48,7 +49,8 @@ impl LoaderKind {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModpackSummary {
     pub id: String,
     pub provider: String,
@@ -60,13 +62,15 @@ pub struct ModpackSummary {
     pub downloads: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModpackDetails {
     pub summary: ModpackSummary,
     pub description: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModpackVersionSummary {
     pub id: String,
     pub name: String,
@@ -95,7 +99,8 @@ pub struct ModpackFileRef {
 /// One file that didn't make it into the instance automatically — kept
 /// structured so the frontend can offer real actions (open the download
 /// page, open the folder).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub struct InstallWarning {
     pub file_name: String,
     pub message: String,

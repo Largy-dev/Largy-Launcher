@@ -19,7 +19,8 @@ const PROTOCOL_VERSION: i32 = 767;
 /// Status responses carry a base64 favicon; anything past this is not a server.
 const MAX_PACKET: usize = 2 * 1024 * 1024;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ServerStatus {
     pub online: u32,
     pub max: u32,

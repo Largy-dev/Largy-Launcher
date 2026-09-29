@@ -37,7 +37,8 @@ const EXCLUDED: &[&str] = &[
     "downloads",
 ];
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExportSummary {
     pub path: String,
     pub referenced: usize,

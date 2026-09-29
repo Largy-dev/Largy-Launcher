@@ -242,7 +242,8 @@ async fn mark_executable(_component_dir: &Path, _manifest: &RuntimeManifest) {}
 // Local Java discovery
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct JavaInstallation {
     pub path: String,
     pub version: String,

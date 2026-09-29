@@ -11,7 +11,8 @@ use crate::util::fs::validate_file_name;
 
 const DIR: &str = "screenshots";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Screenshot {
     pub file_name: String,
     /// Absolute path, turned into an asset URL by the frontend.

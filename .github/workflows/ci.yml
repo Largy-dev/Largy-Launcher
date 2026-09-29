@@ -53,6 +53,17 @@ jobs:
         working-directory: src-tauri
         run: cargo test --locked
 
+      # `cargo test` regenerates the TypeScript types the frontend imports
+      # (ts-rs); a diff means a Rust type changed without its binding.
+      - name: TypeScript bindings are up to date
+        shell: bash
+        run: |
+          git add -N src/bindings
+          git diff --exit-code -- src/bindings || {
+            echo "::error::src/bindings is stale: run 'cargo test' in src-tauri and commit the result"
+            exit 1
+          }
+
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets --locked -- -D warnings

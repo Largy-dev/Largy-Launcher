@@ -24,7 +24,8 @@ pub fn sanitize_memory(min_mb: u32, max_mb: u32) -> (u32, u32) {
 /// overridable per-install by editing `azure_client_id` in settings.json.
 const DEFAULT_AZURE_CLIENT_ID: &str = "d3201869-49d5-4102-88b0-42495ac2ac12";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GlobalSettings {
     pub default_min_memory_mb: u32,
     pub default_max_memory_mb: u32,
@@ -65,7 +66,8 @@ pub struct GlobalSettings {
 
 /// A reusable, user-named memory/JVM combination — distinct from the fixed
 /// one-click optimizations in `lib/jvmPresets.ts` on the frontend.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct JvmPreset {
     pub name: String,
     pub min_memory_mb: u32,
@@ -77,7 +79,8 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum CloseBehavior {
     /// Ask the first time (the answer can be remembered).
@@ -87,7 +90,8 @@ pub enum CloseBehavior {
     Quit,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LauncherBehavior {
     #[default]

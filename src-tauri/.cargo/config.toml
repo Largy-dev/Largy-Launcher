@@ -1,0 +1,5 @@
+# ts-rs: `cargo test` regenerates the TypeScript bindings the frontend
+# imports (src/bindings), with 64-bit integers as plain numbers.
+[env]
+TS_RS_EXPORT_DIR = { value = "../src/bindings", relative = true }
+TS_RS_LARGE_INT = "number"

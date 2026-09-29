@@ -20,7 +20,8 @@ use super::instances::{ensure_not_running, instances_changed, spawn_blocking};
 
 /// Result of an instance install/update: the instance itself, plus any
 /// per-file problems that didn't stop the install but left it incomplete.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct InstanceInstallResult {
     pub instance: Instance,
     pub warnings: Vec<InstallWarning>,

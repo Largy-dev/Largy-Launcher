@@ -20,7 +20,8 @@ use crate::error::{AppError, AppResult};
 const MAX_ATTEMPTS: u32 = 3;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(150);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DownloadProgress {
     pub task_id: String,
     pub label: String,

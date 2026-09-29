@@ -16,7 +16,8 @@ const TEXTURE_HOST: &str = "textures.minecraft.net";
 /// Mojang refuses bigger uploads anyway; keeps a wrong file from being read whole.
 const MAX_SKIN_BYTES: usize = 256 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum SkinVariant {
     Classic,
@@ -40,7 +41,8 @@ impl SkinVariant {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export, rename = "Cape")]
 pub struct CapeView {
     pub id: String,
     pub alias: String,
@@ -48,7 +50,8 @@ pub struct CapeView {
     pub texture: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SkinProfile {
     pub name: String,
     pub variant: SkinVariant,

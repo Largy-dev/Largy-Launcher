@@ -17,7 +17,8 @@ use super::Instance;
 
 const DISABLED_SUFFIX: &str = ".disabled";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum ContentKind {
     Mod,
@@ -177,7 +178,8 @@ pub async fn install(
     Ok(written)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModUpdate {
     pub file_name: String,
     pub project_id: String,

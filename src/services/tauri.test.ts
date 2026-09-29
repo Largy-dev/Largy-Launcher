@@ -21,7 +21,14 @@ describe("auth", () => {
   });
 
   it("completeLogin passes the device code payload", async () => {
-    const device = { device_code: "d", user_code: "u", verification_uri: "v", expires_in: 1, interval: 1 };
+    const device = {
+      device_code: "d",
+      user_code: "u",
+      verification_uri: "v",
+      expires_in: 1,
+      interval: 1,
+      message: "m",
+    };
     await auth.completeLogin(device);
     expect(invokeMock).toHaveBeenCalledWith("auth_complete_login", { device });
   });

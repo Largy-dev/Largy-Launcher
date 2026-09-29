@@ -16,7 +16,8 @@ const SCHEMA: u32 = 1;
 /// Mods and shaders one preparation may install, all presets included.
 pub const MAX_PROJECTS: usize = 30;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export, rename = "ServerPreset")]
 pub struct Preset {
     pub id: String,
     pub label: String,
@@ -31,7 +32,8 @@ pub struct Preset {
     pub shaders: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub struct FeaturedServer {
     pub id: String,
     pub name: String,
@@ -53,9 +55,11 @@ pub struct FeaturedServer {
     pub modpack: Option<ServerModpack>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub struct ServerModpack {
     /// `ftb`, `modrinth` or `curseforge`.
+    #[ts(type = "\"ftb\" | \"modrinth\" | \"curseforge\"")]
     pub provider: String,
     pub pack_id: String,
     pub version_id: String,
@@ -69,7 +73,8 @@ pub struct ServerModpack {
 
 /// One exact Modrinth version added to a server's modpack. Only its own file
 /// is installed: the pack already ships what it depends on.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub struct ExtraMod {
     /// Modrinth slug, for messages.
     pub project: String,
@@ -93,7 +98,8 @@ impl ServerModpack {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export, rename = "ServerCatalog")]
 pub struct Catalog {
     pub schema: u32,
     pub presets: Vec<Preset>,

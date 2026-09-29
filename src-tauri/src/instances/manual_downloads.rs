@@ -10,7 +10,8 @@ use crate::download::sha1_of_file;
 use crate::error::AppResult;
 use crate::util::fs::safe_join;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ManualFile {
     /// Instance-relative destination, e.g. `mods/foo-1.2.jar`.
     pub path: PathBuf,

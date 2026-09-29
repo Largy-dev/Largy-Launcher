@@ -1,25 +1,25 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { Instance, InstanceInstallResult } from "./tauri";
+import type { InstanceInstallResult } from "./tauri";
+import type { FeaturedServer } from "@/bindings/FeaturedServer";
+import type { PrepareResult } from "@/bindings/PrepareResult";
+import type { PrepareSpec } from "@/bindings/PrepareSpec";
+import type { ServerCatalog } from "@/bindings/ServerCatalog";
+import type { ServerEntry } from "@/bindings/ServerEntry";
+import type { ServerModpack } from "@/bindings/ServerModpack";
+import type { ServerPreset } from "@/bindings/ServerPreset";
+import type { ServerStatus } from "@/bindings/ServerStatus";
 
-/** One entry of an instance's `servers.dat`, in the in-game order. */
-export interface ServerEntry {
-  name: string;
-  address: string;
-  /** Base64 PNG the game cached from the server's last ping. */
-  icon: string | null;
-}
-
-export interface ServerStatus {
-  online: number;
-  max: number;
-  version: string;
-  /** `§`-coded description (see `lib/motd`). */
-  motd: string;
-  favicon: string | null;
-  latency_ms: number;
-  players: string[];
-}
+export type {
+  FeaturedServer,
+  PrepareResult,
+  PrepareSpec,
+  ServerCatalog,
+  ServerEntry,
+  ServerModpack,
+  ServerPreset,
+  ServerStatus,
+};
 
 export const serversApi = {
   list: (instanceId: string) => invoke<ServerEntry[]>("instance_servers_list", { instanceId }),
@@ -30,64 +30,6 @@ export const serversApi = {
   remove: (instanceId: string, index: number) => invoke<void>("instance_servers_remove", { instanceId, index }),
   ping: (address: string) => invoke<ServerStatus>("server_ping", { address }),
 };
-
-/** A pack of client mods offered when preparing a server instance. */
-export interface ServerPreset {
-  id: string;
-  label: string;
-  description: string;
-  default: boolean;
-  /** Modrinth slugs (Fabric mods). */
-  mods: string[];
-  /** Modrinth shader pack slugs; the first is switched on. */
-  shaders: string[];
-}
-
-export interface FeaturedServer {
-  id: string;
-  name: string;
-  address: string;
-  description: string;
-  tags: string[];
-  language: string;
-  minecraft_version: string;
-  website: string | null;
-  required_mods: string[];
-  /** Modded servers: the exact modpack version to install instead of the Fabric presets. */
-  modpack: ServerModpack | null;
-}
-
-export interface ServerModpack {
-  provider: "ftb" | "modrinth" | "curseforge";
-  pack_id: string;
-  version_id: string;
-  name: string;
-  version_name: string;
-  /** Exact Modrinth versions the server adds on top of the pack. */
-  extra_mods?: { project: string; version_id: string }[];
-}
-
-export interface ServerCatalog {
-  schema: number;
-  presets: ServerPreset[];
-  servers: FeaturedServer[];
-}
-
-export interface PrepareSpec {
-  /** Catalog id, or `custom` for a server the player typed in. */
-  featured_id: string;
-  name: string;
-  address: string;
-  minecraft_version: string;
-  mods: string[];
-  shaders: string[];
-  icon: string | null;
-}
-
-export interface PrepareResult {
-  instance: Instance;
-  warnings: string[];
-}
 
 export const catalogApi = {
   load: () => invoke<ServerCatalog>("featured_servers"),

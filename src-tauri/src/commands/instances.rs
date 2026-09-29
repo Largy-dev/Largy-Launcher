@@ -86,7 +86,8 @@ pub async fn instances_duplicate(
     Ok(instance)
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct InstanceSettingsInput {
     pub min_memory_mb: Option<u32>,
     pub max_memory_mb: Option<u32>,

@@ -35,7 +35,8 @@ pub fn validate_id(id: &str) -> AppResult<()> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModpackRef {
     pub provider: String,
     pub pack_id: String,
@@ -52,7 +53,8 @@ pub struct ModpackRef {
     pub installed_files: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Instance {
     pub id: String,
     pub name: String,
@@ -109,7 +111,8 @@ pub struct Instance {
 }
 
 /// One completed play session, recorded when the game process exits.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PlaySession {
     pub started_at: i64,
     pub duration_seconds: u64,

@@ -31,7 +31,8 @@ pub struct RunningChild {
 }
 
 /// Coarse launch steps, emitted as `launch-phase` events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LaunchPhase {
     Auth,
@@ -43,7 +44,8 @@ pub enum LaunchPhase {
     Running,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct LaunchPhaseEvent {
     pub instance_id: String,
     pub phase: LaunchPhase,
@@ -53,7 +55,8 @@ pub fn emit_phase(app: &AppHandle, instance_id: &str, phase: LaunchPhase) {
     let _ = app.emit("launch-phase", LaunchPhaseEvent { instance_id: instance_id.to_string(), phase });
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ProcessStats {
     pub memory_mb: u64,
     pub cpu_percent: f32,
@@ -66,7 +69,8 @@ pub struct LaunchState {
     pub pid: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct InstanceExit {
     pub instance_id: String,
     pub code: Option<i32>,

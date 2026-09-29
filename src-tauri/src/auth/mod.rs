@@ -37,7 +37,8 @@ fn is_transient(err: &AppError) -> bool {
     matches!(err, AppError::Network(_) | AppError::RateLimited(_))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
+#[ts(export)]
 pub struct MinecraftProfile {
     pub id: String,
     pub name: String,
@@ -53,7 +54,8 @@ pub struct AccountSession {
 }
 
 /// What the frontend gets to see of the active session.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export, rename = "AccountSession")]
 pub struct AccountView {
     pub profile: MinecraftProfile,
     /// The session couldn't be verified online (no network at startup):
@@ -70,7 +72,8 @@ impl AccountSession {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StoredAccount {
     pub id: String,
     pub name: String,

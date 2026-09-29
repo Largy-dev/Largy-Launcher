@@ -17,7 +17,8 @@ use crate::state::AppState;
 /// Server icons arrive as data URLs from the status ping.
 const MAX_ICON_LEN: usize = 96 * 1024;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PrepareSpec {
     /// Catalog id, or `None` for a server the player typed in.
     #[serde(default)]
@@ -34,7 +35,8 @@ pub struct PrepareSpec {
     pub icon: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PrepareResult {
     pub instance: Instance,
     /// Mods or shaders that couldn't be installed (the instance still works).

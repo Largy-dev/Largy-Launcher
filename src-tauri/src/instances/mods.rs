@@ -14,7 +14,8 @@ use crate::util::fs::validate_file_name;
 
 const DISABLED_SUFFIX: &str = ".disabled";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModEntry {
     pub file_name: String,
     pub enabled: bool,

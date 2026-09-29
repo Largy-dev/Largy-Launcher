@@ -28,13 +28,16 @@ pub fn new_log_buffer() -> LogBuffer {
     Arc::new(Mutex::new(VecDeque::with_capacity(LOG_BUFFER_CAPACITY)))
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct LogLine {
     pub line: String,
+    #[ts(type = "\"stdout\" | \"stderr\"")]
     pub stream: &'static str,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct InstanceLogBatch {
     pub instance_id: String,
     pub lines: Vec<LogLine>,

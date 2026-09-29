@@ -24,7 +24,8 @@ pub struct LatestVersions {
     pub snapshot: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct VersionManifestEntry {
     pub id: String,
     #[serde(rename = "type")]

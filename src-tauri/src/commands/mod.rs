@@ -33,7 +33,8 @@ pub fn system_memory_mb() -> u64 {
     sys.total_memory() / 1024 / 1024
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SystemMemoryInfo {
     pub total_mb: u64,
     pub available_mb: u64,

@@ -4,7 +4,8 @@
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CrashAnalysis {
     pub summary: String,
     pub suggestion: Option<String>,

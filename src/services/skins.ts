@@ -1,30 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Cape } from "@/bindings/Cape";
+import type { LibrarySkin } from "@/bindings/LibrarySkin";
+import type { SkinProfile } from "@/bindings/SkinProfile";
+import type { SkinVariant } from "@/bindings/SkinVariant";
 
-export type SkinVariant = "classic" | "slim";
-
-export interface Cape {
-  id: string;
-  alias: string;
-  active: boolean;
-  /** Data URL of the cape texture. */
-  texture: string | null;
-}
-
-export interface SkinProfile {
-  name: string;
-  variant: SkinVariant;
-  /** Data URL of the active skin; null for the default skin. */
-  skin: string | null;
-  capes: Cape[];
-}
-
-export interface LibrarySkin {
-  id: string;
-  name: string;
-  variant: SkinVariant;
-  added_at: number;
-  texture: string;
-}
+export type { Cape, LibrarySkin, SkinProfile, SkinVariant };
 
 export const skinsApi = {
   profile: () => invoke<SkinProfile>("skins_get_profile"),

@@ -18,7 +18,8 @@ use crate::util::fs::write_atomic;
 
 const SERVERS_FILE: &str = "servers.dat";
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub struct ServerEntry {
     pub name: String,
     pub address: String,

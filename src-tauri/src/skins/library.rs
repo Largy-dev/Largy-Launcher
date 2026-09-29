@@ -11,7 +11,7 @@ use crate::util::fs::write_atomic;
 
 const INDEX: &str = "library.json";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
 pub struct LibrarySkin {
     pub id: String,
     pub name: String,
@@ -20,7 +20,8 @@ pub struct LibrarySkin {
 }
 
 /// A library entry with its texture, for the UI.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export, rename = "LibrarySkin")]
 pub struct LibrarySkinView {
     #[serde(flatten)]
     pub skin: LibrarySkin,

@@ -5,3 +5,4 @@ package-lock.json
 
 # Root docs/instructions aren't app source — out of scope for this pass.
 *.md
+src/bindings

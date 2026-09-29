@@ -1,5 +1,78 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { AccountSession } from "@/bindings/AccountSession";
+import type { CloseBehavior } from "@/bindings/CloseBehavior";
+import type { ContentHit } from "@/bindings/ContentHit";
+import type { ContentKind } from "@/bindings/ContentKind";
+import type { CrashAnalysis } from "@/bindings/CrashAnalysis";
+import type { DeviceCodeInfo } from "@/bindings/DeviceCodeInfo";
+import type { DownloadProgress } from "@/bindings/DownloadProgress";
+import type { ExportSummary } from "@/bindings/ExportSummary";
+import type { GlobalSettings } from "@/bindings/GlobalSettings";
+import type { InstallWarning } from "@/bindings/InstallWarning";
+import type { Instance } from "@/bindings/Instance";
+import type { InstanceExit } from "@/bindings/InstanceExit";
+import type { InstanceInstallResult } from "@/bindings/InstanceInstallResult";
+import type { InstanceLogBatch } from "@/bindings/InstanceLogBatch";
+import type { InstanceSettingsInput } from "@/bindings/InstanceSettingsInput";
+import type { JavaInstallation } from "@/bindings/JavaInstallation";
+import type { JvmPreset } from "@/bindings/JvmPreset";
+import type { LaunchPhase } from "@/bindings/LaunchPhase";
+import type { LaunchPhaseEvent } from "@/bindings/LaunchPhaseEvent";
+import type { LauncherBehavior } from "@/bindings/LauncherBehavior";
+import type { LoaderKind } from "@/bindings/LoaderKind";
+import type { LogLine } from "@/bindings/LogLine";
+import type { MinecraftProfile } from "@/bindings/MinecraftProfile";
+import type { ModEntry } from "@/bindings/ModEntry";
+import type { ModUpdate } from "@/bindings/ModUpdate";
+import type { ModpackDetails } from "@/bindings/ModpackDetails";
+import type { ModpackRef } from "@/bindings/ModpackRef";
+import type { ModpackSummary } from "@/bindings/ModpackSummary";
+import type { ModpackVersionSummary } from "@/bindings/ModpackVersionSummary";
+import type { PlaySession } from "@/bindings/PlaySession";
+import type { ProcessStats } from "@/bindings/ProcessStats";
+import type { Screenshot } from "@/bindings/Screenshot";
+import type { StoredAccount } from "@/bindings/StoredAccount";
+import type { SystemMemoryInfo } from "@/bindings/SystemMemoryInfo";
+import type { VersionManifestEntry } from "@/bindings/VersionManifestEntry";
+
+export type {
+  AccountSession,
+  CloseBehavior,
+  ContentHit,
+  ContentKind,
+  CrashAnalysis,
+  DeviceCodeInfo,
+  DownloadProgress,
+  ExportSummary,
+  GlobalSettings,
+  InstallWarning,
+  Instance,
+  InstanceExit,
+  InstanceInstallResult,
+  InstanceLogBatch,
+  InstanceSettingsInput,
+  JavaInstallation,
+  JvmPreset,
+  LaunchPhase,
+  LaunchPhaseEvent,
+  LauncherBehavior,
+  LoaderKind,
+  LogLine,
+  MinecraftProfile,
+  ModEntry,
+  ModUpdate,
+  ModpackDetails,
+  ModpackRef,
+  ModpackSummary,
+  ModpackVersionSummary,
+  PlaySession,
+  ProcessStats,
+  Screenshot,
+  StoredAccount,
+  SystemMemoryInfo,
+  VersionManifestEntry,
+};
 
 export interface AppError {
   kind: string;
@@ -26,249 +99,11 @@ export function errorMessage(error: unknown): string {
 // since none of them opt into camelCase renaming).
 // ---------------------------------------------------------------------------
 
-export type LoaderKind = "vanilla" | "forge" | "neoforge" | "fabric" | "quilt";
-
-export interface VersionManifestEntry {
-  id: string;
-  type: string;
-  url: string;
-}
-
-export interface ModpackRef {
-  provider: string;
-  pack_id: string;
-  version_id: string;
-  pack_name: string;
-  installed_files: string[];
-}
-
-export interface PlaySession {
-  started_at: number;
-  duration_seconds: number;
-}
-
-export interface Instance {
-  id: string;
-  name: string;
-  minecraft_version: string;
-  loader: LoaderKind;
-  loader_version: string | null;
-  directory: string;
-  icon_url: string | null;
-  min_memory_mb: number | null;
-  max_memory_mb: number | null;
-  extra_jvm_args: string[];
-  modpack: ModpackRef | null;
-  created_at: number;
-  last_played_at: number | null;
-  play_time_seconds: number;
-  java_path: string | null;
-  window_width: number | null;
-  window_height: number | null;
-  fullscreen: boolean;
-  auto_join_server: string | null;
-  /** Catalog server this instance was prepared for (menu Serveurs). */
-  featured_server: string | null;
-  pinned: boolean;
-  protected: boolean;
-  notes: string;
-  /** Most recent play sessions, newest first. */
-  sessions: PlaySession[];
-}
-
-export interface InstanceSettingsInput {
-  min_memory_mb: number | null;
-  max_memory_mb: number | null;
-  extra_jvm_args: string[];
-  java_path: string | null;
-  window_width: number | null;
-  window_height: number | null;
-  fullscreen: boolean;
-  auto_join_server: string | null;
-}
-
-export type LauncherBehavior = "keep_open" | "minimize" | "hide";
-export type CloseBehavior = "ask" | "tray" | "quit";
-
-export interface JvmPreset {
-  name: string;
-  min_memory_mb: number;
-  max_memory_mb: number;
-  extra_jvm_args: string[];
-}
-
-export interface GlobalSettings {
-  default_min_memory_mb: number;
-  default_max_memory_mb: number;
-  default_jvm_args: string[];
-  azure_client_id: string;
-  curseforge_api_key: string;
-  java_path_override: string | null;
-  offline_mode: boolean;
-  offline_username: string;
-  on_game_launch: LauncherBehavior;
-  on_close: CloseBehavior;
-  discord_rich_presence: boolean;
-  jvm_presets: JvmPreset[];
-}
-
-export interface MinecraftProfile {
-  id: string;
-  name: string;
-}
-
-/** The active account as the backend exposes it (the game token stays in Rust). */
-export interface AccountSession {
-  profile: MinecraftProfile;
-  /** Restored without network: singleplayer only until the next refresh. */
-  offline: boolean;
-}
-
-export interface StoredAccount {
-  id: string;
-  name: string;
-  active: boolean;
-}
-
-export interface DeviceCodeInfo {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  expires_in: number;
-  interval: number;
-}
-
-export interface JavaInstallation {
-  path: string;
-  version: string;
-  major: number;
-  source: "managed" | "system";
-}
-
-export interface ModpackSummary {
-  id: string;
-  provider: string;
-  name: string;
-  author: string;
-  icon_url: string | null;
-  summary: string;
-  downloads: number | null;
-}
-
-export interface ModpackDetails {
-  summary: ModpackSummary;
-  description: string;
-}
-
-export interface ModpackVersionSummary {
-  id: string;
-  name: string;
-  minecraft_version: string;
-  loader: LoaderKind;
-  loader_version: string;
-}
-
 export type ProviderId = "modrinth" | "ftb" | "curseforge";
-
-export interface InstallWarning {
-  file_name: string;
-  message: string;
-  browser_url: string | null;
-  /** Instance-relative destination of a file to download by hand. */
-  path?: string | null;
-  sha1?: string | null;
-}
-
-export interface InstanceInstallResult {
-  instance: Instance;
-  warnings: InstallWarning[];
-}
-
-export interface ExportSummary {
-  path: string;
-  referenced: number;
-  bundled: number;
-}
-
-export type ContentKind = "mod" | "resource_pack" | "shader";
-
-export interface ContentHit {
-  project_id: string;
-  slug: string;
-  title: string;
-  description: string;
-  author: string;
-  icon_url: string | null;
-  downloads: number;
-  project_type: string;
-}
-
-export interface ModUpdate {
-  file_name: string;
-  project_id: string;
-  title: string;
-  icon_url: string | null;
-  current_version: string;
-  new_version: string;
-  new_file_name: string;
-  url: string;
-  sha1: string;
-  size: number;
-}
 
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
-
-export interface DownloadProgress {
-  task_id: string;
-  label: string;
-  bytes_done: number;
-  bytes_total: number;
-  files_done: number;
-  files_total: number;
-}
-
-export interface LogLine {
-  line: string;
-  stream: "stdout" | "stderr";
-}
-
-export interface InstanceLogBatch {
-  instance_id: string;
-  lines: LogLine[];
-}
-
-export interface CrashAnalysis {
-  summary: string;
-  suggestion: string | null;
-  matched_pattern: string;
-  crash_report: string | null;
-}
-
-export type LaunchPhase = "auth" | "version" | "loader" | "natives" | "java" | "starting" | "running";
-
-export interface LaunchPhaseEvent {
-  instance_id: string;
-  phase: LaunchPhase;
-}
-
-export interface ProcessStats {
-  memory_mb: number;
-  cpu_percent: number;
-}
-
-export interface SystemMemoryInfo {
-  total_mb: number;
-  available_mb: number;
-}
-
-export interface InstanceExit {
-  instance_id: string;
-  code: number | null;
-  crash_analysis: CrashAnalysis | null;
-  killed: boolean;
-}
 
 export function onDownloadProgress(handler: (p: DownloadProgress) => void): Promise<UnlistenFn> {
   return listen<DownloadProgress>("download-progress", (e) => handler(e.payload));
@@ -427,13 +262,6 @@ export const instancesApi = {
   deleteScreenshot: (id: string, fileName: string) => invoke<void>("instance_screenshots_delete", { id, fileName }),
 };
 
-export interface Screenshot {
-  file_name: string;
-  path: string;
-  size: number;
-  taken_at: number;
-}
-
 export const launchApi = {
   /** `server` (`host[:port]`) joins that server for this launch only. */
   launch: (instanceId: string, server?: string) =>
@@ -446,12 +274,6 @@ export const launchApi = {
   isRunning: (instanceId: string) => invoke<boolean>("is_instance_running", { instanceId }),
   stats: (instanceId: string) => invoke<ProcessStats | null>("instance_process_stats", { instanceId }),
 };
-
-export interface ModEntry {
-  file_name: string;
-  enabled: boolean;
-  size: number;
-}
 
 export const instanceModsApi = {
   list: (instanceId: string) => invoke<ModEntry[]>("instance_mods_list", { instanceId }),
