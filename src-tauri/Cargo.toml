@@ -51,6 +51,7 @@ discord-rich-presence = "0.2"
 ts-rs = { version = "12", features = ["serde-json-impl"] }
 toml = "0.8"
 flate2 = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [target.'cfg(windows)'.dependencies]
 mslnk = "0.1"

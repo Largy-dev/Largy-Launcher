@@ -310,7 +310,8 @@ struct ModrinthLoaderVersion {
 }
 
 fn modrinth(root: &Path) -> Vec<ExternalInstance> {
-    subdirs(root)
+    // Older versions wrote a profile.json in each profile folder…
+    let mut found: Vec<ExternalInstance> = subdirs(root)
         .into_iter()
         .filter_map(|dir| {
             let bytes = std::fs::read(dir.join("profile.json")).ok()?;
@@ -321,7 +322,22 @@ fn modrinth(root: &Path) -> Vec<ExternalInstance> {
             let name = if m.name.is_empty() { dir.file_name()?.to_string_lossy().into_owned() } else { m.name };
             Some(entry(ExternalSource::Modrinth, name, m.game_version, loader, loader_version, &dir, parse_date(m.last_played.as_deref())))
         })
-        .collect()
+        .collect();
+    // …current ones keep everything in app.db, next to the profiles folder.
+    let Some(db) = root.parent().map(|data| data.join("app.db")) else { return found };
+    for profile in modrinth_app::read_profiles(&db) {
+        let dir = root.join(&profile.path);
+        if !dir.is_dir() || !crate::util::fs::is_plain_file_name(&profile.path) {
+            continue;
+        }
+        let loader = LoaderKind::from_name(&profile.loader).unwrap_or(LoaderKind::Vanilla);
+        let loader_version = profile.loader_version.filter(|_| loader != LoaderKind::Vanilla);
+        let item = entry(ExternalSource::Modrinth, profile.name, profile.game_version, loader, loader_version, &dir, profile.last_played);
+        if !found.iter().any(|f| f.id == item.id) {
+            found.push(item);
+        }
+    }
+    found
 }
 
 /// Every instance found in other launchers, most recently played first.
@@ -400,6 +416,8 @@ pub fn import(paths: &AppPaths, external: &ExternalInstance, include_worlds: boo
         Ok(())
     })
 }
+
+mod modrinth_app;
 
 #[cfg(test)]
 mod tests;

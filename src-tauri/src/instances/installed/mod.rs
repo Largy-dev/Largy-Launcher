@@ -7,7 +7,10 @@
 //! catalogues lives in [`super::content`].
 
 pub mod cache;
+mod identify;
 pub mod metadata;
+
+pub use identify::identify;
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -21,11 +24,10 @@ use sha1::{Digest, Sha1};
 use super::content::ContentKind;
 use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
-use crate::providers::curseforge::{self, CurseForgeProvider};
+use crate::providers::curseforge;
 use crate::providers::LoaderKind;
-use crate::providers::modrinth::ModrinthApi;
 use crate::util::fs::validate_file_name;
-use cache::{CacheEntry, RemoteProject, RemoteProvider};
+use cache::{CacheEntry, RemoteProject};
 use metadata::LocalMeta;
 
 pub const DISABLED_SUFFIX: &str = ".disabled";
@@ -188,6 +190,9 @@ fn hash_file(path: &Path) -> Option<(String, u32)> {
 /// Hashes the files of `kind` the cache has no hashes for yet — the slow
 /// part (every byte of every jar), kept off the first display.
 pub fn ensure_hashes(paths: &AppPaths, instance_dir: &Path, kind: ContentKind) -> AppResult<()> {
+    // Files never listed yet get their cache entry first (the loader only
+    // shapes the returned dependencies, not what's cached).
+    list(paths, instance_dir, LoaderKind::Vanilla, kind)?;
     let found = candidates(&instance_dir.join(kind.folder()), kind)?;
     let keys: Vec<String> = found.iter().map(Candidate::key).collect();
     let known = cache::get_many(paths, &keys);
@@ -338,119 +343,6 @@ pub fn modrinth_url(project_type: &str, slug: &str) -> String {
     format!("https://modrinth.com/{kind}/{slug}")
 }
 
-/// Looks up the Modrinth (by SHA-1) or CurseForge (by fingerprint) project
-/// of every file not identified recently; returns how many were found.
-pub async fn identify(
-    paths: &AppPaths,
-    modrinth: &ModrinthApi,
-    curseforge: &CurseForgeProvider,
-    instance_dir: &Path,
-    loader: LoaderKind,
-    kind: ContentKind,
-) -> AppResult<usize> {
-    let items = {
-        let (paths, dir) = (paths.clone(), instance_dir.to_path_buf());
-        tokio::task::spawn_blocking(move || list(&paths, &dir, loader, kind))
-            .await
-            .map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))??
-    };
-    {
-        let (paths, dir) = (paths.clone(), instance_dir.to_path_buf());
-        tokio::task::spawn_blocking(move || ensure_hashes(&paths, &dir, kind))
-            .await
-            .map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))??;
-    }
-    let now = crate::auth::now_unix();
-    let keys: Vec<String> = items
-        .iter()
-        .filter(|i| !i.is_dir && i.remote.is_none())
-        .map(|i| cache::key(&i.file_name, i.size, i.modified))
-        .collect();
-    let pending: HashMap<String, CacheEntry> = cache::get_many(paths, &keys)
-        .into_iter()
-        .filter(|(_, e)| e.sha1.is_some() && now - e.remote_checked_at > REMOTE_RECHECK_SECS)
-        .collect();
-    if pending.is_empty() {
-        return Ok(0);
-    }
-
-    let mut found: HashMap<String, RemoteProject> = HashMap::new();
-    let by_sha1: HashMap<String, String> =
-        pending.iter().filter_map(|(k, e)| e.sha1.clone().map(|h| (h, k.clone()))).collect();
-    let hashes: Vec<String> = by_sha1.keys().cloned().collect();
-    let mut versions = HashMap::new();
-    for chunk in hashes.chunks(500) {
-        versions.extend(modrinth.versions_by_hash(chunk).await?);
-    }
-    let mut project_ids: Vec<String> = versions.values().map(|v| v.project_id.clone()).collect();
-    project_ids.sort();
-    project_ids.dedup();
-    let mut projects = HashMap::new();
-    for chunk in project_ids.chunks(100) {
-        projects.extend(modrinth.projects(chunk).await?.into_iter().map(|p| (p.id.clone(), p)));
-    }
-    for (hash, version) in &versions {
-        if let (Some(key), Some(p)) = (by_sha1.get(hash), projects.get(&version.project_id)) {
-            let slug = if p.slug.is_empty() { &p.id } else { &p.slug };
-            found.insert(
-                key.clone(),
-                RemoteProject {
-                    provider: RemoteProvider::Modrinth,
-                    project_id: p.id.clone(),
-                    title: p.title.clone(),
-                    description: p.description.clone(),
-                    icon_url: p.icon_url.clone(),
-                    url: modrinth_url(&p.project_type, slug),
-                },
-            );
-        }
-    }
-
-    if curseforge.has_key() {
-        let by_fingerprint: HashMap<u32, String> = pending
-            .iter()
-            .filter(|(k, _)| !found.contains_key(*k))
-            .filter_map(|(k, e)| e.fingerprint.map(|f| (f, k.clone())))
-            .collect();
-        let fingerprints: Vec<u32> = by_fingerprint.keys().copied().collect();
-        if !fingerprints.is_empty() {
-            match curseforge.identify(&fingerprints).await {
-                Ok(matches) => {
-                    for (fp, p) in matches {
-                        if let Some(key) = by_fingerprint.get(&fp) {
-                            found.insert(
-                                key.clone(),
-                                RemoteProject {
-                                    provider: RemoteProvider::Curseforge,
-                                    project_id: p.id.to_string(),
-                                    title: p.name,
-                                    description: p.summary,
-                                    icon_url: p.icon_url,
-                                    url: p.website_url.unwrap_or_else(|| {
-                                        format!("https://www.curseforge.com/projects/{}", p.id)
-                                    }),
-                                },
-                            );
-                        }
-                    }
-                }
-                Err(e) => tracing::warn!("CurseForge fingerprint lookup failed: {e}"),
-            }
-        }
-    }
-
-    let identified = found.len();
-    cache::update(paths, |entries| {
-        for key in pending.keys() {
-            if let Some(entry) = entries.get_mut(key) {
-                entry.remote_checked_at = now;
-                entry.remote = found.remove(key);
-            }
-        }
-    });
-    Ok(identified)
-}
-
 fn paths_for(dir: &Path, file_name: &str) -> (PathBuf, PathBuf) {
     (dir.join(file_name), dir.join(format!("{file_name}{DISABLED_SUFFIX}")))
 }
@@ -514,7 +406,13 @@ pub fn add_from_path(instance_dir: &Path, kind: ContentKind, source: &Path) -> A
     }
     let dir = instance_dir.join(kind.folder());
     std::fs::create_dir_all(&dir)?;
-    std::fs::copy(source, dir.join(&file_name))?;
+    let dest = dir.join(&file_name);
+    // Replace rather than overwrite in place: the old jar may be hard-linked
+    // from a restore point, which must keep the old bytes.
+    if dest.exists() {
+        std::fs::remove_file(&dest)?;
+    }
+    std::fs::copy(source, &dest)?;
     Ok(file_name)
 }
 

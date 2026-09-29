@@ -27,6 +27,8 @@ interface ReportIssueDialogProps {
   /** The instance the problem is about, if any. */
   instance?: Instance;
   crashSummary?: string | null;
+  /** The crash report of this very crash (path), when the game wrote one. */
+  crashReport?: string | null;
 }
 
 /**
@@ -34,7 +36,7 @@ interface ReportIssueDialogProps {
  * if they agree — links to their logs (uploaded to mclo.gs, scrubbed of
  * personal details). Nothing is sent anywhere until they click.
  */
-export function ReportIssueDialog({ open, onOpenChange, instance, crashSummary }: ReportIssueDialogProps) {
+export function ReportIssueDialog({ open, onOpenChange, instance, crashSummary, crashReport }: ReportIssueDialogProps) {
   const [description, setDescription] = useState("");
   const [launcherLog, setLauncherLog] = useState(true);
   const [gameLog, setGameLog] = useState(true);
@@ -43,28 +45,18 @@ export function ReportIssueDialog({ open, onOpenChange, instance, crashSummary }
   const report = useMutation({
     mutationFn: async () => {
       const [appVersion, os] = await Promise.all([getAppVersion(), invoke<string>("system_os_version")]);
-      const sources: LogSource[] = [];
-      if (launcherLog) sources.push("launcher");
-      if (instance && gameLog) sources.push(crashSummary ? "crash" : "game");
+      // This crash's own report, else the game log — never an older crash's report.
+      const logs: { source: LogSource; crashReport: string | null }[] = [];
+      if (launcherLog) logs.push({ source: "launcher", crashReport: null });
+      if (instance && gameLog) {
+        logs.push(crashReport ? { source: "crash", crashReport } : { source: "game", crashReport: null });
+      }
       const logUrls: string[] = [];
-      for (const source of sources) {
+      for (const log of logs) {
         try {
-          logUrls.push(
-            await invoke<string>("logs_share", { source, instanceId: instance?.id ?? null, crashReport: null }),
-          );
-        } catch (e) {
-          // A crash without a crash report still has the game log.
-          if (source === "crash") {
-            try {
-              logUrls.push(
-                await invoke<string>("logs_share", { source: "game", instanceId: instance!.id, crashReport: null }),
-              );
-            } catch {
-              // Nothing to attach: the report goes without it.
-            }
-          } else {
-            console.warn("log not attached", errorMessage(e));
-          }
+          logUrls.push(await invoke<string>("logs_share", { ...log, instanceId: instance?.id ?? null }));
+        } catch {
+          // Nothing to attach (no log yet, or mclo.gs unreachable): the report goes without it.
         }
       }
       return buildIssueUrl({
@@ -122,7 +114,7 @@ export function ReportIssueDialog({ open, onOpenChange, instance, crashSummary }
           {instance && (
             <label className="flex items-center gap-2">
               <Checkbox checked={gameLog} onCheckedChange={(v) => setGameLog(v === true)} />
-              Joindre le {crashSummary ? "rapport de crash" : "log du jeu"} de « {instance.name} »
+              Joindre le {crashReport ? "rapport de crash" : "log du jeu"} de « {instance.name} »
             </label>
           )}
           <p className="text-xs text-muted-foreground">

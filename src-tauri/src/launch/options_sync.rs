@@ -116,6 +116,10 @@ fn shared_file(paths: &AppPaths, minecraft_version: &str) -> PathBuf {
 }
 
 /// Before a launch: the shared options into the instance's `options.txt`.
+/// Only an existing file the game wrote (it has a `version:` line) is
+/// touched: without that line Minecraft runs its pre-1.13 key-binding
+/// conversions on the modern values and mangles them. A brand-new instance
+/// gets the shared options from its second launch on.
 pub fn apply(paths: &AppPaths, instance_dir: &Path, minecraft_version: &str) -> std::io::Result<()> {
     let Ok(shared_text) = std::fs::read_to_string(shared_file(paths, minecraft_version)) else {
         return Ok(());
@@ -125,7 +129,12 @@ pub fn apply(paths: &AppPaths, instance_dir: &Path, minecraft_version: &str) -> 
         return Ok(());
     }
     let target = instance_dir.join(OPTIONS);
-    let current = std::fs::read_to_string(&target).unwrap_or_default();
+    let Ok(current) = std::fs::read_to_string(&target) else {
+        return Ok(());
+    };
+    if !current.lines().any(|l| l.starts_with("version:")) {
+        return Ok(());
+    }
     let merged = merge(&current, &shared);
     if merged != current {
         write_atomic(&target, merged.as_bytes())?;
@@ -178,16 +187,35 @@ mod tests {
             std::fs::create_dir_all(dir).unwrap();
         }
         std::fs::write(a.join(OPTIONS), "fov:0.8\nrenderDistance:32\nkey_key.drop:key.keyboard.g\n").unwrap();
-        std::fs::write(b.join(OPTIONS), "renderDistance:6\nfov:0.0\n").unwrap();
+        std::fs::write(b.join(OPTIONS), "version:3955\nrenderDistance:6\nfov:0.0\n").unwrap();
 
         collect(&paths, &a, "1.21.1").unwrap();
         apply(&paths, &b, "1.20.1").unwrap();
         apply(&paths, &old, "1.12.2").unwrap();
 
         let b_options = std::fs::read_to_string(b.join(OPTIONS)).unwrap();
-        assert_eq!(b_options, "renderDistance:6\nfov:0.8\nkey_key.drop:key.keyboard.g\n");
+        assert_eq!(b_options, "version:3955\nrenderDistance:6\nfov:0.8\nkey_key.drop:key.keyboard.g\n");
         // Pre-1.13 key bindings aren't compatible: that era has its own copy.
         assert!(!old.join(OPTIONS).exists());
+    }
+
+    #[test]
+    fn files_the_game_has_not_written_are_left_alone() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::from_root(root.path().join("data"));
+        let (a, fresh, unversioned) = (root.path().join("a"), root.path().join("fresh"), root.path().join("u"));
+        for dir in [&a, &fresh, &unversioned] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(a.join(OPTIONS), "version:3955\nfov:0.8\n").unwrap();
+        std::fs::write(unversioned.join(OPTIONS), "fov:0.1\n").unwrap();
+        collect(&paths, &a, "1.21.1").unwrap();
+
+        apply(&paths, &fresh, "1.21.1").unwrap();
+        apply(&paths, &unversioned, "1.21.1").unwrap();
+
+        assert!(!fresh.join(OPTIONS).exists());
+        assert_eq!(std::fs::read_to_string(unversioned.join(OPTIONS)).unwrap(), "fov:0.1\n");
     }
 
     #[test]

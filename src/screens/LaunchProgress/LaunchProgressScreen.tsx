@@ -122,6 +122,7 @@ export function LaunchProgressScreen() {
         onOpenChange={setReporting}
         instance={instance}
         crashSummary={crashAnalysis?.summary}
+        crashReport={crashAnalysis?.crash_report}
       />
     </div>
   );

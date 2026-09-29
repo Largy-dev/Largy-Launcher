@@ -295,3 +295,15 @@ fn covers_default_to_the_newest_screenshot_and_can_be_chosen() {
     assert!(set_cover(&paths, &id, CoverChoice::Auto).unwrap().cover_path.unwrap().ends_with("new.png"));
     assert!(set_cover(&paths, &id, CoverChoice::File(dir.path().join("notes.txt").display().to_string())).is_err());
 }
+
+#[test]
+fn pictures_elsewhere_in_the_instance_are_copied_as_covers() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = AppPaths::from_root(dir.path().join("data"));
+    let id = create(&paths, test_input("Pack")).unwrap().id;
+    let pack_png = paths.instance_dir(&id).join("resourcepacks/pack.png");
+    std::fs::create_dir_all(pack_png.parent().unwrap()).unwrap();
+    std::fs::write(&pack_png, b"png").unwrap();
+    let chosen = set_cover(&paths, &id, CoverChoice::File(pack_png.display().to_string())).unwrap();
+    assert_eq!(chosen.cover.as_deref(), Some("cover.png"));
+}

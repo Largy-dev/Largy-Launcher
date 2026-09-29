@@ -44,6 +44,8 @@ pub async fn auth_window_login_available(state: State<'_, AppState>) -> AppResul
     Ok(interactive::is_available(&state.client, &client_id(&state)).await)
 }
 
+/// Label prefix of sign-in windows; each attempt gets its own label so a
+/// finishing attempt never closes a newer one.
 const LOGIN_WINDOW: &str = "ms-login";
 
 /// Opens the Microsoft sign-in page in a window and waits for its redirect.
@@ -58,13 +60,16 @@ pub async fn auth_window_login(app: tauri::AppHandle, state: State<'_, AppState>
     let url = interactive::authorize_url(&client_id, &pkce, &expected_state);
     let url: tauri::Url = url.parse().map_err(|e| crate::error::AppError::Auth(format!("adresse invalide : {e}")))?;
 
-    if let Some(previous) = app.get_webview_window(LOGIN_WINDOW) {
-        let _ = previous.destroy();
+    for (label, previous) in app.webview_windows() {
+        if label.starts_with(LOGIN_WINDOW) {
+            let _ = previous.destroy();
+        }
     }
+    let label = format!("{LOGIN_WINDOW}-{}", uuid::Uuid::new_v4().simple());
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
     let tx = Arc::new(parking_lot::Mutex::new(Some(tx)));
     let on_redirect = tx.clone();
-    let window = tauri::WebviewWindowBuilder::new(&app, LOGIN_WINDOW, tauri::WebviewUrl::External(url))
+    let window = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(url))
         .title("Connexion Microsoft — Largy Launcher")
         .inner_size(500.0, 700.0)
         // Its own WebView2 profile: isolated from the launcher's page, and
@@ -107,9 +112,7 @@ pub async fn auth_window_login(app: tauri::AppHandle, state: State<'_, AppState>
             *slot = None;
         }
     }
-    if let Some(window) = app.get_webview_window(LOGIN_WINDOW) {
-        let _ = window.destroy();
-    }
+    let _ = window.destroy();
     let redirect = redirect.ok_or(crate::error::AppError::Cancelled)?;
     let code = interactive::code_from_redirect(&redirect, &expected_state)?;
     let tokens = interactive::exchange_code(&state.client, &client_id, &code, &pkce).await?;

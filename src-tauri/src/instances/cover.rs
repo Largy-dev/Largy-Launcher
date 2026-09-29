@@ -55,7 +55,10 @@ pub fn set_cover(paths: &AppPaths, id: &str, choice: CoverChoice) -> AppResult<I
             let inside = std::fs::canonicalize(&source)
                 .ok()
                 .zip(std::fs::canonicalize(&current.directory).ok())
-                .and_then(|(s, root)| s.strip_prefix(&root).ok().map(|rel| rel.to_path_buf()));
+                .and_then(|(s, root)| s.strip_prefix(&root).ok().map(|rel| rel.to_path_buf()))
+                // Only screenshots are used in place: the asset protocol
+                // serves nothing else from inside an instance.
+                .filter(|rel| rel.starts_with("screenshots"));
             match inside {
                 Some(rel) => Some(rel.to_string_lossy().replace('\\', "/")),
                 None => {

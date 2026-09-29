@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, CheckCheck, Compass, Loader2, Power, PowerOff, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, Compass, Loader2, Search } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
@@ -20,6 +19,7 @@ import { errorMessage, instancesApi, type ContentKind, type Instance } from "@/s
 
 import { KIND_META } from "./kinds";
 import { InstalledRow, ROW_HEIGHT } from "./InstalledRow";
+import { SelectionBar } from "./SelectionBar";
 
 type Filter = "all" | "enabled" | "disabled" | "problems";
 type Sort = "name" | "recent" | "size";
@@ -384,82 +384,14 @@ export function InstalledList({ instance, kind, onBrowse }: InstalledListProps) 
         </>
       )}
 
-      <AnimatePresence>
-        {selecting && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 24 }}
-            className="glass-strong fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-2xl p-1.5 pl-4 shadow-2xl ring-1 ring-border"
-            role="toolbar"
-            aria-label="Actions sur la sélection"
-          >
-            <span className="mr-2 text-sm font-semibold tabular-nums">
-              {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setSelected(new Set(visible.map((i) => i.file_name)))}
-            >
-              <CheckCheck aria-hidden="true" />
-              Tout
-            </Button>
-            {kind !== "shader" || selectedItems.some((i) => !i.is_dir) ? (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={setEnabled.isPending}
-                  onClick={() =>
-                    setEnabled.mutate({
-                      names: selectedItems.filter((i) => !i.is_dir).map((i) => i.file_name),
-                      enabled: true,
-                    })
-                  }
-                >
-                  <Power aria-hidden="true" />
-                  Activer
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={setEnabled.isPending}
-                  onClick={() =>
-                    setEnabled.mutate({
-                      names: selectedItems.filter((i) => !i.is_dir).map((i) => i.file_name),
-                      enabled: false,
-                    })
-                  }
-                >
-                  <PowerOff aria-hidden="true" />
-                  Désactiver
-                </Button>
-              </>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-destructive hover:text-destructive"
-              onClick={() => setToDelete(selectedItems)}
-            >
-              <Trash2 aria-hidden="true" />
-              Supprimer
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Annuler la sélection"
-              onClick={() => setSelected(new Set())}
-            >
-              <X aria-hidden="true" />
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <SelectionBar
+        selected={selectedItems}
+        busy={setEnabled.isPending}
+        onSelectAll={() => setSelected(new Set(visible.map((i) => i.file_name)))}
+        onSetEnabled={(names, enabled) => setEnabled.mutate({ names, enabled })}
+        onDelete={setToDelete}
+        onClear={() => setSelected(new Set())}
+      />
 
       {dragging && (
         <div className="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">

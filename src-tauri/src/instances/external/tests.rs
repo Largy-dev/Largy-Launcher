@@ -132,3 +132,29 @@ fn import_copies_content_but_not_logs_and_worlds_only_on_request() {
     let with = import(&paths, &found[0], true).unwrap();
     assert_eq!(std::fs::read_dir(with.directory.join("saves")).unwrap().count(), 2);
 }
+
+#[test]
+fn current_modrinth_app_instances_come_from_its_database() {
+    let base = tempfile::tempdir().unwrap();
+    let data = base.path().join("ModrinthApp");
+    game_dir(&data.join("profiles/Create"), 2, 1);
+    rusqlite::Connection::open(data.join("app.db"))
+        .unwrap()
+        .execute_batch(
+            "CREATE TABLE instances (id TEXT, path TEXT, applied_content_set_id TEXT, name TEXT, last_played INTEGER);
+             CREATE TABLE instance_content_sets (id TEXT, instance_id TEXT, game_version TEXT, loader TEXT,
+                                                 loader_version TEXT, modified INTEGER);
+             INSERT INTO instances VALUES ('i1', 'Create', 's1', 'Create: Above', 1700000000);
+             INSERT INTO instances VALUES ('i2', 'Gone', 's2', 'Deleted folder', NULL);
+             INSERT INTO instance_content_sets VALUES ('s1', 'i1', '1.20.1', 'forge', '47.2.0', 1);
+             INSERT INTO instance_content_sets VALUES ('s2', 'i2', '1.20.1', 'fabric', '0.15', 1);",
+        )
+        .unwrap();
+
+    let found = detect(&roots(base.path()), None, &[]);
+
+    assert_eq!(found.len(), 1);
+    let e = &found[0];
+    assert_eq!((e.source, e.name.as_str(), e.loader, e.mods, e.worlds), (ExternalSource::Modrinth, "Create: Above", LoaderKind::Forge, 2, 1));
+    assert_eq!(e.last_played, Some(1_700_000_000));
+}

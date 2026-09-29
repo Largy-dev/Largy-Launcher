@@ -130,6 +130,31 @@ fn enabling_disabling_and_deleting() {
 }
 
 #[test]
+fn hashes_cover_files_never_listed_before() {
+    let f = setup();
+    std::fs::write(f.instance.join("mods/new.jar"), jar(&[])).unwrap();
+    let hashes = hashes(&f.paths, &f.instance, LoaderKind::Fabric, ContentKind::Mod).unwrap();
+    assert_eq!(hashes.values().collect::<Vec<_>>(), vec!["new.jar"]);
+}
+
+#[test]
+fn adding_a_file_with_an_existing_name_leaves_hard_links_intact() {
+    let f = setup();
+    let installed = f.instance.join("mods/create.jar");
+    std::fs::write(&installed, jar(&[("old", b"old")])).unwrap();
+    let snapshot = f.instance.join("snapshot-create.jar");
+    std::fs::hard_link(&installed, &snapshot).unwrap();
+    let src = tempfile::tempdir().unwrap();
+    let patched = src.path().join("create.jar");
+    std::fs::write(&patched, jar(&[("new", b"new")])).unwrap();
+
+    add_from_path(&f.instance, ContentKind::Mod, &patched).unwrap();
+
+    assert_eq!(std::fs::read(&installed).unwrap(), std::fs::read(&patched).unwrap());
+    assert_ne!(std::fs::read(&snapshot).unwrap(), std::fs::read(&patched).unwrap());
+}
+
+#[test]
 fn folders_can_be_deleted_but_not_disabled() {
     let f = setup();
     let folder = f.instance.join("shaderpacks/BSL");
