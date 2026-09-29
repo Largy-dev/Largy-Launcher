@@ -51,6 +51,12 @@ pub fn system_memory_info() -> SystemMemoryInfo {
     SystemMemoryInfo { total_mb: sys.total_memory() / 1024 / 1024, available_mb: sys.available_memory() / 1024 / 1024 }
 }
 
+/// "Windows 11 Pro 26200" — for bug reports.
+#[tauri::command]
+pub fn system_os_version() -> String {
+    sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string())
+}
+
 #[tauri::command]
 pub async fn loaders_list_versions(
     state: State<'_, AppState>,

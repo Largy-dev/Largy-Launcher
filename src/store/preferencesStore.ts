@@ -41,6 +41,8 @@ export interface Preferences {
   /** Minutes of continuous play between two playtime reminders. */
   playtimeReminderMinutes: number;
   logs: LogPreferences;
+  /** The home screen's tips card was dismissed for good. */
+  tipsDismissed: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -63,6 +65,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   },
   playtimeReminderMinutes: 60,
   logs: { autoScroll: true, wrap: true },
+  tipsDismissed: false,
 };
 
 interface PreferencesStore extends Preferences {

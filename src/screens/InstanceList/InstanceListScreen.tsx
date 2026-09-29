@@ -16,6 +16,7 @@ import {
 
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { TipsCard } from "@/components/TipsCard";
 import { Skeleton } from "@/components/Skeleton";
 import { InstanceHero } from "@/components/instance/InstanceHero";
 import { LOADER_META, LOADER_ORDER } from "@/components/instance/LoaderBadge";
@@ -185,6 +186,7 @@ export function InstanceListScreen() {
       ) : (
         <>
           {featured && <InstanceHero instance={featured} />}
+          <TipsCard />
 
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>

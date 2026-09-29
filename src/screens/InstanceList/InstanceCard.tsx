@@ -206,7 +206,7 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
         <div
           {...clickable}
           className={cn(
-            "glass relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl transition-shadow hover:shadow-xl",
+            "glass relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl transition-shadow outline-none hover:shadow-xl focus-visible:ring-2 focus-visible:ring-primary",
             installing && "cursor-default",
           )}
         >
@@ -285,7 +285,7 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
       ) : (
         <div
           {...clickable}
-          className="glass relative flex cursor-pointer items-center gap-3 overflow-hidden rounded-xl p-2.5 pr-3 transition-shadow hover:shadow-lg"
+          className="glass relative flex cursor-pointer items-center gap-3 overflow-hidden rounded-xl p-2.5 pr-3 transition-shadow outline-none hover:shadow-lg focus-visible:ring-2 focus-visible:ring-primary"
         >
           <div className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: color }} aria-hidden="true" />
           <InstanceIcon instance={instance} className="ml-1 size-11 rounded-lg" />

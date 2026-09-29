@@ -131,6 +131,7 @@ pub fn run() {
             commands::app_version,
             commands::system_memory_mb,
             commands::system_memory_info,
+            commands::system_os_version,
             commands::loaders_list_versions,
             commands::java_list_installations,
             commands::java_probe,

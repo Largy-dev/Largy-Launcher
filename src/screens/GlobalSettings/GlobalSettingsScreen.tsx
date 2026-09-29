@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Bell,
+  Bug,
   CheckCircle2,
   Coffee,
   ExternalLink,
@@ -41,6 +42,8 @@ import { notify } from "@/lib/notify";
 import { adviseRam } from "@/lib/ramAdvice";
 import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
 import { useShareLog } from "@/hooks/useShareLog";
+import { REPO_URL } from "@/lib/issueReport";
+import { ReportIssueDialog } from "@/components/ReportIssueDialog";
 import {
   errorMessage,
   openLauncherLogs,
@@ -85,8 +88,6 @@ const TABS: SettingsTab<TabId>[] = [
   { id: "advanced", label: "Avancé", icon: Wrench, description: "Clés d'API et options pour utilisateurs avertis." },
   { id: "about", label: "À propos", icon: Info, description: "Version et mises à jour." },
 ];
-
-const REPO_URL = "https://github.com/Largy-dev/Largy-Launcher";
 
 function isTab(value: string | null): value is TabId {
   return TABS.some((t) => t.id === value);
@@ -185,6 +186,19 @@ function InstallerCacheRow() {
         </Button>
       }
     />
+  );
+}
+
+function ReportIssueButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+        <Bug aria-hidden="true" />
+        Signaler
+      </Button>
+      <ReportIssueDialog open={open} onOpenChange={setOpen} />
+    </>
   );
 }
 
@@ -394,6 +408,11 @@ export function GlobalSettingsScreen() {
                   onChange={(e) => update("curseforge_api_key", e.target.value)}
                 />
               }
+            />
+            <SettingRow
+              label="Signaler un problème"
+              description="Prépare un rapport sur GitHub avec ta description, ta version et, si tu veux, tes logs."
+              control={<ReportIssueButton />}
             />
             <SettingRow
               label="Journal du launcher"

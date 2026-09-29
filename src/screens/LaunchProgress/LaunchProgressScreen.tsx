@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import { AnimatePresence } from "motion/react";
@@ -10,6 +11,7 @@ import { CrashCard, LiveStatsPanel, TransferPanel } from "@/components/launch/La
 import { LaunchTimeline } from "@/components/launch/LaunchTimeline";
 import { LogConsole } from "@/components/console/LogConsole";
 import { useShareLog } from "@/hooks/useShareLog";
+import { ReportIssueDialog } from "@/components/ReportIssueDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { useAllocatedRam } from "@/hooks/useInstanceInfo";
@@ -32,6 +34,7 @@ export function LaunchProgressScreen() {
   const { play, running, preparing } = useLaunchInstance(instance);
   const allocated = useAllocatedRam(instance);
   const share = useShareLog();
+  const [reporting, setReporting] = useState(false);
 
   if (!instance) {
     return (
@@ -95,6 +98,7 @@ export function LaunchProgressScreen() {
             onOpenFolder={openCrashDetails}
             onRelaunch={() => play()}
             sharing={share.isPending}
+            onReport={() => setReporting(true)}
             onShare={() =>
               share.mutate(
                 crashAnalysis.crash_report
@@ -112,6 +116,12 @@ export function LaunchProgressScreen() {
         onShare={() => share.mutate({ source: "game", instanceId: instance.id })}
         sharing={share.isPending}
         className="min-h-72 flex-1"
+      />
+      <ReportIssueDialog
+        open={reporting}
+        onOpenChange={setReporting}
+        instance={instance}
+        crashSummary={crashAnalysis?.summary}
       />
     </div>
   );

@@ -1,7 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { AlertTriangle, Copy, Cpu, FolderOpen, Loader2, MemoryStick, RotateCcw, Share2, Timer, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Bug,
+  Copy,
+  Cpu,
+  FolderOpen,
+  Loader2,
+  MemoryStick,
+  RotateCcw,
+  Share2,
+  Timer,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/hooks/useInstanceInfo";
@@ -117,9 +129,19 @@ interface CrashCardProps {
   onRelaunch: () => void;
   onShare: () => void;
   sharing: boolean;
+  onReport: () => void;
 }
 
-export function CrashCard({ analysis, logs, onDismiss, onOpenFolder, onRelaunch, onShare, sharing }: CrashCardProps) {
+export function CrashCard({
+  analysis,
+  logs,
+  onDismiss,
+  onOpenFolder,
+  onRelaunch,
+  onShare,
+  sharing,
+  onReport,
+}: CrashCardProps) {
   async function copyReport() {
     const lines = logs.slice(-300).map((l) => l.line);
     const report = [
@@ -167,6 +189,10 @@ export function CrashCard({ analysis, logs, onDismiss, onOpenFolder, onRelaunch,
             <Button size="sm" variant="outline" onClick={onOpenFolder} className="gap-1.5">
               <FolderOpen aria-hidden="true" />
               {analysis.crash_report ? "Voir le crash report" : "Ouvrir les logs"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onReport} className="gap-1.5">
+              <Bug aria-hidden="true" />
+              Signaler un bug du launcher
             </Button>
           </div>
         </div>
