@@ -140,6 +140,8 @@ pub fn run() {
             commands::auth::auth_begin_login,
             commands::auth::auth_complete_login,
             commands::auth::auth_cancel_login,
+            commands::auth::auth_window_login_available,
+            commands::auth::auth_window_login,
             commands::auth::auth_try_silent_login,
             commands::auth::auth_switch_account,
             commands::auth::auth_list_accounts,

@@ -4,6 +4,7 @@
 //! is kept in `accounts.json`. The Minecraft access token itself never
 //! leaves the backend.
 
+pub mod interactive;
 pub mod mc_auth;
 pub mod ms_oauth;
 pub mod token_store;
@@ -132,6 +133,22 @@ async fn finish_chain(client: &reqwest::Client, ms_access_token: &str) -> AppRes
     Ok(AccountSession { profile, minecraft_access_token: mc_token, expires_at, xuid: xsts.xid })
 }
 
+/// Turns fresh Microsoft tokens into a Minecraft session and remembers the
+/// account as the active one — the end of every sign-in flow.
+pub async fn login_with_tokens(
+    paths: &AppPaths,
+    client: &reqwest::Client,
+    tokens: &ms_oauth::MsTokens,
+) -> AppResult<AccountSession> {
+    let session = finish_chain(client, &tokens.access_token).await?;
+    TokenStore::save_refresh_token(&session.profile.id, &tokens.refresh_token)?;
+    remember_minecraft_token(&session);
+    let mut file = load_accounts(paths)?;
+    file.upsert(&session.profile);
+    save_accounts(paths, &file)?;
+    Ok(session)
+}
+
 /// Polls the token endpoint until the user finishes the browser step (or
 /// `cancel` fires), then runs the rest of the chain and remembers the
 /// account as the active one.
@@ -159,15 +176,7 @@ pub async fn complete_login(
             // RFC 8628 §3.5: back off by 5 seconds on every `slow_down`.
             PollOutcome::SlowDown => interval += Duration::from_secs(5),
             PollOutcome::Expired => return Err(AppError::Auth("Code expiré, réessaie.".to_string())),
-            PollOutcome::Success(tokens) => {
-                let session = finish_chain(client, &tokens.access_token).await?;
-                TokenStore::save_refresh_token(&session.profile.id, &tokens.refresh_token)?;
-                remember_minecraft_token(&session);
-                let mut file = load_accounts(paths)?;
-                file.upsert(&session.profile);
-                save_accounts(paths, &file)?;
-                return Ok(session);
-            }
+            PollOutcome::Success(tokens) => return login_with_tokens(paths, client, &tokens).await,
         }
     }
 }

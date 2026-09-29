@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/lib/notify";
-import { auth, errorMessage, isCancelled, settingsApi, type DeviceCodeInfo } from "@/services/tauri";
+import {
+  auth,
+  errorMessage,
+  isCancelled,
+  settingsApi,
+  type AccountSession,
+  type DeviceCodeInfo,
+} from "@/services/tauri";
 import { useAppStore } from "@/store/appStore";
 
 function MicrosoftMark() {
@@ -21,7 +28,7 @@ function MicrosoftMark() {
   );
 }
 
-type LoginStatus = "idle" | "waiting" | "polling" | "confirm-offline" | "error";
+type LoginStatus = "idle" | "waiting" | "window" | "polling" | "confirm-offline" | "error";
 
 interface LoginDialogProps {
   open: boolean;
@@ -58,14 +65,20 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     reset();
   }
 
-  async function startLogin() {
+  async function startLogin(useCode = false) {
     setStatus("waiting");
     setError(null);
     try {
-      const info = await auth.beginLogin();
-      setDevice(info);
-      setStatus("polling");
-      const session = await auth.completeLogin(info);
+      let session: AccountSession;
+      if (!useCode && (await auth.windowLoginAvailable().catch(() => false))) {
+        setStatus("window");
+        session = await auth.windowLogin();
+      } else {
+        const info = await auth.beginLogin();
+        setDevice(info);
+        setStatus("polling");
+        session = await auth.completeLogin(info);
+      }
       setAccount(session);
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       notify.success({ title: `Bienvenue, ${session.profile.name} !`, message: "Compte Microsoft connecté." });
@@ -75,10 +88,18 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         finishLogin();
       }
     } catch (e) {
-      if (isCancelled(e)) return;
+      if (isCancelled(e)) {
+        setStatus((current) => (current === "window" ? "idle" : current));
+        return;
+      }
       setError(errorMessage(e));
       setStatus("error");
     }
+  }
+
+  async function switchToCode() {
+    await auth.cancelLogin().catch(() => {});
+    startLogin(true);
   }
 
   async function copyAndOpen(info: DeviceCodeInfo) {
@@ -97,7 +118,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       onOpenChange={(next) => {
         onOpenChange(next);
         if (!next) {
-          if (status === "polling" || status === "waiting") auth.cancelLogin().catch(() => {});
+          if (status === "polling" || status === "waiting" || status === "window") auth.cancelLogin().catch(() => {});
           reset();
         }
       }}
@@ -112,7 +133,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         </DialogHeader>
 
         {status === "idle" && (
-          <Button onClick={startLogin} className="w-full gap-2">
+          <Button onClick={() => startLogin()} className="w-full gap-2">
             <MicrosoftMark />
             Se connecter avec Microsoft
           </Button>
@@ -122,6 +143,22 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             Préparation de la connexion…
+          </div>
+        )}
+
+        {status === "window" && (
+          <div className="space-y-3 text-center">
+            <p className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Termine la connexion dans la fenêtre Microsoft…
+            </p>
+            <button
+              type="button"
+              onClick={switchToCode}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              La fenêtre ne s'affiche pas ? Se connecter avec un code
+            </button>
           </div>
         )}
 

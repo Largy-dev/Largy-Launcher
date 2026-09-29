@@ -179,6 +179,10 @@ export const auth = {
   beginLogin: () => invoke<DeviceCodeInfo>("auth_begin_login"),
   completeLogin: (device: DeviceCodeInfo) => invoke<AccountSession>("auth_complete_login", { device }),
   cancelLogin: () => invoke<void>("auth_cancel_login"),
+  /** Whether the app registration allows signing in inside a launcher window. */
+  windowLoginAvailable: () => invoke<boolean>("auth_window_login_available"),
+  /** Microsoft's sign-in page in a window; resolves once signed in (closing it cancels). */
+  windowLogin: () => invoke<AccountSession>("auth_window_login"),
   trySilentLogin: () => invoke<AccountSession | null>("auth_try_silent_login"),
   listAccounts: () => invoke<StoredAccount[]>("auth_list_accounts"),
   switchAccount: (accountId: string) => invoke<AccountSession>("auth_switch_account", { accountId }),
