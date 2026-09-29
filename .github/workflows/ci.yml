@@ -67,3 +67,42 @@ jobs:
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets --locked -- -D warnings
+
+  e2e:
+    # The real app window driven over WebView2's DevTools protocol: catches
+    # what unit tests can't (wiring between screens, IPC, rendering errors).
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          add-rust-environment-hash-key: false
+          key: e2e
+
+      - run: npm ci
+
+      - name: Build the app (debug, DevTools port open)
+        run: npx tauri build --debug --no-bundle --config tests/e2e/tauri.e2e.json
+
+      - name: Drive it
+        env:
+          LARGY_E2E_SEED: "1"
+        run: node tests/e2e/run.mjs src-tauri/target/debug/largy-launcher.exe
+
+      - name: Screenshots of failed steps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tests/e2e/artifacts
+          if-no-files-found: ignore

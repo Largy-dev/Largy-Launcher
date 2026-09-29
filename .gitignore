@@ -56,3 +56,4 @@ dist-ssr
 
 # Ruflo runtime data
 ruvector.db
+tests/e2e/artifacts

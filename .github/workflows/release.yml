@@ -49,6 +49,30 @@ jobs:
 
       - run: npm ci
 
+      # Authenticode signing through Azure Trusted Signing — Windows then
+      # stops showing "Windows protected your PC". Switched on as soon as the
+      # AZURE_* secrets and TRUSTED_SIGNING_* variables exist; without them the
+      # build is unsigned, as before.
+      - name: Configure code signing
+        id: signing
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ENDPOINT: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.TRUSTED_SIGNING_PROFILE }}
+        run: |
+          if (-not $env:AZURE_CLIENT_ID -or -not $env:ENDPOINT -or -not $env:ACCOUNT -or -not $env:PROFILE) {
+            Write-Host "Code signing not configured: building unsigned."
+            "args=" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          cargo install trusted-signing-cli --locked
+          $command = "trusted-signing-cli -e $env:ENDPOINT -a $env:ACCOUNT -c $env:PROFILE -d `"Largy Launcher`" %1"
+          @{ bundle = @{ windows = @{ signCommand = $command } } } | ConvertTo-Json -Depth 5 |
+            Set-Content -Encoding utf8 src-tauri/tauri.signing.json
+          "args=--config src-tauri/tauri.signing.json" >> $env:GITHUB_OUTPUT
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -57,7 +81,11 @@ jobs:
           # Baked into the binary (option_env!) so the CurseForge tab works
           # with no setup; never committed to the repo.
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         with:
+          args: ${{ steps.signing.outputs.args }}
           tagName: ${{ github.ref_name }}
           releaseName: "Largy Launcher ${{ github.ref_name }}"
           releaseBody: "Installe `LargyLauncher-Setup.exe` et lance-le — aucune configuration requise."
