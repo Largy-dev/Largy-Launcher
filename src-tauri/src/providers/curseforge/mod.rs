@@ -20,7 +20,7 @@ use serde_json::json;
 use super::archive;
 use super::{
     InstallWarning, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
-    ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
+    ModpackVersionSummary, ProviderError, PackCategory, ResolvedModpackVersion, SearchQuery, SearchSort,
 };
 use crate::download::{DownloadItem, DownloadManager};
 pub use api_types::CfProject;
@@ -191,6 +191,31 @@ impl CurseForgeProvider {
     }
 }
 
+/// French names of CurseForge's modpack categories (unknown ones kept as is).
+fn category_label(name: &str) -> String {
+    let label = match name {
+        "Adventure and RPG" => "Aventure et RPG",
+        "Combat / PvP" => "Combat / PvP",
+        "Exploration" => "Exploration",
+        "Extra Large" => "Très gros",
+        "Hardcore" => "Hardcore",
+        "Magic" => "Magie",
+        "Map Based" => "Basé sur une map",
+        "Mini Game" => "Mini-jeux",
+        "Multiplayer" => "Multijoueur",
+        "Quests" => "Quêtes",
+        "Sci-Fi" => "Science-fiction",
+        "Skyblock" => "Skyblock",
+        "Small / Light" => "Petit / léger",
+        "Tech" => "Technologie",
+        "Vanilla+" => "Vanilla+",
+        "Horror" => "Horreur",
+        "Exploration & Adventure" => "Exploration et aventure",
+        other => return other.to_string(),
+    };
+    label.to_string()
+}
+
 /// CurseForge's file fingerprint: 32-bit MurmurHash2 (seed 1) of the file
 /// with every whitespace byte (tab, LF, CR, space) removed.
 pub fn fingerprint(bytes: &[u8]) -> u32 {
@@ -271,21 +296,51 @@ impl ModpackProvider for CurseForgeProvider {
     }
 
     async fn search(&self, query: SearchQuery) -> Result<Vec<ModpackSummary>, ProviderError> {
-        let response: ListResponse<CfMod> = self
+        // CurseForge's ModsSearchSortField: 2 popularity, 3 last updated,
+        // 6 total downloads, 11 release date.
+        let sort_field = match query.sort {
+            SearchSort::Relevance => 2,
+            SearchSort::Downloads => 6,
+            SearchSort::Updated => 3,
+            SearchSort::Newest => 11,
+        };
+        let mut params = vec![
+            ("gameId", MINECRAFT_GAME_ID.to_string()),
+            ("classId", MODPACK_CLASS_ID.to_string()),
+            ("searchFilter", query.text.clone()),
+            ("pageSize", "25".to_string()),
+            ("index", query.offset.to_string()),
+            ("sortField", sort_field.to_string()),
+            ("sortOrder", "desc".to_string()),
+        ];
+        if let Some(version) = &query.game_version {
+            params.push(("gameVersion", version.clone()));
+        }
+        if let Some(loader) = query.loader.and_then(content::loader_type) {
+            params.push(("modLoaderType", loader.to_string()));
+        }
+        if let Some(category) = &query.category {
+            params.push(("categoryId", category.clone()));
+        }
+        let response: ListResponse<CfMod> = self.get("/mods/search", &params).await?;
+        Ok(response.data.iter().map(CfMod::to_summary).collect())
+    }
+
+    async fn categories(&self) -> Result<Vec<PackCategory>, ProviderError> {
+        let response: ListResponse<api_types::CfCategory> = self
             .get(
-                "/mods/search",
-                &[
-                    ("gameId", MINECRAFT_GAME_ID.to_string()),
-                    ("classId", MODPACK_CLASS_ID.to_string()),
-                    ("searchFilter", query.text.clone()),
-                    ("pageSize", "25".to_string()),
-                    ("index", query.offset.to_string()),
-                    ("sortField", "2".to_string()),
-                    ("sortOrder", "desc".to_string()),
-                ],
+                "/categories",
+                &[("gameId", MINECRAFT_GAME_ID.to_string()), ("classId", MODPACK_CLASS_ID.to_string())],
             )
             .await?;
-        Ok(response.data.iter().map(CfMod::to_summary).collect())
+        let mut categories: Vec<PackCategory> = response
+            .data
+            .into_iter()
+            .filter(|c| c.is_class != Some(true))
+            .map(|c| PackCategory { id: c.id.to_string(), label: category_label(&c.name) })
+            .collect();
+        categories.sort_by(|a, b| a.label.cmp(&b.label));
+        Ok(categories)
     }
 
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {

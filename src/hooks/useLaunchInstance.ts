@@ -2,8 +2,43 @@ import { useNavigate } from "react-router";
 
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/lib/notify";
-import { errorMessage, instancesApi, isAppError, isCancelled, launchApi, type Instance } from "@/services/tauri";
+import {
+  errorMessage,
+  instancesApi,
+  isAppError,
+  isCancelled,
+  launchApi,
+  providersApi,
+  type Instance,
+} from "@/services/tauri";
 import { runtimeOf, useAppStore } from "@/store/appStore";
+
+/**
+ * A pack joined by link follows its file: when the file changed, update the
+ * instance before playing. Offline or unreachable: play what's installed.
+ */
+async function syncLinkedPack(instance: Instance): Promise<void> {
+  const pack = instance.modpack;
+  if (pack?.provider !== "url") return;
+  try {
+    const [latest] = await providersApi.getVersions("url", pack.pack_id);
+    if (!latest || latest.id === pack.version_id) return;
+    notify.info({
+      title: `Mise à jour de ${instance.name}…`,
+      message: "Le pack partagé a changé : synchronisation avant de jouer.",
+      history: false,
+    });
+    await instancesApi.updateModpack(instance.id, latest.id);
+    notify.success({ title: `${instance.name} est à jour`, message: latest.name, history: false });
+  } catch (e) {
+    if (isCancelled(e)) throw e;
+    notify.warning({
+      title: "Pack non synchronisé",
+      message: `La dernière version n'a pas pu être récupérée (${errorMessage(e)}). Lancement de la version installée.`,
+      history: false,
+    });
+  }
+}
 
 /**
  * Starts any instance (optionally straight onto a server): checks there is
@@ -45,6 +80,11 @@ export function usePlayInstance() {
     }
     if (runtimeOf(useAppStore.getState().runtime, instance.id).running) {
       navigate(`/instances/${instance.id}/launch`);
+      return;
+    }
+    try {
+      await syncLinkedPack(instance);
+    } catch {
       return;
     }
     setActiveInstanceId(instance.id);

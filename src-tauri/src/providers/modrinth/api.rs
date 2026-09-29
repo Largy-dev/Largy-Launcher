@@ -28,6 +28,22 @@ pub struct SearchHit {
     pub downloads: u64,
     #[serde(default)]
     pub project_type: String,
+    /// Game versions the project supports.
+    #[serde(default)]
+    pub versions: Vec<String>,
+    /// Categories and loaders.
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub date_modified: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CategoryTag {
+    pub name: String,
+    pub project_type: String,
+    #[serde(default)]
+    pub header: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -152,6 +168,18 @@ impl ModrinthApi {
         limit: u32,
     ) -> Result<Vec<SearchHit>, ProviderError> {
         let index = if query.trim().is_empty() { "downloads" } else { "relevance" };
+        self.search_sorted(query, facets, offset, limit, index).await
+    }
+
+    /// `index`: `relevance`, `downloads`, `follows`, `newest` or `updated`.
+    pub async fn search_sorted(
+        &self,
+        query: &str,
+        facets: Vec<Vec<String>>,
+        offset: u32,
+        limit: u32,
+        index: &str,
+    ) -> Result<Vec<SearchHit>, ProviderError> {
         let response: SearchResponse = self
             .get(
                 "/search",
@@ -165,6 +193,11 @@ impl ModrinthApi {
             )
             .await?;
         Ok(response.hits)
+    }
+
+    /// Category tags (`name`, `project_type`) of the whole catalogue.
+    pub async fn categories(&self) -> Result<Vec<CategoryTag>, ProviderError> {
+        self.get("/tag/category", &[]).await
     }
 
     pub async fn project(&self, id: &str) -> Result<Project, ProviderError> {

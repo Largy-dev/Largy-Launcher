@@ -307,6 +307,9 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
                   icon_url: instance.icon_url,
                   summary: "",
                   downloads: null,
+                  game_versions: [instance.minecraft_version],
+                  loaders: [instance.loader],
+                  updated_at: null,
                 }
               : null
           }

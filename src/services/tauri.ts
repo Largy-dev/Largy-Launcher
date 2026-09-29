@@ -28,8 +28,11 @@ import type { ModpackDetails } from "@/bindings/ModpackDetails";
 import type { ModpackRef } from "@/bindings/ModpackRef";
 import type { ModpackSummary } from "@/bindings/ModpackSummary";
 import type { ModpackVersionSummary } from "@/bindings/ModpackVersionSummary";
+import type { PackCategory } from "@/bindings/PackCategory";
 import type { PlaySession } from "@/bindings/PlaySession";
 import type { ProcessStats } from "@/bindings/ProcessStats";
+import type { SearchQuery } from "@/bindings/SearchQuery";
+import type { SearchSort } from "@/bindings/SearchSort";
 import type { Screenshot } from "@/bindings/Screenshot";
 import type { StoredAccount } from "@/bindings/StoredAccount";
 import type { SystemMemoryInfo } from "@/bindings/SystemMemoryInfo";
@@ -64,6 +67,9 @@ export type {
   ModpackRef,
   ModpackSummary,
   ModpackVersionSummary,
+  PackCategory,
+  SearchQuery,
+  SearchSort,
   PlaySession,
   ProcessStats,
   Screenshot,
@@ -97,7 +103,8 @@ export function errorMessage(error: unknown): string {
 // since none of them opt into camelCase renaming).
 // ---------------------------------------------------------------------------
 
-export type ProviderId = "modrinth" | "ftb" | "curseforge";
+/** `url`: a pack shared by link (an `.mrpack` online), kept in sync with the file. */
+export type ProviderId = "modrinth" | "ftb" | "curseforge" | "url";
 
 // ---------------------------------------------------------------------------
 // Events
@@ -193,8 +200,13 @@ export const minecraftApi = {
 };
 
 export const providersApi = {
-  search: (provider: ProviderId, text: string, offset = 0) =>
-    invoke<ModpackSummary[]>("providers_search", { provider, text, offset }),
+  search: (provider: ProviderId, query: Partial<SearchQuery> & { text: string }) =>
+    invoke<ModpackSummary[]>("providers_search", {
+      provider,
+      query: { offset: 0, game_version: null, loader: null, category: null, sort: "relevance", ...query },
+    }),
+  /** Categories this provider's modpacks can be filtered by (none for FTB). */
+  categories: (provider: ProviderId) => invoke<PackCategory[]>("providers_categories", { provider }),
   getModpack: (provider: ProviderId, packId: string) =>
     invoke<ModpackDetails>("providers_get_modpack", { provider, packId }),
   getVersions: (provider: ProviderId, packId: string) =>

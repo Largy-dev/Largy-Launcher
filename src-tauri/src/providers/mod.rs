@@ -5,6 +5,7 @@
 pub mod archive;
 pub mod curseforge;
 pub mod ftb;
+pub mod linked;
 pub mod modrinth;
 
 use std::path::PathBuf;
@@ -49,7 +50,7 @@ impl LoaderKind {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ModpackSummary {
     pub id: String,
@@ -60,6 +61,39 @@ pub struct ModpackSummary {
     pub summary: String,
     #[serde(default)]
     pub downloads: Option<u64>,
+    /// Newest Minecraft release versions the pack supports, newest first.
+    #[serde(default)]
+    pub game_versions: Vec<String>,
+    #[serde(default)]
+    pub loaders: Vec<LoaderKind>,
+    /// Unix seconds of the pack's last update.
+    #[serde(default)]
+    pub updated_at: Option<i64>,
+}
+
+/// Keeps release versions (`1.20.1`, `26.3`), newest first, at most `limit`.
+pub fn newest_releases(versions: impl IntoIterator<Item = String>, limit: usize) -> Vec<String> {
+    let mut releases: Vec<String> = versions
+        .into_iter()
+        .filter(|v| !v.is_empty() && v.split('.').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit())))
+        .collect();
+    crate::util::version::sort_desc(&mut releases);
+    releases.dedup();
+    releases.truncate(limit);
+    releases
+}
+
+/// RFC 3339 date → Unix seconds.
+pub fn parse_date(value: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(value).ok().map(|d| d.timestamp())
+}
+
+/// A catalogue category modpacks can be filtered by.
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct PackCategory {
+    pub id: String,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
@@ -176,6 +210,10 @@ pub trait ModpackProvider: Send + Sync {
     fn display_name(&self) -> &'static str;
 
     async fn search(&self, query: SearchQuery) -> Result<Vec<ModpackSummary>, ProviderError>;
+    /// Categories [`SearchQuery::category`] accepts (none = no category filter).
+    async fn categories(&self) -> Result<Vec<PackCategory>, ProviderError> {
+        Ok(Vec::new())
+    }
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError>;
     /// Newest first.
     async fn get_versions(&self, pack_id: &str) -> Result<Vec<ModpackVersionSummary>, ProviderError>;
@@ -213,11 +251,33 @@ pub trait ModpackProvider: Send + Sync {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SearchSort {
+    /// Best match for the text, most popular without one.
+    #[default]
+    Relevance,
+    Downloads,
+    Updated,
+    Newest,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SearchQuery {
     pub text: String,
     #[serde(default)]
     pub offset: u32,
+    #[serde(default)]
+    pub game_version: Option<String>,
+    #[serde(default)]
+    pub loader: Option<LoaderKind>,
+    /// A [`PackCategory::id`] of the same provider.
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub sort: SearchSort,
 }
 
 /// Scans `(name, version)` pairs — e.g. FTB's `targets` array — and returns
@@ -253,6 +313,18 @@ impl ProviderRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn newest_releases_drop_snapshots_and_sort_numerically() {
+        let versions = ["1.20.1", "23w31a", "1.9.4", "1.21.1", "1.20.1", "1.21-pre1", "26.3"].map(String::from);
+        assert_eq!(newest_releases(versions, 3), vec!["26.3", "1.21.1", "1.20.1"]);
+    }
+
+    #[test]
+    fn dates_parse_to_unix_seconds() {
+        assert_eq!(parse_date("2024-01-01T00:00:10Z"), Some(1_704_067_210));
+        assert_eq!(parse_date("yesterday"), None);
+    }
 
     #[test]
     fn from_name_matches_known_loaders_case_insensitively() {

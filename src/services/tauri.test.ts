@@ -75,9 +75,12 @@ describe("minecraftApi", () => {
 });
 
 describe("providersApi", () => {
-  it("search maps provider/text to snake_case-free camelCase args", async () => {
-    await providersApi.search("curseforge", "create");
-    expect(invokeMock).toHaveBeenCalledWith("providers_search", { provider: "curseforge", text: "create", offset: 0 });
+  it("search sends a full query with defaults for the filters not set", async () => {
+    await providersApi.search("curseforge", { text: "create", loader: "forge" });
+    expect(invokeMock).toHaveBeenCalledWith("providers_search", {
+      provider: "curseforge",
+      query: { text: "create", offset: 0, game_version: null, loader: "forge", category: null, sort: "relevance" },
+    });
   });
 
   it("getVersions camelCases packId", async () => {

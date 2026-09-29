@@ -159,7 +159,7 @@ async fn modpack_providers_resolve_real_packs() {
 
     let modrinth = ModrinthProvider::new(env.client.clone(), env.paths.cache_dir().join("modrinth"));
     let hits = modrinth
-        .search(SearchQuery { text: "fabulously optimized".to_string(), offset: 0 })
+        .search(SearchQuery { text: "fabulously optimized".to_string(), ..Default::default() })
         .await
         .unwrap();
     let pack = hits.first().expect("modrinth hit");
@@ -192,4 +192,20 @@ async fn modpack_providers_resolve_real_packs() {
     );
     assert!(!resolved.files.is_empty());
     assert_eq!(without_url, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "network"]
+async fn snapshot_and_old_versions_resolve() {
+    let env = env();
+    let latest = manifest::fetch_version_manifest(&env.meta).await.unwrap().latest;
+    println!("latest snapshot {}", latest.snapshot);
+    let component = vanilla_files(&env, &latest.snapshot).await;
+    assert!(!component.is_empty());
+
+    let component = vanilla_files(&env, "b1.7.3").await;
+    assert_eq!(component, "jre-legacy", "old versions run on Java 8");
+    let runtime = env.java.ensure_runtime(env.app.handle(), &env.paths, &env.downloader, &component).await.unwrap();
+    let (_, major) = java::probe(&runtime.path).await.expect("java 8 must run");
+    assert_eq!(major, 8);
 }

@@ -11,8 +11,9 @@ use serde::Deserialize;
 
 use super::archive;
 use super::{
-    InstallWarning, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
-    ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
+    newest_releases, parse_date, InstallWarning, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider,
+    ModpackSummary, ModpackVersionSummary, PackCategory, ProviderError, ResolvedModpackVersion, SearchQuery,
+    SearchSort,
 };
 use crate::download::{DownloadItem, DownloadManager};
 use crate::util::fs::safe_join;
@@ -26,6 +27,10 @@ const ALLOWED_HOSTS: &[&str] =
 struct MrpackIndex {
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(rename = "versionId", default)]
+    version_id: Option<String>,
     #[serde(default)]
     files: Vec<MrpackFile>,
     dependencies: std::collections::HashMap<String, String>,
@@ -67,6 +72,41 @@ fn loader_from_dependencies(deps: &std::collections::HashMap<String, String>) ->
         }
     }
     (LoaderKind::Vanilla, String::new())
+}
+
+/// What an `.mrpack` is, read from its index without extracting anything.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MrpackInfo {
+    pub name: Option<String>,
+    pub summary: Option<String>,
+    /// The pack's own version label (`versionId`).
+    pub version_id: Option<String>,
+    pub minecraft_version: String,
+    pub loader: LoaderKind,
+    pub loader_version: String,
+    pub files: usize,
+}
+
+pub fn mrpack_info(mrpack: &Path) -> Result<MrpackInfo, ProviderError> {
+    let index_text = archive::read_text(mrpack, "modrinth.index.json")?
+        .ok_or_else(|| ProviderError::Other("fichier .mrpack invalide (modrinth.index.json absent)".to_string()))?;
+    let index: MrpackIndex =
+        serde_json::from_str(&index_text).map_err(|e| ProviderError::Other(format!("modrinth.index.json invalide: {e}")))?;
+    let minecraft_version = index
+        .dependencies
+        .get("minecraft")
+        .cloned()
+        .ok_or_else(|| ProviderError::Other("le modpack ne précise pas sa version de Minecraft".to_string()))?;
+    let (loader, loader_version) = loader_from_dependencies(&index.dependencies);
+    Ok(MrpackInfo {
+        name: index.name,
+        summary: index.summary,
+        version_id: index.version_id,
+        minecraft_version,
+        loader,
+        loader_version,
+        files: index.files.len(),
+    })
 }
 
 /// Parses an `.mrpack` already on disk, extracting its override folders to
@@ -149,6 +189,9 @@ impl ModrinthProvider {
 
 fn summary_from_hit(hit: api::SearchHit) -> ModpackSummary {
     ModpackSummary {
+        loaders: hit.categories.iter().filter_map(|c| LoaderKind::from_name(c)).collect(),
+        game_versions: newest_releases(hit.versions, 3),
+        updated_at: parse_date(&hit.date_modified),
         id: hit.project_id,
         provider: "modrinth".to_string(),
         name: hit.title,
@@ -157,6 +200,39 @@ fn summary_from_hit(hit: api::SearchHit) -> ModpackSummary {
         summary: hit.description,
         downloads: Some(hit.downloads),
     }
+}
+
+/// French names of Modrinth's modpack categories.
+fn category_label(name: &str) -> String {
+    let label = match name {
+        "adventure" => "Aventure",
+        "challenging" => "Difficile",
+        "combat" => "Combat",
+        "kitchen-sink" => "Fourre-tout",
+        "lightweight" => "Léger",
+        "magic" => "Magie",
+        "multiplayer" => "Multijoueur",
+        "optimization" => "Optimisation",
+        "quests" => "Quêtes",
+        "technology" => "Technologie",
+        other => return other.replace('-', " "),
+    };
+    label.to_string()
+}
+
+/// Modrinth search facets for a modpack query.
+fn modpack_facets(query: &SearchQuery) -> Vec<Vec<String>> {
+    let mut facets = vec![vec!["project_type:modpack".to_string()]];
+    if let Some(version) = &query.game_version {
+        facets.push(vec![format!("versions:{version}")]);
+    }
+    if let Some(loader) = query.loader.and_then(LoaderKind::modrinth_name) {
+        facets.push(vec![format!("categories:{loader}")]);
+    }
+    if let Some(category) = &query.category {
+        facets.push(vec![format!("categories:{category}")]);
+    }
+    facets
 }
 
 #[async_trait]
@@ -170,11 +246,28 @@ impl ModpackProvider for ModrinthProvider {
     }
 
     async fn search(&self, query: SearchQuery) -> Result<Vec<ModpackSummary>, ProviderError> {
-        let hits = self
-            .api
-            .search(&query.text, vec![vec!["project_type:modpack".to_string()]], query.offset, 24)
-            .await?;
+        let index = match query.sort {
+            SearchSort::Relevance if query.text.trim().is_empty() => "downloads",
+            SearchSort::Relevance => "relevance",
+            SearchSort::Downloads => "downloads",
+            SearchSort::Updated => "updated",
+            SearchSort::Newest => "newest",
+        };
+        let hits = self.api.search_sorted(&query.text, modpack_facets(&query), query.offset, 24, index).await?;
         Ok(hits.into_iter().map(summary_from_hit).collect())
+    }
+
+    async fn categories(&self) -> Result<Vec<PackCategory>, ProviderError> {
+        let mut categories: Vec<PackCategory> = self
+            .api
+            .categories()
+            .await?
+            .into_iter()
+            .filter(|c| c.project_type == "modpack" && c.header == "categories")
+            .map(|c| PackCategory { label: category_label(&c.name), id: c.name })
+            .collect();
+        categories.sort_by(|a, b| a.label.cmp(&b.label));
+        Ok(categories)
     }
 
     async fn get_modpack(&self, pack_id: &str) -> Result<ModpackDetails, ProviderError> {
@@ -182,6 +275,9 @@ impl ModpackProvider for ModrinthProvider {
         let project = project?;
         Ok(ModpackDetails {
             summary: ModpackSummary {
+                updated_at: None,
+                game_versions: Vec::new(),
+                loaders: Vec::new(),
                 id: project.id.clone(),
                 provider: "modrinth".to_string(),
                 name: project.title.clone(),
@@ -242,6 +338,28 @@ impl ModpackProvider for ModrinthProvider {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn modpack_search_facets_follow_the_filters() {
+        let query = SearchQuery {
+            game_version: Some("1.20.1".into()),
+            loader: Some(LoaderKind::NeoForge),
+            category: Some("magic".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            modpack_facets(&query),
+            vec![
+                vec!["project_type:modpack".to_string()],
+                vec!["versions:1.20.1".to_string()],
+                vec!["categories:neoforge".to_string()],
+                vec!["categories:magic".to_string()],
+            ]
+        );
+        assert_eq!(modpack_facets(&SearchQuery::default()).len(), 1);
+        assert_eq!(category_label("kitchen-sink"), "Fourre-tout");
+        assert_eq!(category_label("new-thing"), "new thing");
+    }
 
     #[test]
     fn only_spec_allowed_hosts_are_accepted() {

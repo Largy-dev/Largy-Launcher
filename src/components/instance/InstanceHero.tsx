@@ -80,7 +80,9 @@ export function InstanceHero({ instance }: { instance: Instance }) {
             </span>
             {instance.modpack && (
               <span className="rounded-full bg-foreground/8 px-2 py-0.5 text-[0.7rem] font-semibold">
-                Modpack {instance.modpack.provider.toUpperCase()}
+                {instance.modpack.provider === "url"
+                  ? "Pack partagé"
+                  : `Modpack ${instance.modpack.provider === "curseforge" ? "CurseForge" : instance.modpack.provider === "modrinth" ? "Modrinth" : instance.modpack.provider.toUpperCase()}`}
               </span>
             )}
           </motion.div>

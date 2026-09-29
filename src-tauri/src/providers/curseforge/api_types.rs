@@ -3,7 +3,7 @@
 
 use serde::Deserialize;
 
-use super::super::{LoaderKind, ModpackSummary};
+use super::super::{newest_releases, parse_date, LoaderKind, ModpackSummary};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ListResponse<T> {
@@ -57,11 +57,49 @@ pub(super) struct CfMod {
     pub(super) links: CfLinks,
     #[serde(rename = "downloadCount", default)]
     pub(super) download_count: f64,
+    #[serde(rename = "latestFilesIndexes", default)]
+    pub(super) latest_files_indexes: Vec<CfFileIndex>,
+    #[serde(rename = "dateModified", default)]
+    pub(super) date_modified: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub(super) struct CfFileIndex {
+    #[serde(rename = "gameVersion", default)]
+    pub(super) game_version: String,
+    /// 1 Forge, 4 Fabric, 5 Quilt, 6 NeoForge.
+    #[serde(rename = "modLoader", default)]
+    pub(super) mod_loader: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub(super) struct CfCategory {
+    pub(super) id: u32,
+    pub(super) name: String,
+    #[serde(rename = "isClass", default)]
+    pub(super) is_class: Option<bool>,
+}
+
+/// Loader behind a CurseForge `modLoaderType`.
+pub(super) fn loader_from_type(id: u32) -> Option<LoaderKind> {
+    match id {
+        1 => Some(LoaderKind::Forge),
+        4 => Some(LoaderKind::Fabric),
+        5 => Some(LoaderKind::Quilt),
+        6 => Some(LoaderKind::NeoForge),
+        _ => None,
+    }
 }
 
 impl CfMod {
     pub(super) fn to_summary(&self) -> ModpackSummary {
+        let mut loaders: Vec<LoaderKind> =
+            self.latest_files_indexes.iter().filter_map(|i| i.mod_loader.and_then(loader_from_type)).collect();
+        loaders.dedup();
         ModpackSummary {
+            game_versions: newest_releases(self.latest_files_indexes.iter().map(|i| i.game_version.clone()), 3),
+            loaders,
+            updated_at: parse_date(&self.date_modified),
             id: self.id.to_string(),
             provider: "curseforge".to_string(),
             name: self.name.clone(),

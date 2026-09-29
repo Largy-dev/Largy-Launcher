@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::task::JoinSet;
 
-use super::{
+use super::{newest_releases, 
     find_loader_target, InstallWarning, LoaderKind, ModpackDetails, ModpackFileRef, ModpackProvider, ModpackSummary,
-    ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
+    ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery, SearchSort,
 };
 use crate::util::fs::safe_join;
 
@@ -106,6 +106,9 @@ struct FtbPackResponse {
     versions: Vec<FtbVersionRef>,
     #[serde(default)]
     meta: Option<FtbMeta>,
+    /// Unix seconds.
+    #[serde(default)]
+    updated: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,7 +133,30 @@ impl FtbPackResponse {
                 .map(|a| a.url.clone()),
             summary: self.synopsis.clone(),
             downloads: None,
+            game_versions: newest_releases(self.targets("minecraft").map(|t| t.version.clone()), 3),
+            loaders: {
+                let mut loaders: Vec<LoaderKind> =
+                    self.versions.iter().flat_map(|v| &v.targets).filter_map(|t| LoaderKind::from_name(&t.name)).collect();
+                loaders.sort_by_key(|l| format!("{l:?}"));
+                loaders.dedup();
+                loaders
+            },
+            updated_at: self.updated,
         }
+    }
+
+    fn targets<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a FtbTarget> + 'a {
+        self.versions.iter().flat_map(|v| &v.targets).filter(move |t| t.name.eq_ignore_ascii_case(name))
+    }
+
+    /// FTB's API can't filter server-side: the search results are filtered here.
+    fn matches(&self, query: &SearchQuery) -> bool {
+        let version_ok =
+            query.game_version.as_ref().is_none_or(|v| self.targets("minecraft").any(|t| &t.version == v));
+        let loader_ok = query.loader.is_none_or(|wanted| {
+            self.versions.iter().flat_map(|v| &v.targets).any(|t| LoaderKind::from_name(&t.name) == Some(wanted))
+        });
+        version_ok && loader_ok
     }
 }
 
@@ -215,7 +241,12 @@ impl ModpackProvider for FtbProvider {
             response.packs
         };
 
-        Ok(self.fetch_ranked(ids, 24).await.iter().map(FtbPackResponse::to_summary).collect())
+        let mut packs: Vec<FtbPackResponse> =
+            self.fetch_ranked(ids, 24).await.into_iter().filter(|p| p.matches(&query)).collect();
+        if matches!(query.sort, SearchSort::Updated | SearchSort::Newest) {
+            packs.sort_by_key(|p| std::cmp::Reverse(p.updated.unwrap_or(0)));
+        }
+        Ok(packs.iter().map(FtbPackResponse::to_summary).collect())
     }
 
     async fn find_curseforge_equivalent(
@@ -369,6 +400,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ftb_packs_are_filtered_by_version_and_loader_locally() {
+        let pack: FtbPackResponse = serde_json::from_value(serde_json::json!({
+            "id": 1, "name": "P", "updated": 5,
+            "versions": [{"id": 2, "name": "1.0", "targets": [
+                {"name": "minecraft", "version": "1.20.1"}, {"name": "neoforge", "version": "47.1"}
+            ]}]
+        }))
+        .unwrap();
+        let q = |v: Option<&str>, l: Option<LoaderKind>| SearchQuery {
+            game_version: v.map(String::from),
+            loader: l,
+            ..Default::default()
+        };
+        assert!(pack.matches(&q(Some("1.20.1"), Some(LoaderKind::NeoForge))));
+        assert!(!pack.matches(&q(Some("1.21.1"), None)));
+        assert!(!pack.matches(&q(None, Some(LoaderKind::Fabric))));
+        let summary = pack.to_summary();
+        assert_eq!(summary.game_versions, vec!["1.20.1"]);
+        assert_eq!(summary.loaders, vec![LoaderKind::NeoForge]);
+        assert_eq!(summary.updated_at, Some(5));
+    }
+
+    #[test]
     fn to_summary_prefers_square_or_logo_art_and_first_author() {
         let pack = FtbPackResponse {
             id: 42,
@@ -382,6 +436,7 @@ mod tests {
             authors: vec![FtbAuthor { name: "Larry".to_string() }],
             versions: Vec::new(),
             meta: None,
+            updated: None,
         };
         let summary = pack.to_summary();
         assert_eq!(summary.id, "42");

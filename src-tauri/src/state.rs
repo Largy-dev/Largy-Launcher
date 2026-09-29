@@ -20,6 +20,7 @@ use crate::modloaders::LoaderRegistry;
 use crate::paths::{self, AppPaths};
 use crate::providers::curseforge::CurseForgeProvider;
 use crate::providers::ftb::FtbProvider;
+use crate::providers::linked::LinkedPackProvider;
 use crate::providers::modrinth::ModrinthProvider;
 use crate::providers::ProviderRegistry;
 use crate::settings::GlobalSettings;
@@ -86,6 +87,7 @@ impl AppState {
         let mut providers = ProviderRegistry::new();
         providers.register(Box::new(ModrinthProvider::new(client.clone(), app_paths.cache_dir().join("modrinth"))));
         providers.register(Box::new(FtbProvider::new(client.clone())));
+        providers.register(Box::new(LinkedPackProvider::new(client.clone(), app_paths.cache_dir().join("linked"))));
         providers.register(Box::new(CurseForgeProvider::new(
             client.clone(),
             curseforge_api_key.clone(),

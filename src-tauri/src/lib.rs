@@ -159,6 +159,7 @@ pub fn run() {
             commands::settings::settings_clear_installer_cache,
             commands::minecraft::minecraft_list_versions,
             commands::providers::providers_search,
+            commands::providers::providers_categories,
             commands::providers::providers_get_modpack,
             commands::providers::providers_get_versions,
             commands::providers::providers_get_changelog,

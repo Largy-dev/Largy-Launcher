@@ -1,7 +1,9 @@
 use tauri::State;
 
 use crate::error::{AppError, AppResult};
-use crate::providers::{ModpackDetails, ModpackProvider, ModpackSummary, ModpackVersionSummary, SearchQuery};
+use crate::providers::{
+    ModpackDetails, ModpackProvider, ModpackSummary, ModpackVersionSummary, PackCategory, SearchQuery,
+};
 use crate::state::AppState;
 
 fn get_provider<'a>(state: &'a State<'_, AppState>, provider: &str) -> AppResult<&'a dyn ModpackProvider> {
@@ -12,10 +14,15 @@ fn get_provider<'a>(state: &'a State<'_, AppState>, provider: &str) -> AppResult
 pub async fn providers_search(
     state: State<'_, AppState>,
     provider: String,
-    text: String,
-    offset: Option<u32>,
+    query: SearchQuery,
 ) -> AppResult<Vec<ModpackSummary>> {
-    Ok(get_provider(&state, &provider)?.search(SearchQuery { text, offset: offset.unwrap_or(0) }).await?)
+    Ok(get_provider(&state, &provider)?.search(query).await?)
+}
+
+/// Categories modpacks of `provider` can be filtered by.
+#[tauri::command]
+pub async fn providers_categories(state: State<'_, AppState>, provider: String) -> AppResult<Vec<PackCategory>> {
+    Ok(get_provider(&state, &provider)?.categories().await?)
 }
 
 #[tauri::command]

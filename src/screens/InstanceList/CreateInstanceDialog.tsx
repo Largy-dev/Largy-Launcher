@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MemoryStick } from "lucide-react";
+import { FlaskConical, Loader2, MemoryStick } from "lucide-react";
 
 import { LOADER_META, LOADER_ORDER } from "@/components/instance/LoaderBadge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,24 @@ const LOADER_HINTS: Record<LoaderKind, string> = {
   neoforge: "Forge moderne",
 };
 
+type Channel = "release" | "snapshot" | "old";
+
+const CHANNELS: { value: Channel; label: string; types: string[]; note?: string }[] = [
+  { value: "release", label: "Stables", types: ["release"] },
+  {
+    value: "snapshot",
+    label: "Snapshots",
+    types: ["snapshot"],
+    note: "Versions de test de Mojang : peuvent corrompre un monde, et peu de mods les supportent.",
+  },
+  {
+    value: "old",
+    label: "Anciennes",
+    types: ["old_beta", "old_alpha"],
+    note: "Alpha et bêta d'avant 2011, en vanilla : expérimental, le son peut manquer.",
+  },
+];
+
 interface CreateInstanceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,6 +59,7 @@ export function CreateInstanceDialog({ open, onOpenChange }: CreateInstanceDialo
   const [minecraftVersion, setMinecraftVersion] = useState("");
   const [loader, setLoader] = useState<LoaderKind>("vanilla");
   const [loaderVersion, setLoaderVersion] = useState("");
+  const [channel, setChannel] = useState<Channel>("release");
   const { data: memory } = useSystemMemory();
 
   const versionsQuery = useQuery({
@@ -49,9 +68,10 @@ export function CreateInstanceDialog({ open, onOpenChange }: CreateInstanceDialo
     enabled: open,
   });
 
-  const releaseVersions = useMemo(
-    () => (versionsQuery.data ?? []).filter((v) => v.type === "release"),
-    [versionsQuery.data],
+  const channelMeta = CHANNELS.find((c) => c.value === channel)!;
+  const versions = useMemo(
+    () => (versionsQuery.data ?? []).filter((v) => channelMeta.types.includes(v.type)),
+    [versionsQuery.data, channelMeta],
   );
 
   const loaderVersionsQuery = useQuery({
@@ -82,6 +102,7 @@ export function CreateInstanceDialog({ open, onOpenChange }: CreateInstanceDialo
     setMinecraftVersion("");
     setLoader("vanilla");
     setLoaderVersion("");
+    setChannel("release");
   }
 
   const canCreate =
@@ -107,7 +128,33 @@ export function CreateInstanceDialog({ open, onOpenChange }: CreateInstanceDialo
           </div>
 
           <div className="space-y-1.5">
-            <Label>Version de Minecraft</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label>Version de Minecraft</Label>
+              <div className="flex rounded-lg bg-muted/60 p-0.5" role="radiogroup" aria-label="Type de versions">
+                {CHANNELS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={channel === c.value}
+                    onClick={() => {
+                      setChannel(c.value);
+                      setMinecraftVersion("");
+                      setLoaderVersion("");
+                      if (c.value === "old") setLoader("vanilla");
+                    }}
+                    className={cn(
+                      "rounded-md px-2 py-0.5 text-[0.7rem] font-medium transition-colors",
+                      channel === c.value
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {versionsQuery.isLoading ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> Chargement des versions…
@@ -118,7 +165,7 @@ export function CreateInstanceDialog({ open, onOpenChange }: CreateInstanceDialo
                   <SelectValue placeholder="Choisir une version" />
                 </SelectTrigger>
                 <SelectContent>
-                  {releaseVersions.map((v) => (
+                  {versions.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.id}
                     </SelectItem>
@@ -126,12 +173,18 @@ export function CreateInstanceDialog({ open, onOpenChange }: CreateInstanceDialo
                 </SelectContent>
               </Select>
             )}
+            {channelMeta.note && (
+              <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                <FlaskConical className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                {channelMeta.note}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
             <Label>Mod loader</Label>
             <div role="radiogroup" className="grid grid-cols-5 gap-2">
-              {LOADER_ORDER.map((value) => {
+              {LOADER_ORDER.filter((value) => channel !== "old" || value === "vanilla").map((value) => {
                 const meta = LOADER_META[value];
                 const Icon = meta.icon;
                 const selected = loader === value;
