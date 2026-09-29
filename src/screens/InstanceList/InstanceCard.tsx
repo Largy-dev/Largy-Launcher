@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { motion } from "motion/react";
 import {
   FolderOpen,
@@ -216,13 +217,30 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
                 backgroundImage: `linear-gradient(135deg, color-mix(in oklab, ${color} 55%, transparent), color-mix(in oklab, ${color} 10%, transparent))`,
               }}
             />
-            {instance.icon_url && (
-              <img
-                src={instance.icon_url}
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 size-full scale-125 object-cover opacity-40 blur-md transition-transform duration-500 group-hover:scale-150"
-              />
+            {instance.cover_path ? (
+              <>
+                <img
+                  src={convertFileSrc(instance.cover_path)}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 size-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-0 bg-gradient-to-t from-card/90 via-card/10 to-transparent"
+                />
+              </>
+            ) : (
+              instance.icon_url && (
+                <img
+                  src={instance.icon_url}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 size-full scale-125 object-cover opacity-40 blur-md transition-transform duration-500 group-hover:scale-150"
+                />
+              )
             )}
             <div className="absolute top-2.5 right-2.5">
               <StatusChips

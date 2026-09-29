@@ -61,6 +61,7 @@ describe("settingsApi", () => {
       on_close: "ask" as const,
       discord_rich_presence: true,
       jvm_presets: [],
+      sync_game_options: false,
     };
     await settingsApi.update(settings);
     expect(invokeMock).toHaveBeenCalledWith("settings_update", { settings });
@@ -120,6 +121,7 @@ describe("instancesApi", () => {
       window_height: 720,
       fullscreen: false,
       auto_join_server: "play.example.net",
+      skip_options_sync: false,
     };
     await instancesApi.updateSettings("abc", settings);
     expect(invokeMock).toHaveBeenCalledWith("instances_update_settings", { id: "abc", settings });

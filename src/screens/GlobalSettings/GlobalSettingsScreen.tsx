@@ -353,6 +353,15 @@ export function GlobalSettingsScreen() {
                 }
               />
             </SettingSection>
+            <SettingSection title="Options du jeu">
+              <SettingRow
+                label="Mêmes options dans toutes les instances"
+                description="Touches, sensibilité de la souris, FOV, volumes, langue et accessibilité : réglés une fois, retrouvés partout. La distance d'affichage et les graphismes restent propres à chaque instance."
+                control={
+                  <Switch checked={form.sync_game_options} onCheckedChange={(v) => update("sync_game_options", v)} />
+                }
+              />
+            </SettingSection>
             <SettingSection title="Discord">
               <SettingRow
                 label="Afficher ma partie sur Discord"

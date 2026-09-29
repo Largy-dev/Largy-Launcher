@@ -38,4 +38,9 @@ discord_rich_presence: boolean,
  * Named memory/JVM combinations the player saved from an instance's
  * settings, reusable across any other instance.
  */
-jvm_presets: Array<JvmPreset>, };
+jvm_presets: Array<JvmPreset>, 
+/**
+ * Carries key bindings, sensitivity, FOV, volumes… from one instance to
+ * the next (see `launch::options_sync`).
+ */
+sync_game_options: boolean, };

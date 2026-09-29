@@ -11,6 +11,8 @@ import { formatDuration, formatRelative } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { errorMessage, instancesApi, type Instance } from "@/services/tauri";
 
+import { CoverRow } from "./CoverRow";
+
 const MAX_NOTES_LEN = 4000;
 
 /** Pin/protect toggles, a free-text note, copying settings from another instance, and recent session history. */
@@ -55,6 +57,7 @@ export function OrganizationSection({ instance }: { instance: Instance }) {
   return (
     <>
       <SettingSection title="Organisation">
+        <CoverRow instance={instance} />
         <SettingRow
           label="Épinglée"
           description="Toujours en haut de la liste des instances, quel que soit le tri."

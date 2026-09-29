@@ -264,3 +264,34 @@ fn a_failed_update_leaves_the_file_untouched() {
     assert!(result.is_err());
     assert_eq!(get(&paths, &id).unwrap().name, "Keep");
 }
+
+#[test]
+fn covers_default_to_the_newest_screenshot_and_can_be_chosen() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = AppPaths::from_root(dir.path().join("data"));
+    let id = create(&paths, test_input("Pics")).unwrap().id;
+    let shots = paths.instance_dir(&id).join("screenshots");
+    std::fs::create_dir_all(&shots).unwrap();
+    assert!(get(&paths, &id).unwrap().cover_path.is_none());
+
+    std::fs::write(shots.join("old.png"), b"png").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    std::fs::write(shots.join("new.png"), b"png").unwrap();
+    assert!(get(&paths, &id).unwrap().cover_path.unwrap().ends_with("new.png"));
+
+    // A screenshot of the instance is used in place…
+    let picked = set_cover(&paths, &id, CoverChoice::File(shots.join("old.png").display().to_string())).unwrap();
+    assert_eq!(picked.cover.as_deref(), Some("screenshots/old.png"));
+    assert!(picked.cover_path.unwrap().ends_with("old.png"));
+
+    // …any other picture is copied in.
+    let outside = dir.path().join("wallpaper.JPG");
+    std::fs::write(&outside, b"jpg").unwrap();
+    let custom = set_cover(&paths, &id, CoverChoice::File(outside.display().to_string())).unwrap();
+    assert_eq!(custom.cover.as_deref(), Some("cover.jpg"));
+    assert!(paths.instance_dir(&id).join("cover.jpg").is_file());
+
+    assert!(set_cover(&paths, &id, CoverChoice::None).unwrap().cover_path.is_none());
+    assert!(set_cover(&paths, &id, CoverChoice::Auto).unwrap().cover_path.unwrap().ends_with("new.png"));
+    assert!(set_cover(&paths, &id, CoverChoice::File(dir.path().join("notes.txt").display().to_string())).is_err());
+}

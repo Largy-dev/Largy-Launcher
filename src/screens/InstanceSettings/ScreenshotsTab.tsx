@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ChevronLeft, ChevronRight, ClipboardCopy, FolderOpen, Images, Loader2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardCopy, FolderOpen, ImageIcon, Images, Loader2, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { formatBytes, formatRelative } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { errorMessage, instancesApi, type Instance, type Screenshot } from "@/services/tauri";
+
+import { useSetCover } from "./CoverRow";
 
 /** Puts the image on the clipboard as PNG (the only image type browsers write). */
 async function copyImage(url: string) {
@@ -36,6 +38,7 @@ export function ScreenshotsTab({ instance }: { instance: Instance }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<Screenshot | null>(null);
   const current = openIndex !== null ? shots?.[openIndex] : undefined;
+  const setCover = useSetCover(instance.id);
   const count = shots?.length ?? 0;
 
   const remove = useMutation({
@@ -162,6 +165,21 @@ export function ScreenshotsTab({ instance }: { instance: Instance }) {
                   </DialogDescription>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={setCover.isPending || instance.cover_path === current.path}
+                    onClick={() =>
+                      setCover.mutate(
+                        { file: current.path },
+                        { onSuccess: () => notify.success({ title: "Nouvelle couverture", history: false }) },
+                      )
+                    }
+                  >
+                    <ImageIcon aria-hidden="true" />
+                    {instance.cover_path === current.path ? "Couverture" : "Utiliser en couverture"}
+                  </Button>
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => copy(current)}>
                     <ClipboardCopy aria-hidden="true" />
                     Copier

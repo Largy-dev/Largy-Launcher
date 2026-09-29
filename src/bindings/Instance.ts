@@ -41,4 +41,19 @@ sessions: Array<PlaySession>,
 /**
  * [`external::ExternalInstance::id`] this instance was imported from.
  */
-imported_from: string | null, };
+imported_from: string | null, 
+/**
+ * Keeps this instance's game options to itself even when options are
+ * shared between instances.
+ */
+skip_options_sync: boolean, 
+/**
+ * Card and banner picture: `None` = the newest screenshot, `"none"` =
+ * none, else a path relative to the instance folder (see [`set_cover`]).
+ */
+cover: string | null, 
+/**
+ * Absolute path of the picture [`Self::cover`] resolves to right now —
+ * recomputed on every read, never trusted from disk.
+ */
+cover_path: string | null, };

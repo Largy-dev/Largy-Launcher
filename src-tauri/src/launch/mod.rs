@@ -5,6 +5,7 @@
 pub mod crash_detect;
 mod jvm_args;
 pub mod logs;
+pub mod options_sync;
 pub mod orchestrator;
 mod prepare;
 pub mod share;

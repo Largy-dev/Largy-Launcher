@@ -90,6 +90,13 @@ pub async fn launch_instance(
     let prepared =
         cancellable(&kill, prepare(app, state, &instance, &settings, &account, Verify::Fast, true)).await?;
 
+    let sync_options = settings.sync_game_options && !instance.skip_options_sync;
+    if sync_options {
+        if let Err(e) = super::options_sync::apply(&state.paths, &instance.directory, &instance.minecraft_version) {
+            tracing::warn!("shared game options not applied to {instance_id}: {e}");
+        }
+    }
+
     emit_phase(app, instance_id, LaunchPhase::Starting);
     let mut child = super::spawn(instance_id, &prepared.ctx, &account.minecraft_access_token)?;
     let pid = child.id();
@@ -124,6 +131,7 @@ pub async fn launch_instance(
     let started = std::time::Instant::now();
     let started_at_unix = crate::auth::now_unix();
     let discord = state.discord.clone();
+    let (options_dir, options_version) = (instance.directory.clone(), instance.minecraft_version.clone());
     tokio::spawn(async move {
         let (status, killed) = tokio::select! {
             status = child.wait() => (status, false),
@@ -151,6 +159,11 @@ pub async fn launch_instance(
         }
         if let Err(e) = instances::record_session(&paths, &instance_id_owned, started_at_unix, played_seconds) {
             tracing::warn!("failed to record session for {instance_id_owned}: {e}");
+        }
+        if sync_options {
+            if let Err(e) = super::options_sync::collect(&paths, &options_dir, &options_version) {
+                tracing::warn!("game options of {instance_id_owned} not shared: {e}");
+            }
         }
         let code = status.ok().and_then(|s| s.code());
         let crash_analysis = {

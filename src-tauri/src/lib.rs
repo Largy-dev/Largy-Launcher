@@ -181,6 +181,7 @@ pub fn run() {
             commands::instances::instances_set_pinned,
             commands::instances::instances_set_protected,
             commands::instances::instances_set_notes,
+            commands::instances::instances_set_cover,
             commands::instances::instances_copy_settings,
             commands::instances::instance_screenshots_list,
             commands::instances::instance_screenshots_delete,

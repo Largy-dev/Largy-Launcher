@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { History, MemoryStick, Package, Settings2, Timer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -40,13 +41,23 @@ export function InstanceHero({ instance }: { instance: Instance }) {
       animate="show"
       className="glass relative mb-6 overflow-hidden rounded-2xl"
     >
-      {instance.icon_url && (
+      {instance.cover_path ? (
         <img
-          src={instance.icon_url}
+          src={convertFileSrc(instance.cover_path)}
           alt=""
           aria-hidden="true"
-          className="absolute -top-1/2 right-0 h-[200%] w-2/3 object-cover opacity-30 blur-2xl saturate-150"
+          className="absolute inset-y-0 right-0 h-full w-3/5 object-cover opacity-70"
+          style={{ maskImage: "linear-gradient(to left, black 35%, transparent)" }}
         />
+      ) : (
+        instance.icon_url && (
+          <img
+            src={instance.icon_url}
+            alt=""
+            aria-hidden="true"
+            className="absolute -top-1/2 right-0 h-[200%] w-2/3 object-cover opacity-30 blur-2xl saturate-150"
+          />
+        )
       )}
       <div
         aria-hidden="true"

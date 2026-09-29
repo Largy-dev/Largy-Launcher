@@ -72,6 +72,7 @@ interface Draft {
   height: number | null;
   fullscreen: boolean;
   server: string;
+  ownOptions: boolean;
 }
 
 function draftOf(instance: Instance): Draft {
@@ -85,6 +86,7 @@ function draftOf(instance: Instance): Draft {
     height: instance.window_height,
     fullscreen: instance.fullscreen,
     server: instance.auto_join_server ?? "",
+    ownOptions: instance.skip_options_sync,
   };
 }
 
@@ -134,6 +136,7 @@ export function InstanceSettingsScreen() {
         window_height: next.height,
         fullscreen: next.fullscreen,
         auto_join_server: next.server.trim() || null,
+        skip_options_sync: next.ownOptions,
       });
     },
     onSuccess: () => {
@@ -296,6 +299,13 @@ export function InstanceSettingsScreen() {
                 />
               }
             />
+            {settings?.sync_game_options && (
+              <SettingRow
+                label="Options propres à cette instance"
+                description="Les touches, la sensibilité, le FOV et les volumes sont partagés entre instances (Paramètres › Jeu & Java). Active ceci pour que cette instance garde les siens."
+                control={<Switch checked={draft.ownOptions} onCheckedChange={(ownOptions) => patch({ ownOptions })} />}
+              />
+            )}
           </SettingSection>
         )}
 

@@ -102,6 +102,8 @@ pub struct InstanceSettingsInput {
     pub fullscreen: bool,
     #[serde(default)]
     pub auto_join_server: Option<String>,
+    #[serde(default)]
+    pub skip_options_sync: bool,
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
@@ -131,6 +133,7 @@ pub fn instances_update_settings(
         instance.window_height = valid_size(settings.window_height);
         instance.fullscreen = settings.fullscreen;
         instance.auto_join_server = non_empty(settings.auto_join_server);
+        instance.skip_options_sync = settings.skip_options_sync;
         Ok(())
     })
 }
@@ -143,6 +146,18 @@ pub fn instances_set_pinned(state: State<'_, AppState>, id: String, pinned: bool
 #[tauri::command]
 pub fn instances_set_protected(state: State<'_, AppState>, id: String, protected: bool) -> AppResult<Instance> {
     instances::set_protected(&state.paths, &id, protected)
+}
+
+#[tauri::command]
+pub fn instances_set_cover(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    cover: instances::CoverChoice,
+) -> AppResult<Instance> {
+    let instance = instances::set_cover(&state.paths, &id, cover)?;
+    instances_changed(&app);
+    Ok(instance)
 }
 
 #[tauri::command]

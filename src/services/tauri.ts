@@ -4,6 +4,7 @@ import type { AccountSession } from "@/bindings/AccountSession";
 import type { CloseBehavior } from "@/bindings/CloseBehavior";
 import type { ContentHit } from "@/bindings/ContentHit";
 import type { ContentKind } from "@/bindings/ContentKind";
+import type { CoverChoice } from "@/bindings/CoverChoice";
 import type { CrashAnalysis } from "@/bindings/CrashAnalysis";
 import type { DeviceCodeInfo } from "@/bindings/DeviceCodeInfo";
 import type { DownloadProgress } from "@/bindings/DownloadProgress";
@@ -234,6 +235,8 @@ export const instancesApi = {
   setProtected: (id: string, protected_: boolean) =>
     invoke<Instance>("instances_set_protected", { id, protected: protected_ }),
   setNotes: (id: string, notes: string) => invoke<Instance>("instances_set_notes", { id, notes }),
+  /** Card / banner picture: "auto" (newest screenshot), "none", or { file: path }. */
+  setCover: (id: string, cover: CoverChoice) => invoke<Instance>("instances_set_cover", { id, cover }),
   /** Copies `sourceId`'s memory/JVM/window/server settings onto `targetId`. */
   copySettings: (sourceId: string, targetId: string) =>
     invoke<Instance>("instances_copy_settings", { sourceId, targetId }),

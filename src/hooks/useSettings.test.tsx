@@ -35,6 +35,7 @@ describe("useSettings", () => {
       on_close: "ask",
       discord_rich_presence: true,
       jvm_presets: [],
+      sync_game_options: false,
     });
 
     const { result } = renderHook(() => useSettings(), { wrapper });

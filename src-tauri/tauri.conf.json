@@ -26,6 +26,7 @@
         "scope": [
           "$APPDATA/instances/*/screenshots/*",
           "$APPDATA/instances/*/saves/*/icon.png",
+          "$APPDATA/instances/*/cover.*",
           "$APPDATA/cache/content-icons/*"
         ]
       }

@@ -203,6 +203,7 @@ export function InstanceListScreen() {
                   return (
                     <button
                       key={loader}
+                      aria-pressed={active}
                       onClick={() => setLoaderFilter(loader)}
                       className="rounded-full px-3 py-1 text-xs font-semibold transition-all"
                       style={{
@@ -225,6 +226,7 @@ export function InstanceListScreen() {
                 <Input
                   type="search"
                   placeholder="Rechercher…"
+                  aria-label="Rechercher une instance"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-8 w-40 pl-8!"
@@ -247,6 +249,7 @@ export function InstanceListScreen() {
                   <button
                     key={value}
                     title={label}
+                    aria-label={`Affichage ${label.toLowerCase()}`}
                     aria-pressed={density === value}
                     onClick={() => setPrefs({ cardDensity: value })}
                     className={cn(

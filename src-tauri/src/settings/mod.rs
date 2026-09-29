@@ -62,6 +62,10 @@ pub struct GlobalSettings {
     /// settings, reusable across any other instance.
     #[serde(default)]
     pub jvm_presets: Vec<JvmPreset>,
+    /// Carries key bindings, sensitivity, FOV, volumes… from one instance to
+    /// the next (see `launch::options_sync`).
+    #[serde(default)]
+    pub sync_game_options: bool,
 }
 
 /// A reusable, user-named memory/JVM combination — distinct from the fixed
@@ -116,6 +120,7 @@ impl Default for GlobalSettings {
             on_close: CloseBehavior::Ask,
             discord_rich_presence: true,
             jvm_presets: Vec::new(),
+            sync_game_options: false,
         }
     }
 }

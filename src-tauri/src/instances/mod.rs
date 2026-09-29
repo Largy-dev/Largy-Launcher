@@ -5,6 +5,7 @@
 
 pub mod backup;
 pub mod content;
+pub mod cover;
 pub mod content_curseforge;
 pub mod export;
 pub mod external;
@@ -15,6 +16,8 @@ pub mod optimize;
 pub mod screenshots;
 pub mod snapshots;
 pub mod worlds;
+
+pub use cover::{set_cover, CoverChoice};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -116,6 +119,18 @@ pub struct Instance {
     /// [`external::ExternalInstance::id`] this instance was imported from.
     #[serde(default)]
     pub imported_from: Option<String>,
+    /// Keeps this instance's game options to itself even when options are
+    /// shared between instances.
+    #[serde(default)]
+    pub skip_options_sync: bool,
+    /// Card and banner picture: `None` = the newest screenshot, `"none"` =
+    /// none, else a path relative to the instance folder (see [`set_cover`]).
+    #[serde(default)]
+    pub cover: Option<String>,
+    /// Absolute path of the picture [`Self::cover`] resolves to right now —
+    /// recomputed on every read, never trusted from disk.
+    #[serde(default)]
+    pub cover_path: Option<String>,
 }
 
 /// One completed play session, recorded when the game process exits.
@@ -157,6 +172,7 @@ pub fn list(paths: &AppPaths) -> AppResult<Vec<Instance>> {
             Ok(mut instance) => {
                 instance.id = entry.file_name().to_string_lossy().into_owned();
                 instance.directory = entry.path();
+                cover::resolve(&mut instance);
                 instances.push(instance)
             }
             Err(e) => tracing::warn!("skipping unreadable instance {:?}: {e}", entry.path()),
@@ -180,6 +196,7 @@ pub fn get(paths: &AppPaths, id: &str) -> AppResult<Instance> {
     let mut instance: Instance = serde_json::from_slice(&bytes)?;
     instance.id = id.to_string();
     instance.directory = dir;
+    cover::resolve(&mut instance);
     Ok(instance)
 }
 
@@ -201,6 +218,7 @@ pub fn update(paths: &AppPaths, id: &str, change: impl FnOnce(&mut Instance) -> 
     let mut instance = get(paths, id)?;
     change(&mut instance)?;
     save(&instance)?;
+    cover::resolve(&mut instance);
     Ok(instance)
 }
 
@@ -251,6 +269,9 @@ pub fn create(paths: &AppPaths, input: CreateInstanceInput) -> AppResult<Instanc
         notes: String::new(),
         sessions: Vec::new(),
         imported_from: None,
+        skip_options_sync: false,
+        cover: None,
+        cover_path: None,
     };
 
     save(&instance)?;

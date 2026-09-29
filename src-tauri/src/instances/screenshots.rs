@@ -53,6 +53,17 @@ pub fn list(instance_dir: &Path) -> AppResult<Vec<Screenshot>> {
     Ok(shots)
 }
 
+/// The most recent screenshot, if any.
+pub fn newest(instance_dir: &Path) -> Option<std::path::PathBuf> {
+    std::fs::read_dir(instance_dir.join(DIR))
+        .ok()?
+        .flatten()
+        .filter(|e| is_image(&e.file_name().to_string_lossy()))
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, path)| path)
+}
+
 pub fn delete(instance_dir: &Path, file_name: &str) -> AppResult<()> {
     validate_file_name(file_name)?;
     if !is_image(file_name) {
