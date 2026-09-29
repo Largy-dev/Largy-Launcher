@@ -230,3 +230,37 @@ fn copy_settings_overwrites_target_launch_settings_only() {
     assert_eq!(updated.max_memory_mb, Some(4096));
     assert_eq!(updated.extra_jvm_args, vec!["-XX:+UseZGC".to_string()]);
 }
+
+#[test]
+fn concurrent_updates_on_one_instance_never_lose_a_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = AppPaths::from_root(dir.path().to_path_buf());
+    let id = create(&paths, test_input("Busy")).unwrap().id;
+
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| {
+                for _ in 0..10 {
+                    add_play_time(&paths, &id, 1).unwrap();
+                }
+            });
+        }
+    });
+
+    assert_eq!(get(&paths, &id).unwrap().play_time_seconds, 80);
+}
+
+#[test]
+fn a_failed_update_leaves_the_file_untouched() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = AppPaths::from_root(dir.path().to_path_buf());
+    let id = create(&paths, test_input("Keep")).unwrap().id;
+
+    let result = update(&paths, &id, |i| {
+        i.name = "Changed".to_string();
+        Err(AppError::Instance("nope".to_string()))
+    });
+
+    assert!(result.is_err());
+    assert_eq!(get(&paths, &id).unwrap().name, "Keep");
+}

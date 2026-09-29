@@ -44,10 +44,7 @@ async fn download_and_track_files(
     preserve_user_files: bool,
 ) -> AppResult<(Vec<PathBuf>, Vec<InstallWarning>)> {
     let (items, mut warnings) = resolve_download_items(provider, resolved, instance_dir).await;
-    let failures = state
-        .downloader
-        .run_batch_lenient(app, instance_id, "Fichiers du modpack", items.clone(), 8)
-        .await;
+    let failures = state.downloader.run_batch_lenient(app, instance_id, "Fichiers du modpack", items.clone(), 8).await;
     let failed: HashSet<PathBuf> = failures.iter().map(|(item, _)| item.dest.clone()).collect();
     for (item, error) in failures {
         warnings.push(InstallWarning {
@@ -139,7 +136,7 @@ async fn install_into_new_instance(
     extra_dir: Option<PathBuf>,
 ) -> AppResult<InstanceInstallResult> {
     let paths = state.paths.clone();
-    let mut instance = spawn_blocking(move || instances::create(&paths, input)).await?;
+    let instance = spawn_blocking(move || instances::create(&paths, input)).await?;
     instances_changed(app);
 
     let result = async {
@@ -159,11 +156,16 @@ async fn install_into_new_instance(
 
     match result {
         Ok((installed_files, warnings)) => {
-            if let Some(modpack) = &mut instance.modpack {
-                modpack.installed_files = installed_files;
-            }
-            let to_save = instance.clone();
-            spawn_blocking(move || instances::save(&to_save)).await?;
+            let (paths, id) = (state.paths.clone(), instance.id.clone());
+            let instance = spawn_blocking(move || {
+                instances::update(&paths, &id, |i| {
+                    if let Some(modpack) = &mut i.modpack {
+                        modpack.installed_files = installed_files;
+                    }
+                    Ok(())
+                })
+            })
+            .await?;
             instances_changed(app);
             Ok(InstanceInstallResult { instance, warnings })
         }
@@ -189,10 +191,8 @@ pub async fn instances_install_modpack(
     instance_name: String,
 ) -> AppResult<InstanceInstallResult> {
     let name = instances::validate_name(&instance_name)?;
-    let provider_ref = state
-        .providers
-        .get(&provider)
-        .ok_or_else(|| AppError::Provider(format!("provider inconnu: {provider}")))?;
+    let provider_ref =
+        state.providers.get(&provider).ok_or_else(|| AppError::Provider(format!("provider inconnu: {provider}")))?;
     let resolved = provider_ref.resolve_version(&pack_id, &version_id).await?;
 
     let input = CreateInstanceInput {
@@ -229,7 +229,7 @@ pub async fn instances_update_modpack(
     let guard = state.begin_install(&instance_id)?;
     let paths = state.paths.clone();
     let id = instance_id.clone();
-    let mut instance = spawn_blocking(move || instances::get(&paths, &id)).await?;
+    let instance = spawn_blocking(move || instances::get(&paths, &id)).await?;
 
     let modpack = instance
         .modpack
@@ -240,10 +240,9 @@ pub async fn instances_update_modpack(
         .get(&modpack.provider)
         .ok_or_else(|| AppError::Provider(format!("provider inconnu: {}", modpack.provider)))?;
 
-    let resolved = cancellable(&guard.cancel, async {
-        Ok(provider_ref.resolve_version(&modpack.pack_id, &version_id).await?)
-    })
-    .await?;
+    let resolved =
+        cancellable(&guard.cancel, async { Ok(provider_ref.resolve_version(&modpack.pack_id, &version_id).await?) })
+            .await?;
 
     let (paths, id, dir) = (state.paths.clone(), instance.id.clone(), instance.directory.clone());
     spawn_blocking(move || backup::backup_saves(&paths, &id, &dir)).await?;
@@ -266,13 +265,17 @@ pub async fn instances_update_modpack(
     })
     .await?;
 
-    instance.minecraft_version = resolved.minecraft_version.clone();
-    instance.loader = resolved.loader;
-    instance.loader_version = (!resolved.loader_version.is_empty()).then(|| resolved.loader_version.clone());
-    instance.modpack = Some(ModpackRef { version_id, installed_files: new_installed_files, ..modpack });
-
-    let to_save = instance.clone();
-    spawn_blocking(move || instances::save(&to_save)).await?;
+    let (paths, id) = (state.paths.clone(), instance.id.clone());
+    let instance = spawn_blocking(move || {
+        instances::update(&paths, &id, |i| {
+            i.minecraft_version = resolved.minecraft_version.clone();
+            i.loader = resolved.loader;
+            i.loader_version = (!resolved.loader_version.is_empty()).then(|| resolved.loader_version.clone());
+            i.modpack = Some(ModpackRef { version_id, installed_files: new_installed_files, ..modpack });
+            Ok(())
+        })
+    })
+    .await?;
     instances_changed(&app);
     Ok(InstanceInstallResult { instance, warnings })
 }
@@ -294,16 +297,24 @@ pub async fn instances_collect_manual_downloads(
         .map_err(|e| AppError::Instance(format!("dossier Téléchargements introuvable: {e}")))?;
     let paths = state.paths.clone();
     let id = instance_id.clone();
-    let mut instance = spawn_blocking(move || instances::get(&paths, &id)).await?;
+    let instance = spawn_blocking(move || instances::get(&paths, &id)).await?;
     let placed = manual_downloads::collect(&downloads, &instance.directory, &files).await?;
 
-    if let Some(modpack) = &mut instance.modpack {
-        let missing: Vec<PathBuf> = placed.iter().filter(|p| !modpack.installed_files.contains(p)).cloned().collect();
-        if !missing.is_empty() {
-            modpack.installed_files.extend(missing);
-            modpack.installed_files.sort();
-            spawn_blocking(move || instances::save(&instance)).await?;
-        }
+    let untracked = instance.modpack.as_ref().is_some_and(|m| placed.iter().any(|p| !m.installed_files.contains(p)));
+    if untracked {
+        let (paths, id, placed) = (state.paths.clone(), instance.id.clone(), placed.clone());
+        spawn_blocking(move || {
+            instances::update(&paths, &id, |i| {
+                if let Some(modpack) = &mut i.modpack {
+                    let missing: Vec<PathBuf> =
+                        placed.iter().filter(|p| !modpack.installed_files.contains(p)).cloned().collect();
+                    modpack.installed_files.extend(missing);
+                    modpack.installed_files.sort();
+                }
+                Ok(())
+            })
+        })
+        .await?;
     }
     Ok(placed)
 }
@@ -311,7 +322,11 @@ pub async fn instances_collect_manual_downloads(
 /// Creates an instance from a local `.mrpack`, CurseForge zip or Prism /
 /// MultiMC export.
 #[tauri::command]
-pub async fn instances_import(app: AppHandle, state: State<'_, AppState>, path: String) -> AppResult<InstanceInstallResult> {
+pub async fn instances_import(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> AppResult<InstanceInstallResult> {
     let source = PathBuf::from(&path);
     let kind = {
         let source = source.clone();
@@ -359,9 +374,11 @@ pub async fn instances_import(app: AppHandle, state: State<'_, AppState>, path: 
             input.modpack = None;
             let mut result = install_into_new_instance(&app, &state, None, resolved, input, game_dir).await?;
             if parsed.max_memory_mb.is_some() {
-                result.instance.min_memory_mb = parsed.min_memory_mb;
-                result.instance.max_memory_mb = parsed.max_memory_mb;
-                instances::save(&result.instance)?;
+                result.instance = instances::update(&state.paths, &result.instance.id, |i| {
+                    i.min_memory_mb = parsed.min_memory_mb;
+                    i.max_memory_mb = parsed.max_memory_mb;
+                    Ok(())
+                })?;
             }
             Ok(result)
         }

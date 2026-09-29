@@ -12,8 +12,12 @@ pub mod mods;
 pub mod screenshots;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Arc, LazyLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use parking_lot::Mutex;
 
 use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
@@ -168,11 +172,29 @@ pub fn get(paths: &AppPaths, id: &str) -> AppResult<Instance> {
     Ok(instance)
 }
 
-pub fn save(instance: &Instance) -> AppResult<()> {
-    write_atomic(
-        &instance.directory.join("instance.json"),
-        serde_json::to_string_pretty(instance)?.as_bytes(),
-    )?;
+/// One lock per instance id, so two read-modify-write cycles on the same
+/// `instance.json` (the game exiting while a setting is saved from the UI)
+/// can't interleave and silently drop one of the two changes.
+static LOCKS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = LazyLock::new(Default::default);
+
+fn lock_for(id: &str) -> Arc<Mutex<()>> {
+    LOCKS.lock().entry(id.to_string()).or_default().clone()
+}
+
+/// Loads the instance, applies `change` and saves it, all under the
+/// instance's lock — the only way an existing `instance.json` is modified.
+pub fn update(paths: &AppPaths, id: &str, change: impl FnOnce(&mut Instance) -> AppResult<()>) -> AppResult<Instance> {
+    validate_id(id)?;
+    let lock = lock_for(id);
+    let _guard = lock.lock();
+    let mut instance = get(paths, id)?;
+    change(&mut instance)?;
+    save(&instance)?;
+    Ok(instance)
+}
+
+fn save(instance: &Instance) -> AppResult<()> {
+    write_atomic(&instance.directory.join("instance.json"), serde_json::to_string_pretty(instance)?.as_bytes())?;
     Ok(())
 }
 
@@ -266,15 +288,19 @@ pub fn delete(paths: &AppPaths, id: &str) -> AppResult<()> {
 }
 
 pub fn touch_last_played(paths: &AppPaths, id: &str) -> AppResult<()> {
-    let mut instance = get(paths, id)?;
-    instance.last_played_at = Some(now_unix());
-    save(&instance)
+    update(paths, id, |i| {
+        i.last_played_at = Some(now_unix());
+        Ok(())
+    })
+    .map(drop)
 }
 
 pub fn add_play_time(paths: &AppPaths, id: &str, seconds: u64) -> AppResult<()> {
-    let mut instance = get(paths, id)?;
-    instance.play_time_seconds = instance.play_time_seconds.saturating_add(seconds);
-    save(&instance)
+    update(paths, id, |i| {
+        i.play_time_seconds = i.play_time_seconds.saturating_add(seconds);
+        Ok(())
+    })
+    .map(drop)
 }
 
 /// Appends one finished session, newest first, trimming to [`MAX_SESSIONS`].
@@ -284,24 +310,26 @@ pub fn record_session(paths: &AppPaths, id: &str, started_at: i64, duration_seco
     if duration_seconds == 0 {
         return Ok(());
     }
-    let mut instance = get(paths, id)?;
-    instance.sessions.insert(0, PlaySession { started_at, duration_seconds });
-    instance.sessions.truncate(MAX_SESSIONS);
-    save(&instance)
+    update(paths, id, |i| {
+        i.sessions.insert(0, PlaySession { started_at, duration_seconds });
+        i.sessions.truncate(MAX_SESSIONS);
+        Ok(())
+    })
+    .map(drop)
 }
 
 pub fn set_pinned(paths: &AppPaths, id: &str, pinned: bool) -> AppResult<Instance> {
-    let mut instance = get(paths, id)?;
-    instance.pinned = pinned;
-    save(&instance)?;
-    Ok(instance)
+    update(paths, id, |i| {
+        i.pinned = pinned;
+        Ok(())
+    })
 }
 
 pub fn set_protected(paths: &AppPaths, id: &str, protected: bool) -> AppResult<Instance> {
-    let mut instance = get(paths, id)?;
-    instance.protected = protected;
-    save(&instance)?;
-    Ok(instance)
+    update(paths, id, |i| {
+        i.protected = protected;
+        Ok(())
+    })
 }
 
 pub fn set_notes(paths: &AppPaths, id: &str, notes: &str) -> AppResult<Instance> {
@@ -309,10 +337,10 @@ pub fn set_notes(paths: &AppPaths, id: &str, notes: &str) -> AppResult<Instance>
     if trimmed.chars().count() > MAX_NOTES_LEN {
         return Err(AppError::Instance(format!("les notes ne peuvent pas dépasser {MAX_NOTES_LEN} caractères")));
     }
-    let mut instance = get(paths, id)?;
-    instance.notes = trimmed.to_string();
-    save(&instance)?;
-    Ok(instance)
+    update(paths, id, |i| {
+        i.notes = trimmed.to_string();
+        Ok(())
+    })
 }
 
 /// Copies the launch-affecting settings of `source_id` onto `target_id`
@@ -320,7 +348,13 @@ pub fn set_notes(paths: &AppPaths, id: &str, notes: &str) -> AppResult<Instance>
 /// modpack or stats.
 pub fn copy_settings(paths: &AppPaths, source_id: &str, target_id: &str) -> AppResult<Instance> {
     let source = get(paths, source_id)?;
-    let mut target = get(paths, target_id)?;
+    update(paths, target_id, |target| {
+        copy_launch_settings(source, target);
+        Ok(())
+    })
+}
+
+fn copy_launch_settings(source: Instance, target: &mut Instance) {
     target.min_memory_mb = source.min_memory_mb;
     target.max_memory_mb = source.max_memory_mb;
     target.extra_jvm_args = source.extra_jvm_args;
@@ -329,8 +363,6 @@ pub fn copy_settings(paths: &AppPaths, source_id: &str, target_id: &str) -> AppR
     target.window_height = source.window_height;
     target.fullscreen = source.fullscreen;
     target.auto_join_server = source.auto_join_server;
-    save(&target)?;
-    Ok(target)
 }
 
 /// Longest name accepted by [`rename`] — keeps cards and the sidebar readable.
@@ -342,19 +374,17 @@ pub fn validate_name(name: &str) -> AppResult<String> {
         return Err(AppError::Instance("le nom de l'instance ne peut pas être vide".to_string()));
     }
     if trimmed.chars().count() > MAX_NAME_LEN {
-        return Err(AppError::Instance(format!(
-            "le nom de l'instance ne peut pas dépasser {MAX_NAME_LEN} caractères"
-        )));
+        return Err(AppError::Instance(format!("le nom de l'instance ne peut pas dépasser {MAX_NAME_LEN} caractères")));
     }
     Ok(trimmed.to_string())
 }
 
 pub fn rename(paths: &AppPaths, id: &str, name: &str) -> AppResult<Instance> {
     let name = validate_name(name)?;
-    let mut instance = get(paths, id)?;
-    instance.name = name;
-    save(&instance)?;
-    Ok(instance)
+    update(paths, id, |i| {
+        i.name = name;
+        Ok(())
+    })
 }
 
 #[cfg(test)]

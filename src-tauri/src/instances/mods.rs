@@ -2,8 +2,8 @@
 //! disable (rename with a `.disabled` suffix — the same convention every
 //! popular launcher uses, since it needs no extra bookkeeping file and a
 //! disabled mod is still trivially visible on disk), delete, and add a jar
-//! picked from the file system. No marketplace search here — see the
-//! `instances_mods_*` command docs for why v1 stays local-only.
+//! picked from the file system. Browsing and installing from Modrinth lives
+//! in [`super::content`].
 
 use std::path::Path;
 
@@ -86,9 +86,7 @@ pub fn add_from_path(instance_dir: &Path, source: &Path) -> AppResult<()> {
     if source.extension().and_then(|e| e.to_str()) != Some("jar") {
         return Err(AppError::Instance("seuls les fichiers .jar peuvent être ajoutés comme mod".to_string()));
     }
-    let file_name = source
-        .file_name()
-        .ok_or_else(|| AppError::Instance("chemin de fichier invalide".to_string()))?;
+    let file_name = source.file_name().ok_or_else(|| AppError::Instance("chemin de fichier invalide".to_string()))?;
 
     let dir = mods_dir(instance_dir);
     std::fs::create_dir_all(&dir)?;

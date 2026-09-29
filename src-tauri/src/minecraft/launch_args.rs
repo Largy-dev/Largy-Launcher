@@ -38,53 +38,61 @@ fn quote_for_argfile(arg: &str) -> String {
     format!("\"{}\"", arg.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// The arguments to actually pass to `java`: the full list, or a single
-/// `@file` pointing at them when the command line would be too long.
+/// The arguments to actually pass to `java`: the full list, or — when the
+/// command line would be too long — the JVM options through a `@file` with
+/// the main class and game arguments still on the command line. The game
+/// arguments carry the access token, which must never be written to disk
+/// (the argfile sits in the instance folder, which gets zipped and shared).
 pub fn command_args(ctx: &LaunchContext) -> std::io::Result<Vec<String>> {
-    let args = build_command_args(ctx);
-    let length: usize = args.iter().map(|a| a.len() + 3).sum();
+    let jvm = jvm_args(ctx);
+    let game = game_args(ctx);
+    let length: usize = jvm.iter().chain(&game).map(|a| a.len() + 3).sum();
     if length <= MAX_COMMAND_LINE || ctx.java_major < 9 {
-        return Ok(args);
+        return Ok(jvm.into_iter().chain(game).collect());
     }
+    let token = ctx.placeholders.get("auth_access_token").filter(|t| t.len() >= 8);
+    let (secret, plain): (Vec<String>, Vec<String>) =
+        jvm.into_iter().partition(|a| token.is_some_and(|t| a.contains(t.as_str())));
     let path = ctx.argfile_path();
-    let content: Vec<String> = args.iter().map(|a| quote_for_argfile(a)).collect();
+    let content: Vec<String> = plain.iter().map(|a| quote_for_argfile(a)).collect();
     crate::util::fs::write_atomic(&path, content.join("\n").as_bytes())?;
-    Ok(vec![format!("@{}", path.display())])
+    Ok(std::iter::once(format!("@{}", path.display())).chain(secret).chain(game).collect())
 }
 
 /// Produces the full argument list to pass to `Command::new(java_path).args(...)`.
 pub fn build_command_args(ctx: &LaunchContext) -> Vec<String> {
+    jvm_args(ctx).into_iter().chain(game_args(ctx)).collect()
+}
+
+/// Everything before the main class: memory, natives, JVM flags, classpath.
+fn jvm_args(ctx: &LaunchContext) -> Vec<String> {
     let mut args = Vec::new();
 
     args.push(format!("-Xms{}M", ctx.min_memory_mb));
     args.push(format!("-Xmx{}M", ctx.max_memory_mb));
     args.extend(ctx.extra_jvm_args.iter().cloned());
-    args.push(format!(
-        "-Djava.library.path={}",
-        ctx.natives_directory.display()
-    ));
+    args.push(format!("-Djava.library.path={}", ctx.natives_directory.display()));
     args.push("-Dminecraft.launcher.brand=LargyLauncher".to_string());
 
     for raw in &ctx.raw_jvm_args {
         args.push(substitute_dollar_braces(raw, &ctx.placeholders));
     }
 
-    let classpath = ctx
-        .classpath
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect::<Vec<_>>()
-        .join(if cfg!(windows) { ";" } else { ":" });
+    let classpath = ctx.classpath.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(if cfg!(windows) {
+        ";"
+    } else {
+        ":"
+    });
     args.push("-cp".to_string());
     args.push(classpath);
-
-    args.push(ctx.main_class.clone());
-
-    for raw in &ctx.raw_game_args {
-        args.push(substitute_dollar_braces(raw, &ctx.placeholders));
-    }
-
     args
+}
+
+/// The main class followed by the game's own arguments (username, token...).
+fn game_args(ctx: &LaunchContext) -> Vec<String> {
+    std::iter::once(ctx.main_class.clone())
+        .chain(ctx.raw_game_args.iter().map(|raw| substitute_dollar_braces(raw, &ctx.placeholders)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -136,6 +144,25 @@ mod tests {
     #[test]
     fn argfile_quoting_escapes_backslashes_and_quotes() {
         assert_eq!(quote_for_argfile(r#"C:\dir"b"#), r#""C:\\dir\"b""#);
+    }
+
+    #[test]
+    fn long_command_lines_keep_the_access_token_out_of_the_argfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut ctx = fixture_ctx();
+        ctx.game_directory = dir.path().to_path_buf();
+        ctx.placeholders.insert("auth_access_token".to_string(), "secret-token-123".to_string());
+        ctx.raw_game_args.extend(["--accessToken".to_string(), "${auth_access_token}".to_string()]);
+        ctx.classpath = (0..2000).map(|i| PathBuf::from(format!("/libs/some-library-{i}.jar"))).collect();
+
+        let args = command_args(&ctx).unwrap();
+
+        assert!(args[0].starts_with('@'));
+        assert_eq!(args[1], "net.minecraft.client.main.Main");
+        assert_eq!(args.last().unwrap(), "secret-token-123");
+        let file = std::fs::read_to_string(ctx.argfile_path()).unwrap();
+        assert!(file.contains("some-library-1999.jar"));
+        assert!(!file.contains("secret-token-123"));
     }
 
     #[test]

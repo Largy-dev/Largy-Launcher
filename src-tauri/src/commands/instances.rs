@@ -16,9 +16,7 @@ where
     T: Send + 'static,
     F: FnOnce() -> AppResult<T> + Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
-        .await
-        .map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))?
+    tokio::task::spawn_blocking(f).await.map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))?
 }
 
 pub(super) fn instances_changed(app: &AppHandle) {
@@ -76,7 +74,12 @@ pub fn instances_rename(state: State<'_, AppState>, id: String, name: String) ->
 }
 
 #[tauri::command]
-pub async fn instances_duplicate(app: AppHandle, state: State<'_, AppState>, id: String, name: String) -> AppResult<Instance> {
+pub async fn instances_duplicate(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+) -> AppResult<Instance> {
     let paths = state.paths.clone();
     let instance = spawn_blocking(move || instances::duplicate(&paths, &id, &name)).await?;
     instances_changed(&app);
@@ -110,28 +113,25 @@ pub fn instances_update_settings(
     id: String,
     settings: InstanceSettingsInput,
 ) -> AppResult<Instance> {
-    let mut instance = instances::get(&state.paths, &id)?;
     let (min, max) = match (settings.min_memory_mb, settings.max_memory_mb) {
         (Some(min), Some(max)) => {
             let (min, max) = crate::settings::sanitize_memory(min, max);
             (Some(min), Some(max))
         }
-        (min, max) => (
-            min.map(|m| m.max(128)),
-            max.map(|m| m.max(crate::settings::MIN_HEAP_MB)),
-        ),
+        (min, max) => (min.map(|m| m.max(128)), max.map(|m| m.max(crate::settings::MIN_HEAP_MB))),
     };
     let valid_size = |v: Option<u32>| v.filter(|&n| (320..=16384).contains(&n));
-    instance.min_memory_mb = min;
-    instance.max_memory_mb = max;
-    instance.extra_jvm_args = settings.extra_jvm_args.into_iter().filter(|a| !a.trim().is_empty()).collect();
-    instance.java_path = non_empty(settings.java_path);
-    instance.window_width = valid_size(settings.window_width);
-    instance.window_height = valid_size(settings.window_height);
-    instance.fullscreen = settings.fullscreen;
-    instance.auto_join_server = non_empty(settings.auto_join_server);
-    instances::save(&instance)?;
-    Ok(instance)
+    instances::update(&state.paths, &id, |instance| {
+        instance.min_memory_mb = min;
+        instance.max_memory_mb = max;
+        instance.extra_jvm_args = settings.extra_jvm_args.into_iter().filter(|a| !a.trim().is_empty()).collect();
+        instance.java_path = non_empty(settings.java_path);
+        instance.window_width = valid_size(settings.window_width);
+        instance.window_height = valid_size(settings.window_height);
+        instance.fullscreen = settings.fullscreen;
+        instance.auto_join_server = non_empty(settings.auto_join_server);
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -151,7 +151,11 @@ pub fn instances_set_notes(state: State<'_, AppState>, id: String, notes: String
 
 /// Copies `source_id`'s memory/JVM/window/server settings onto `target_id`.
 #[tauri::command]
-pub fn instances_copy_settings(state: State<'_, AppState>, source_id: String, target_id: String) -> AppResult<Instance> {
+pub fn instances_copy_settings(
+    state: State<'_, AppState>,
+    source_id: String,
+    target_id: String,
+) -> AppResult<Instance> {
     instances::copy_settings(&state.paths, &source_id, &target_id)
 }
 

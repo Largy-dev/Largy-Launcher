@@ -3,7 +3,10 @@
 use tauri::State;
 
 use crate::error::AppResult;
-use crate::instances::{self, content::{self, ContentKind}};
+use crate::instances::{
+    self,
+    content::{self, ContentKind},
+};
 use crate::providers::modrinth::ModrinthApi;
 use crate::providers::InstallWarning;
 use crate::servers::{self, ping::ServerStatus, ServerEntry};
@@ -89,14 +92,16 @@ pub async fn servers_attach_instance(
     if !servers::featured::is_slug(&featured_id) {
         return Err(crate::error::AppError::Other("serveur inconnu".to_string()));
     }
-    let mut instance = instances::get(&state.paths, &instance_id)?;
+    let instance = instances::get(&state.paths, &instance_id)?;
     let address = address.trim().to_string();
     if !servers::list(&instance.directory)?.iter().any(|s| s.address == address) {
         servers::add(&instance.directory, &instance.name, &address)?;
     }
-    instance.auto_join_server = Some(address);
-    instance.featured_server = Some(featured_id.clone());
-    instances::save(&instance)?;
+    let instance = instances::update(&state.paths, &instance_id, |i| {
+        i.auto_join_server = Some(address);
+        i.featured_server = Some(featured_id.clone());
+        Ok(())
+    })?;
 
     let catalog = servers::featured::load(&state.client).await;
     let extra_mods = catalog

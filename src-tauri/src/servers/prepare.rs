@@ -60,9 +60,7 @@ impl PrepareSpec {
         if let Some(bad) = self.mods.iter().chain(&self.shaders).find(|s| !is_slug(s)) {
             return Err(AppError::Other(format!("mod invalide : {bad}")));
         }
-        self.icon = self
-            .icon
-            .filter(|icon| icon.starts_with("data:image/png;base64,") && icon.len() <= MAX_ICON_LEN);
+        self.icon = self.icon.filter(|icon| icon.starts_with("data:image/png;base64,") && icon.len() <= MAX_ICON_LEN);
         Ok(self)
     }
 }
@@ -78,19 +76,19 @@ pub async fn prepare(state: &AppState, spec: PrepareSpec) -> AppResult<PrepareRe
     let spec = spec.validate()?;
     let name = instances::validate_name(&spec.name)?;
 
-    let fabric = state
-        .loaders
-        .get(LoaderKind::Fabric)
-        .ok_or_else(|| AppError::Loader("Fabric indisponible".to_string()))?;
+    let fabric =
+        state.loaders.get(LoaderKind::Fabric).ok_or_else(|| AppError::Loader("Fabric indisponible".to_string()))?;
     let loader_version = fabric
         .list_versions(&state.meta, &spec.minecraft_version)
         .await
         .map_err(AppError::from)?
         .into_iter()
         .next()
-        .ok_or_else(|| AppError::Loader(format!("Fabric ne supporte pas encore Minecraft {}", spec.minecraft_version)))?;
+        .ok_or_else(|| {
+            AppError::Loader(format!("Fabric ne supporte pas encore Minecraft {}", spec.minecraft_version))
+        })?;
 
-    let mut instance = instances::create(
+    let created = instances::create(
         &state.paths,
         CreateInstanceInput {
             name,
@@ -101,9 +99,11 @@ pub async fn prepare(state: &AppState, spec: PrepareSpec) -> AppResult<PrepareRe
             icon_url: spec.icon.clone(),
         },
     )?;
-    instance.auto_join_server = Some(spec.address.clone());
-    instance.featured_server = spec.featured_id.clone();
-    instances::save(&instance)?;
+    let instance = instances::update(&state.paths, &created.id, |i| {
+        i.auto_join_server = Some(spec.address.clone());
+        i.featured_server = spec.featured_id.clone();
+        Ok(())
+    })?;
     super::add(&instance.directory, &instance.name, &spec.address)?;
 
     let api = ModrinthApi::new(state.client.clone());
