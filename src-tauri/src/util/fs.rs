@@ -26,6 +26,26 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     })
 }
 
+/// Copies `src` over `dest` through a temp file renamed into place: `dest`
+/// is replaced, never rewritten in place (it may be hard-linked from a
+/// restore point, which must keep the old bytes), and stays intact if the
+/// copy fails. Copying a file onto itself is a no-op.
+pub fn replace_file(src: &Path, dest: &Path) -> std::io::Result<()> {
+    if let (Ok(a), Ok(b)) = (std::fs::canonicalize(src), std::fs::canonicalize(dest)) {
+        if a == b {
+            return Ok(());
+        }
+    }
+    let parent = dest.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let file_name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = parent.join(format!(".{file_name}.{}.tmp", uuid::Uuid::new_v4().simple()));
+    std::fs::copy(src, &tmp)?;
+    std::fs::rename(&tmp, dest).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
 /// Joins an untrusted relative path onto `base`, rejecting anything that
 /// could land outside it: absolute paths, drive prefixes, and `..`.
 pub fn safe_join(base: &Path, relative: impl AsRef<Path>) -> Option<PathBuf> {
@@ -89,14 +109,8 @@ fn copy_into(
             continue;
         }
         let rel = target.strip_prefix(root).map(Path::to_path_buf).unwrap_or_else(|_| target.clone());
-        let exists = target.exists();
-        if !(exists && skip_existing(&rel)) {
-            // Replace rather than overwrite in place: the old file may be
-            // hard-linked from a restore point (see `instances::snapshots`).
-            if exists {
-                std::fs::remove_file(&target)?;
-            }
-            std::fs::copy(entry.path(), &target)?;
+        if !(target.exists() && skip_existing(&rel)) {
+            replace_file(&entry.path(), &target)?;
         }
         copied.push(rel);
     }
@@ -179,6 +193,24 @@ mod tests {
         assert_eq!(copied, vec![PathBuf::from("config/a.toml"), PathBuf::from("options.txt")]);
         assert_eq!(std::fs::read(dest.path().join("options.txt")).unwrap(), b"user");
         assert_eq!(std::fs::read(dest.path().join("config/a.toml")).unwrap(), b"pack");
+    }
+
+    #[test]
+    fn replace_file_keeps_hard_links_and_handles_copying_onto_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let (dest, link, src) = (dir.path().join("a.jar"), dir.path().join("link.jar"), dir.path().join("new.jar"));
+        std::fs::write(&dest, b"old").unwrap();
+        std::fs::hard_link(&dest, &link).unwrap();
+        std::fs::write(&src, b"new").unwrap();
+
+        replace_file(&src, &dest).unwrap();
+        replace_file(&dest, &dest).unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        assert_eq!(std::fs::read(&link).unwrap(), b"old");
+        assert!(replace_file(&dir.path().join("missing"), &dest).is_err());
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 3);
     }
 
     #[test]

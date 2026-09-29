@@ -50,8 +50,10 @@ fn lists_mods_with_their_metadata_and_icon() {
     assert_eq!(s.depends, vec!["indium"]);
     // Hashes come in a second, background pass.
     assert_eq!(s.sha1, None);
-    ensure_hashes(&f.paths, &f.instance, ContentKind::Mod).unwrap();
-    let hashed = list(&f.paths, &f.instance, LoaderKind::Fabric, ContentKind::Mod).unwrap();
+    let hashed = list_hashed(&f.paths, &f.instance, LoaderKind::Fabric, ContentKind::Mod).unwrap();
+    // …and stored: a plain listing now has them too.
+    let listed = list(&f.paths, &f.instance, LoaderKind::Fabric, ContentKind::Mod).unwrap();
+    assert_eq!(listed.iter().map(|i| &i.sha1).collect::<Vec<_>>(), hashed.iter().map(|i| &i.sha1).collect::<Vec<_>>());
     assert_eq!(hashed[1].sha1.as_deref(), Some(hex::encode(Sha1::digest(&sodium)).as_str()));
     assert_eq!(hashed[1].fingerprint, Some(crate::providers::curseforge::fingerprint(&sodium)));
     let icon = s.icon_path.as_ref().expect("icon extracted");
@@ -213,7 +215,7 @@ fn bench_listing() {
     list(&paths, Path::new(&dir), LoaderKind::NeoForge, ContentKind::Mod).unwrap();
     println!("cached scan: {:?}", started.elapsed());
     let started = std::time::Instant::now();
-    ensure_hashes(&paths, Path::new(&dir), ContentKind::Mod).unwrap();
+    list_hashed(&paths, Path::new(&dir), LoaderKind::NeoForge, ContentKind::Mod).unwrap();
     println!("background hashing: {:?}", started.elapsed());
 }
 

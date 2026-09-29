@@ -90,12 +90,12 @@ pub async fn launch_instance(
     let prepared =
         cancellable(&kill, prepare(app, state, &instance, &settings, &account, Verify::Fast, true)).await?;
 
-    let sync_options = settings.sync_game_options && !instance.skip_options_sync;
-    if sync_options {
-        if let Err(e) = super::options_sync::apply(&state.paths, &instance.directory, &instance.minecraft_version) {
-            tracing::warn!("shared game options not applied to {instance_id}: {e}");
-        }
-    }
+    // Collected back after the game only if applied now (see `options_sync::apply`).
+    let sync_options = settings.sync_game_options
+        && !instance.skip_options_sync
+        && super::options_sync::apply(&state.paths, &instance.directory, &instance.minecraft_version)
+            .inspect_err(|e| tracing::warn!("shared game options not applied to {instance_id}: {e}"))
+            .unwrap_or(false);
 
     emit_phase(app, instance_id, LaunchPhase::Starting);
     let mut child = super::spawn(instance_id, &prepared.ctx, &account.minecraft_access_token)?;

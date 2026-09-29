@@ -187,30 +187,40 @@ fn hash_file(path: &Path) -> Option<(String, u32)> {
     Some((hex::encode(Sha1::digest(&bytes)), curseforge::fingerprint(&bytes)))
 }
 
-/// Hashes the files of `kind` the cache has no hashes for yet — the slow
-/// part (every byte of every jar), kept off the first display.
-pub fn ensure_hashes(paths: &AppPaths, instance_dir: &Path, kind: ContentKind) -> AppResult<()> {
-    // Files never listed yet get their cache entry first (the loader only
-    // shapes the returned dependencies, not what's cached).
-    list(paths, instance_dir, LoaderKind::Vanilla, kind)?;
-    let found = candidates(&instance_dir.join(kind.folder()), kind)?;
-    let keys: Vec<String> = found.iter().map(Candidate::key).collect();
-    let known = cache::get_many(paths, &keys);
-    let todo: Vec<&Candidate> =
-        found.iter().filter(|c| !c.is_dir && known.get(&c.key()).is_some_and(|e| e.sha1.is_none())).collect();
+/// Like [`list`], with every file's SHA-1 and fingerprint — hashing (the
+/// slow part: every byte of every jar) only what the cache doesn't know yet.
+pub fn list_hashed(
+    paths: &AppPaths,
+    instance_dir: &Path,
+    loader: LoaderKind,
+    kind: ContentKind,
+) -> AppResult<Vec<InstalledItem>> {
+    let mut items = list(paths, instance_dir, loader, kind)?;
+    let folder = instance_dir.join(kind.folder());
+    let todo: Vec<usize> = (0..items.len()).filter(|&i| !items[i].is_dir && items[i].sha1.is_none()).collect();
     if todo.is_empty() {
-        return Ok(());
+        return Ok(items);
     }
-    let hashes = parallel_map(&todo, |c| hash_file(&c.path));
+    let on_disk = |item: &InstalledItem| {
+        folder.join(if item.enabled { item.file_name.clone() } else { format!("{}{DISABLED_SUFFIX}", item.file_name) })
+    };
+    let hashes = parallel_map(&todo, |&i| hash_file(&on_disk(&items[i])));
     cache::update(paths, |entries| {
-        for (candidate, hash) in todo.iter().zip(hashes) {
-            if let (Some(entry), Some((sha1, fingerprint))) = (entries.get_mut(&candidate.key()), hash) {
-                entry.sha1 = Some(sha1);
-                entry.fingerprint = Some(fingerprint);
+        for (&i, hash) in todo.iter().zip(&hashes) {
+            let key = cache::key(&items[i].file_name, items[i].size, items[i].modified);
+            if let (Some(entry), Some((sha1, fingerprint))) = (entries.get_mut(&key), hash) {
+                entry.sha1 = Some(sha1.clone());
+                entry.fingerprint = Some(*fingerprint);
             }
         }
     });
-    Ok(())
+    for (&i, hash) in todo.iter().zip(hashes) {
+        if let Some((sha1, fingerprint)) = hash {
+            items[i].sha1 = Some(sha1);
+            items[i].fingerprint = Some(fingerprint);
+        }
+    }
+    Ok(items)
 }
 
 /// How much content an instance holds — counts only, nothing read or hashed.
@@ -261,8 +271,7 @@ pub fn hashes(
     loader: LoaderKind,
     kind: ContentKind,
 ) -> AppResult<HashMap<String, String>> {
-    ensure_hashes(paths, instance_dir, kind)?;
-    Ok(list(paths, instance_dir, loader, kind)?
+    Ok(list_hashed(paths, instance_dir, loader, kind)?
         .into_iter()
         .filter_map(|i| {
             let on_disk = if i.enabled { i.file_name } else { format!("{}{DISABLED_SUFFIX}", i.file_name) };
@@ -406,13 +415,7 @@ pub fn add_from_path(instance_dir: &Path, kind: ContentKind, source: &Path) -> A
     }
     let dir = instance_dir.join(kind.folder());
     std::fs::create_dir_all(&dir)?;
-    let dest = dir.join(&file_name);
-    // Replace rather than overwrite in place: the old jar may be hard-linked
-    // from a restore point, which must keep the old bytes.
-    if dest.exists() {
-        std::fs::remove_file(&dest)?;
-    }
-    std::fs::copy(source, &dest)?;
+    crate::util::fs::replace_file(source, &dir.join(&file_name))?;
     Ok(file_name)
 }
 

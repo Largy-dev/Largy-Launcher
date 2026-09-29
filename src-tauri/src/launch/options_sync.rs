@@ -116,30 +116,28 @@ fn shared_file(paths: &AppPaths, minecraft_version: &str) -> PathBuf {
 }
 
 /// Before a launch: the shared options into the instance's `options.txt`.
-/// Only an existing file the game wrote (it has a `version:` line) is
-/// touched: without that line Minecraft runs its pre-1.13 key-binding
-/// conversions on the modern values and mangles them. A brand-new instance
-/// gets the shared options from its second launch on.
-pub fn apply(paths: &AppPaths, instance_dir: &Path, minecraft_version: &str) -> std::io::Result<()> {
-    let Ok(shared_text) = std::fs::read_to_string(shared_file(paths, minecraft_version)) else {
-        return Ok(());
-    };
-    let shared = extract(&shared_text);
-    if shared.is_empty() {
-        return Ok(());
-    }
+/// Only an existing file the game wrote (it has a `version:` line) takes
+/// part: without that line Minecraft runs its pre-1.13 key-binding
+/// conversions on the modern values and mangles them. Returns whether the
+/// instance takes part — [`collect`] must be skipped otherwise, or a
+/// brand-new instance's defaults would overwrite everyone's settings. Such
+/// an instance joins in from its second launch.
+pub fn apply(paths: &AppPaths, instance_dir: &Path, minecraft_version: &str) -> std::io::Result<bool> {
     let target = instance_dir.join(OPTIONS);
     let Ok(current) = std::fs::read_to_string(&target) else {
-        return Ok(());
+        return Ok(false);
     };
     if !current.lines().any(|l| l.starts_with("version:")) {
-        return Ok(());
+        return Ok(false);
     }
-    let merged = merge(&current, &shared);
+    let Ok(shared_text) = std::fs::read_to_string(shared_file(paths, minecraft_version)) else {
+        return Ok(true);
+    };
+    let merged = merge(&current, &extract(&shared_text));
     if merged != current {
         write_atomic(&target, merged.as_bytes())?;
     }
-    Ok(())
+    Ok(true)
 }
 
 /// After the game closed: what the player changed becomes the shared copy.
@@ -211,8 +209,9 @@ mod tests {
         std::fs::write(unversioned.join(OPTIONS), "fov:0.1\n").unwrap();
         collect(&paths, &a, "1.21.1").unwrap();
 
-        apply(&paths, &fresh, "1.21.1").unwrap();
-        apply(&paths, &unversioned, "1.21.1").unwrap();
+        assert!(!apply(&paths, &fresh, "1.21.1").unwrap());
+        assert!(!apply(&paths, &unversioned, "1.21.1").unwrap());
+        assert!(apply(&paths, &a, "1.21.1").unwrap());
 
         assert!(!fresh.join(OPTIONS).exists());
         assert_eq!(std::fs::read_to_string(unversioned.join(OPTIONS)).unwrap(), "fov:0.1\n");

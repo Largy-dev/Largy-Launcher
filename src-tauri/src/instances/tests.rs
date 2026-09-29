@@ -307,3 +307,19 @@ fn pictures_elsewhere_in_the_instance_are_copied_as_covers() {
     let chosen = set_cover(&paths, &id, CoverChoice::File(pack_png.display().to_string())).unwrap();
     assert_eq!(chosen.cover.as_deref(), Some("cover.png"));
 }
+
+#[test]
+fn picking_the_current_cover_again_keeps_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = AppPaths::from_root(dir.path().join("data"));
+    let id = create(&paths, test_input("Cover")).unwrap().id;
+    let outside = dir.path().join("pic.png");
+    std::fs::write(&outside, b"png").unwrap();
+    set_cover(&paths, &id, CoverChoice::File(outside.display().to_string())).unwrap();
+    let current = paths.instance_dir(&id).join("cover.png");
+
+    let again = set_cover(&paths, &id, CoverChoice::File(current.display().to_string())).unwrap();
+
+    assert_eq!(again.cover.as_deref(), Some("cover.png"));
+    assert_eq!(std::fs::read(&current).unwrap(), b"png");
+}

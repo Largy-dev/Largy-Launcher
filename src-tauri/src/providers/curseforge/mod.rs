@@ -413,9 +413,6 @@ mod tests {
         .unwrap()
     }
 
-
-
-
     #[test]
     fn file_refs_go_to_the_right_folder_and_report_missing_files() {
         let wanted = vec![

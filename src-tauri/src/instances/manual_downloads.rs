@@ -86,7 +86,7 @@ fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
     if std::fs::rename(from, to).is_ok() {
         return Ok(());
     }
-    std::fs::copy(from, to)?;
+    crate::util::fs::replace_file(from, to)?;
     std::fs::remove_file(from)
 }
 

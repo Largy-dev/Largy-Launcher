@@ -1,8 +1,7 @@
 //! The Modrinth App keeps its instances in a SQLite database (`app.db` next
 //! to the `profiles/` folder): a `profiles` table in older versions, then
 //! `instances` + `instance_content_sets` (version and loader moved there).
-//! The database is copied (with its WAL) and the copy read, so a running
-//! Modrinth App is never locked or disturbed.
+//! It's only ever opened read-only.
 
 use std::path::Path;
 
@@ -52,33 +51,20 @@ fn query(conn: &Connection) -> rusqlite::Result<Vec<AppProfile>> {
     Ok(rows.filter_map(Result::ok).filter(|p| seen.insert(p.path.clone())).collect())
 }
 
-/// Every instance recorded in the Modrinth App database at `db`.
+/// Every instance recorded in the Modrinth App database at `db`, opened
+/// read-only (a running Modrinth App keeps writing undisturbed: WAL mode).
 pub fn read_profiles(db: &Path) -> Vec<AppProfile> {
     if !db.is_file() {
         return Vec::new();
     }
-    let copy = std::env::temp_dir().join(format!("largy-modrinth-app-{}", uuid::Uuid::new_v4().simple()));
-    let result = (|| {
-        std::fs::create_dir_all(&copy).ok()?;
-        let target = copy.join("app.db");
-        std::fs::copy(db, &target).ok()?;
-        for suffix in ["-wal", "-shm"] {
-            let side = db.with_file_name(format!("app.db{suffix}"));
-            if side.is_file() {
-                let _ = std::fs::copy(&side, copy.join(format!("app.db{suffix}")));
-            }
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    match Connection::open_with_flags(db, flags).and_then(|conn| query(&conn)) {
+        Ok(profiles) => profiles,
+        Err(e) => {
+            tracing::warn!("Modrinth App database unreadable: {e}");
+            Vec::new()
         }
-        let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-        match Connection::open_with_flags(&target, flags).and_then(|conn| query(&conn)) {
-            Ok(profiles) => Some(profiles),
-            Err(e) => {
-                tracing::warn!("Modrinth App database unreadable: {e}");
-                None
-            }
-        }
-    })();
-    let _ = std::fs::remove_dir_all(&copy);
-    result.unwrap_or_default()
+    }
 }
 
 #[cfg(test)]

@@ -332,10 +332,9 @@ fn modrinth(root: &Path) -> Vec<ExternalInstance> {
         }
         let loader = LoaderKind::from_name(&profile.loader).unwrap_or(LoaderKind::Vanilla);
         let loader_version = profile.loader_version.filter(|_| loader != LoaderKind::Vanilla);
-        let item = entry(ExternalSource::Modrinth, profile.name, profile.game_version, loader, loader_version, &dir, profile.last_played);
-        if !found.iter().any(|f| f.id == item.id) {
-            found.push(item);
-        }
+        let last_played = profile.last_played.filter(|&t| t > 0);
+        // A folder listed both ways is deduplicated by `detect`, freshest first.
+        found.push(entry(ExternalSource::Modrinth, profile.name, profile.game_version, loader, loader_version, &dir, last_played));
     }
     found
 }

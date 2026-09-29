@@ -17,7 +17,7 @@ use crate::paths::AppPaths;
 use crate::util::fs::write_atomic;
 
 /// Bumped when [`LocalMeta`] parsing changes, so every file is read again.
-const SCHEMA: u32 = 4;
+const SCHEMA: u32 = 5;
 /// Entries of files not seen for this long are forgotten.
 const FORGET_AFTER_SECS: i64 = 90 * 24 * 3600;
 /// `last_seen` is refreshed at most this often (a listing doesn't rewrite

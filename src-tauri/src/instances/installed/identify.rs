@@ -1,13 +1,14 @@
 //! Which Modrinth or CurseForge project each installed file belongs to:
 //! Modrinth by SHA-1, then CurseForge by fingerprint for what Modrinth
-//! doesn't know. One catalogue being down doesn't stop the other, and files
-//! are only marked as "looked up" when the lookup actually happened.
+//! doesn't know. CurseForge is only asked once Modrinth answered (a file
+//! Modrinth knows must not be pinned to CurseForge because Modrinth was
+//! down), and files are only marked as looked up when both could answer.
 
 use std::collections::HashMap;
 use std::path::Path;
 
 use super::cache::{self, CacheEntry, RemoteProject, RemoteProvider};
-use super::{ensure_hashes, list, modrinth_url, ContentKind, REMOTE_RECHECK_SECS};
+use super::{list_hashed, modrinth_url, ContentKind, REMOTE_RECHECK_SECS};
 use crate::error::{AppError, AppResult};
 use crate::paths::AppPaths;
 use crate::providers::curseforge::CurseForgeProvider;
@@ -99,11 +100,7 @@ pub async fn identify(
     kind: ContentKind,
 ) -> AppResult<usize> {
     let (p, dir) = (paths.clone(), instance_dir.to_path_buf());
-    let items = blocking(move || {
-        ensure_hashes(&p, &dir, kind)?;
-        list(&p, &dir, loader, kind)
-    })
-    .await?;
+    let items = blocking(move || list_hashed(&p, &dir, loader, kind)).await?;
 
     let now = crate::auth::now_unix();
     let keys: Vec<String> = items
@@ -121,13 +118,9 @@ pub async fn identify(
 
     let by_sha1: HashMap<String, String> =
         pending.iter().filter_map(|(k, e)| e.sha1.clone().map(|h| (h, k.clone()))).collect();
-    let (mut found, modrinth_error) = match from_modrinth(modrinth, &by_sha1).await {
-        Ok(found) => (found, None),
-        Err(e) => {
-            tracing::warn!("Modrinth identification failed: {e}");
-            (HashMap::new(), Some(e))
-        }
-    };
+    let mut found = from_modrinth(modrinth, &by_sha1).await.inspect_err(|e| {
+        tracing::warn!("Modrinth identification failed: {e}");
+    })?;
 
     let mut curseforge_failed = false;
     if curseforge.has_key() {
@@ -147,7 +140,7 @@ pub async fn identify(
 
     // A file counts as looked up only if every catalogue could answer; else
     // it's retried on the next visit rather than in three days.
-    let complete = modrinth_error.is_none() && !curseforge_failed;
+    let complete = !curseforge_failed;
     let identified = found.len();
     cache::update(paths, |entries| {
         for key in pending.keys() {
@@ -160,8 +153,5 @@ pub async fn identify(
             }
         }
     });
-    match modrinth_error {
-        Some(e) if identified == 0 => Err(e.into()),
-        _ => Ok(identified),
-    }
+    Ok(identified)
 }
