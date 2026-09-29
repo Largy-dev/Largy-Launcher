@@ -189,7 +189,7 @@ pub fn instances_reveal_file(state: State<'_, AppState>, id: String, path: Strin
     Ok(())
 }
 
-fn open_in_file_manager(path: &Path) {
+pub(super) fn open_in_file_manager(path: &Path) {
     #[cfg(windows)]
     {
         let mut cmd = std::process::Command::new("explorer");

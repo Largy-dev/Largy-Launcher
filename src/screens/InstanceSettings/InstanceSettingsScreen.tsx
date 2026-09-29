@@ -48,6 +48,7 @@ import { useAppStore } from "@/store/appStore";
 import { JvmPresetsSection } from "./JvmPresetsSection";
 import { OrganizationSection } from "./OrganizationSection";
 import { ScreenshotsTab } from "./ScreenshotsTab";
+import { SnapshotsSection } from "./SnapshotsSection";
 import { ServersTab } from "./ServersTab";
 
 type TabId = "general" | "game" | "servers" | "screenshots" | "memory" | "java";
@@ -182,10 +183,10 @@ export function InstanceSettingsScreen() {
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => navigate(`/instances/${instanceId}/mods`)}
+              onClick={() => navigate(`/instances/${instanceId}/content`)}
             >
               <Puzzle aria-hidden="true" />
-              {instance.loader === "vanilla" ? "Contenu" : `Mods${modCount !== null ? ` (${modCount})` : ""}`}
+              {instance.loader === "vanilla" || modCount === null ? "Contenu" : `Contenu · ${modCount} mods`}
             </Button>
             <PlayButton instance={instance} />
           </>
@@ -244,6 +245,7 @@ export function InstanceSettingsScreen() {
               </div>
             </SettingSection>
             <OrganizationSection instance={instance} />
+            <SnapshotsSection instance={instance} />
             <InstanceActions instance={instance} />
           </>
         )}

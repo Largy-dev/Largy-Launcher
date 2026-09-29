@@ -99,7 +99,7 @@ export function ModpackDetailDialog({
       ),
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-mods", result.instance.id] });
+      queryClient.invalidateQueries({ queryKey: ["content-summary", result.instance.id] });
       notifyInstallResult(result, `${vars.packName} installé`, () => navigate(`/instances/${result.instance.id}`));
     },
     onError: (e, vars) =>
@@ -113,7 +113,7 @@ export function ModpackDetailDialog({
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["modpack-versions", provider, pack?.id] });
-      queryClient.invalidateQueries({ queryKey: ["instance-mods", result.instance.id] });
+      queryClient.invalidateQueries({ queryKey: ["content-summary", result.instance.id] });
       queryClient.invalidateQueries({ queryKey: ["instance", result.instance.id] });
       notifyInstallResult(result, `${result.instance.name} mis à jour`, () =>
         navigate(`/instances/${result.instance.id}`),

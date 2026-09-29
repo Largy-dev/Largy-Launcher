@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import {
@@ -6,16 +6,13 @@ import {
   LayoutGrid,
   LayoutList,
   Loader2,
-  Package,
   Plus,
   Rows3,
   Search,
   Sparkles,
-  Timer,
   type LucideIcon,
 } from "lucide-react";
 
-import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/Skeleton";
@@ -29,7 +26,8 @@ import { useFileDrop } from "@/hooks/useFileDrop";
 import { useImportInstance } from "@/hooks/useImportInstance";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { instanceModsApi, instancesApi, type Instance, type LoaderKind } from "@/services/tauri";
+import { installedApi } from "@/services/content";
+import { instancesApi, type Instance, type LoaderKind } from "@/services/tauri";
 import { usePreferences, type CardDensity, type InstanceSort } from "@/store/preferencesStore";
 
 import { CreateInstanceDialog } from "./CreateInstanceDialog";
@@ -50,45 +48,24 @@ const SORTS: Record<InstanceSort, { label: string; compare: (a: Instance, b: Ins
   playtime: { label: "Temps de jeu", compare: (a, b) => b.play_time_seconds - a.play_time_seconds },
 };
 
-function StatTile({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }) {
-  return (
-    <div className="glass flex items-center gap-3 rounded-xl px-4 py-3">
-      <div className="bg-gradient-brand flex size-9 items-center justify-center rounded-lg shadow-glow">
-        <Icon className="size-4 text-primary-foreground" aria-hidden="true" />
-      </div>
-      <div>
-        <p className="text-lg leading-tight font-bold tabular-nums">{children}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-function StatsStrip({ instances }: { instances: Instance[] }) {
+/** One quiet line under the section title: how many instances, hours and mods. */
+function StatsLine({ instances }: { instances: Instance[] }) {
   const modded = instances.filter((i) => i.loader !== "vanilla");
-  const modQueries = useQueries({
+  const summaries = useQueries({
     queries: modded.map((i) => ({
-      queryKey: ["instance-mods", i.id],
-      queryFn: () => instanceModsApi.list(i.id),
+      queryKey: ["content-summary", i.id],
+      queryFn: () => installedApi.summary(i.id),
       staleTime: 60_000,
     })),
   });
-  const totalMods = modQueries.reduce((n, q) => n + (q.data?.filter((m) => m.enabled).length ?? 0), 0);
+  const totalMods = summaries.reduce((n, q) => n + (q.data?.mods_enabled ?? 0), 0);
   const totalPlay = instances.reduce((n, i) => n + i.play_time_seconds, 0);
-
-  return (
-    <div className="mb-6 grid grid-cols-3 gap-3">
-      <StatTile icon={LayoutGrid} label="Instances">
-        <AnimatedNumber value={instances.length} />
-      </StatTile>
-      <StatTile icon={Timer} label="Temps de jeu cumulé">
-        {totalPlay > 0 ? formatDuration(totalPlay) : "—"}
-      </StatTile>
-      <StatTile icon={Package} label="Mods installés">
-        <AnimatedNumber value={totalMods} />
-      </StatTile>
-    </div>
-  );
+  const parts = [
+    `${instances.length} instance${instances.length > 1 ? "s" : ""}`,
+    totalPlay > 0 ? `${formatDuration(totalPlay)} de jeu` : null,
+    totalMods > 0 ? `${totalMods} mods` : null,
+  ].filter(Boolean);
+  return <p className="text-xs text-muted-foreground tabular-nums">{parts.join(" · ")}</p>;
 }
 
 export function InstanceListScreen() {
@@ -156,10 +133,12 @@ export function InstanceListScreen() {
       ) : (
         <>
           {featured && <InstanceHero instance={featured} />}
-          <StatsStrip instances={instances} />
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <h2 className="mr-auto text-lg font-bold">Mes instances</h2>
+            <div className="mr-auto">
+              <h2 className="text-lg leading-tight font-bold">Mes instances</h2>
+              <StatsLine instances={instances} />
+            </div>
             <div className="relative">
               <Search
                 className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"

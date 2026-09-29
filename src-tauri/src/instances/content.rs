@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::download::{sha1_of_file, DownloadItem, DownloadManager};
 use crate::error::{AppError, AppResult};
+use crate::instances::installed::cache::RemoteProvider;
 use crate::providers::modrinth::api::{SearchHit, Version};
 use crate::providers::modrinth::ModrinthApi;
 use crate::util::fs::{is_plain_file_name, validate_file_name};
@@ -51,13 +52,46 @@ fn loader_filter(instance: &Instance, kind: ContentKind) -> Vec<&'static str> {
     }
 }
 
+/// A catalogue project, whichever provider it comes from.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ContentHit {
+    pub provider: RemoteProvider,
+    pub project_id: String,
+    pub slug: String,
+    pub title: String,
+    pub description: String,
+    pub author: String,
+    pub icon_url: Option<String>,
+    pub downloads: u64,
+    /// Project page on the provider's website.
+    pub url: String,
+}
+
+impl From<SearchHit> for ContentHit {
+    fn from(hit: SearchHit) -> Self {
+        let slug = if hit.slug.is_empty() { hit.project_id.clone() } else { hit.slug.clone() };
+        ContentHit {
+            provider: RemoteProvider::Modrinth,
+            url: crate::instances::installed::modrinth_url(&hit.project_type, &slug),
+            project_id: hit.project_id,
+            slug,
+            title: hit.title,
+            description: hit.description,
+            author: hit.author,
+            icon_url: hit.icon_url,
+            downloads: hit.downloads,
+        }
+    }
+}
+
 pub async fn search(
     api: &ModrinthApi,
     instance: &Instance,
     kind: ContentKind,
     query: &str,
     offset: u32,
-) -> AppResult<Vec<SearchHit>> {
+) -> AppResult<Vec<ContentHit>> {
     let mut facets = vec![
         vec![format!("project_type:{}", kind.project_type())],
         vec![format!("versions:{}", instance.minecraft_version)],
@@ -65,7 +99,7 @@ pub async fn search(
     if let Some(loader) = loader_filter(instance, kind).first() {
         facets.push(vec![format!("categories:{loader}")]);
     }
-    Ok(api.search(query, facets, offset, 30).await?)
+    Ok(api.search(query, facets, offset, 30).await?.into_iter().map(ContentHit::from).collect())
 }
 
 async fn compatible_version(api: &ModrinthApi, instance: &Instance, kind: ContentKind, project_id: &str) -> AppResult<Version> {
@@ -181,6 +215,7 @@ pub async fn install(
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ModUpdate {
+    pub provider: RemoteProvider,
     pub file_name: String,
     pub project_id: String,
     pub title: String,
@@ -225,6 +260,7 @@ pub async fn check_updates(api: &ModrinthApi, instance: &Instance) -> AppResult<
             continue;
         }
         updates.push(ModUpdate {
+            provider: RemoteProvider::Modrinth,
             file_name: by_hash.get(&hash).cloned().unwrap_or_default(),
             project_id: new.project_id.clone(),
             title: String::new(),

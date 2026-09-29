@@ -23,7 +23,11 @@
       "csp": "default-src 'self'; img-src 'self' data: https: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/instances/*/screenshots/*"]
+        "scope": [
+          "$APPDATA/instances/*/screenshots/*",
+          "$APPDATA/instances/*/saves/*/icon.png",
+          "$APPDATA/cache/content-icons/*"
+        ]
       }
     }
   },

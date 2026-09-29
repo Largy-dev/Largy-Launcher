@@ -51,7 +51,7 @@ export function InstallWarningsDialog() {
         if (placed.length > 0) {
           const next = new Set([...collected, ...placed]);
           setCollectedFor({ owner: pending, paths: next });
-          queryClient.invalidateQueries({ queryKey: ["instance-mods", pending.instanceId] });
+          queryClient.invalidateQueries({ queryKey: ["installed", pending.instanceId] });
           if (manual.every((f) => next.has(f.path))) {
             notify.success({
               title: `${pending.instanceName} est complet`,

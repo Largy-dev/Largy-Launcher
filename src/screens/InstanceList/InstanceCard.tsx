@@ -147,7 +147,7 @@ export function InstanceCard({ instance, density = "grid", index = 0 }: Instance
           Réglages
         </DropdownMenuItem>
         {instance.loader !== "vanilla" && (
-          <DropdownMenuItem className="gap-2" onClick={() => navigate(`/instances/${instance.id}/mods`)}>
+          <DropdownMenuItem className="gap-2" onClick={() => navigate(`/instances/${instance.id}/content`)}>
             <Puzzle className="size-4" aria-hidden="true" />
             Gérer les mods
           </DropdownMenuItem>

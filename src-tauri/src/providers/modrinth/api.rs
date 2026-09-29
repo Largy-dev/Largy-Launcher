@@ -12,8 +12,7 @@ use crate::providers::ProviderError;
 
 const BASE: &str = "https://api.modrinth.com/v2";
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, rename = "ContentHit")]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SearchHit {
     pub project_id: String,
     #[serde(default)]

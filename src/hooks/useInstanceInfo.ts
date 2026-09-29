@@ -3,23 +3,24 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useSettings } from "@/hooks/useSettings";
 import { adviseRam, ramStatus } from "@/lib/ramAdvice";
-import { getSystemMemoryInfo, instanceModsApi, type Instance } from "@/services/tauri";
+import { installedApi } from "@/services/content";
+import { getSystemMemoryInfo, type Instance } from "@/services/tauri";
 
 export function useSystemMemory() {
   return useQuery({ queryKey: ["system-memory-info"], queryFn: getSystemMemoryInfo, staleTime: 60_000 });
 }
 
-/** Enabled mods in an instance (null for vanilla or while loading). Shares its cache with the mods screen. */
+/** Enabled mods in an instance (null for vanilla or while loading). Shares its cache with the content screen. */
 export function useModCount(instance: Instance | undefined): number | null {
   const modded = !!instance && instance.loader !== "vanilla";
   const { data } = useQuery({
-    queryKey: ["instance-mods", instance?.id],
-    queryFn: () => instanceModsApi.list(instance!.id),
+    queryKey: ["content-summary", instance?.id],
+    queryFn: () => installedApi.summary(instance!.id),
     enabled: modded,
     staleTime: 60_000,
   });
   if (!modded || !data) return null;
-  return data.filter((m) => m.enabled).length;
+  return data.mods_enabled;
 }
 
 /** RAM actually allocated to an instance (its own setting, else the global default). */

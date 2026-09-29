@@ -5,11 +5,14 @@
 
 pub mod backup;
 pub mod content;
+pub mod content_curseforge;
 pub mod export;
 pub mod import;
+pub mod installed;
 pub mod manual_downloads;
-pub mod mods;
 pub mod screenshots;
+pub mod snapshots;
+pub mod worlds;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -287,6 +290,9 @@ pub fn delete(paths: &AppPaths, id: &str) -> AppResult<()> {
     if dir.exists() {
         std::fs::remove_dir_all(dir)?;
     }
+    // Restore points only make sense for the instance itself (world backups
+    // are kept: they're the player's saves).
+    let _ = std::fs::remove_dir_all(paths.root().join("snapshots").join(id));
     Ok(())
 }
 

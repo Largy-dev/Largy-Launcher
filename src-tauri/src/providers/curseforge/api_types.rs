@@ -24,14 +24,14 @@ pub(super) struct ItemResponse<T> {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct CfLogo {
+pub(super) struct CfLogo {
     #[serde(rename = "thumbnailUrl")]
-    thumbnail_url: Option<String>,
+    pub(super) thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct CfAuthor {
-    name: String,
+pub(super) struct CfAuthor {
+    pub(super) name: String,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -43,18 +43,20 @@ pub(super) struct CfLinks {
 #[derive(Debug, Deserialize, Clone)]
 pub(super) struct CfMod {
     pub(super) id: u32,
-    name: String,
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) slug: String,
     pub(super) summary: String,
     #[serde(default)]
-    logo: Option<CfLogo>,
+    pub(super) logo: Option<CfLogo>,
     #[serde(default)]
-    authors: Vec<CfAuthor>,
+    pub(super) authors: Vec<CfAuthor>,
     #[serde(rename = "classId", default)]
     pub(super) class_id: Option<u32>,
     #[serde(default)]
     pub(super) links: CfLinks,
     #[serde(rename = "downloadCount", default)]
-    download_count: f64,
+    pub(super) download_count: f64,
 }
 
 impl CfMod {
@@ -80,6 +82,49 @@ impl CfMod {
     }
 }
 
+/// A CurseForge project as the launcher shows it next to an installed file.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, Deserialize)]
+pub struct CfProject {
+    pub id: u32,
+    pub name: String,
+    pub summary: String,
+    pub icon_url: Option<String>,
+    pub website_url: Option<String>,
+    pub authors: Vec<String>,
+}
+
+impl CfMod {
+    pub(super) fn to_project(&self) -> CfProject {
+        CfProject {
+            id: self.id,
+            name: self.name.clone(),
+            summary: self.summary.clone(),
+            icon_url: self.logo.as_ref().and_then(|l| l.thumbnail_url.clone()),
+            website_url: self.links.website_url.clone(),
+            authors: self.authors.iter().map(|a| a.name.clone()).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct CfFingerprintMatches {
+    #[serde(rename = "exactMatches", default)]
+    pub(super) exact_matches: Vec<CfFingerprintMatch>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct CfFingerprintMatch {
+    /// Project (mod) id.
+    pub(super) id: u32,
+    pub(super) file: CfFingerprintFile,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct CfFingerprintFile {
+    #[serde(rename = "fileFingerprint")]
+    pub(super) file_fingerprint: u32,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub(super) struct CfHash {
     pub(super) value: String,
@@ -103,6 +148,24 @@ pub(super) struct CfFile {
     pub(super) file_length: u64,
     #[serde(rename = "isServerPack", default)]
     pub(super) is_server_pack: Option<bool>,
+    #[serde(rename = "modId", default)]
+    pub(super) mod_id: u32,
+    #[serde(default)]
+    pub(super) dependencies: Vec<CfFileDependency>,
+    /// 1 release, 2 beta, 3 alpha.
+    #[serde(rename = "releaseType", default)]
+    pub(super) release_type: u32,
+    #[serde(rename = "fileFingerprint", default)]
+    pub(super) file_fingerprint: u32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub(super) struct CfFileDependency {
+    #[serde(rename = "modId")]
+    pub(super) mod_id: u32,
+    /// 3 = required dependency.
+    #[serde(rename = "relationType")]
+    pub(super) relation_type: u32,
 }
 
 impl CfFile {
@@ -193,6 +256,10 @@ mod tests {
             hashes: vec![CfHash { value: "ABC".to_string(), algo: 1 }, CfHash { value: "md5".to_string(), algo: 2 }],
             file_length: 10,
             is_server_pack: None,
+            mod_id: 1,
+            dependencies: Vec::new(),
+            release_type: 1,
+            file_fingerprint: 0,
         }
     }
 

@@ -9,16 +9,19 @@ import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { CloseDialog } from "@/components/shell/CloseDialog";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { useState } from "react";
+
 import { useAppEvents } from "@/hooks/useAppEvents";
 import { useLaunchRequests } from "@/hooks/useLaunchRequests";
 import { usePlaytimeReminder } from "@/hooks/usePlaytimeReminder";
+import { ScrollContainerContext } from "@/hooks/useScrollContainer";
 import { pageTransition, reducedMotionFor } from "@/lib/motion";
 import { resolveDark } from "@/lib/theme";
 import { InstanceListScreen } from "@/screens/InstanceList/InstanceListScreen";
 import { ModpackBrowserScreen } from "@/screens/ModpackBrowser/ModpackBrowserScreen";
 import { GlobalSettingsScreen } from "@/screens/GlobalSettings/GlobalSettingsScreen";
 import { InstanceSettingsScreen } from "@/screens/InstanceSettings/InstanceSettingsScreen";
-import { InstanceModsScreen } from "@/screens/InstanceMods/InstanceModsScreen";
+import { InstanceContentScreen } from "@/screens/InstanceContent/InstanceContentScreen";
 import { LaunchProgressScreen } from "@/screens/LaunchProgress/LaunchProgressScreen";
 import { ServerBrowserScreen } from "@/screens/ServerBrowser/ServerBrowserScreen";
 import { SkinsScreen } from "@/screens/Skins/SkinsScreen";
@@ -50,14 +53,17 @@ function AppShell() {
   useAppEvents();
   useLaunchRequests();
   usePlaytimeReminder();
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden text-foreground">
       <AmbientBackground />
       <Sidebar />
-      <main className="relative flex flex-1 flex-col overflow-y-auto p-6">
-        <ActivityBar />
-        <AnimatedOutlet />
+      <main ref={setScrollEl} className="relative flex flex-1 flex-col overflow-y-auto p-6">
+        <ScrollContainerContext.Provider value={scrollEl}>
+          <ActivityBar />
+          <AnimatedOutlet />
+        </ScrollContainerContext.Provider>
       </main>
       <CloseDialog />
       <CommandPalette />
@@ -76,7 +82,8 @@ const router = createHashRouter([
       { path: "skins", element: <SkinsScreen /> },
       { path: "settings", element: <GlobalSettingsScreen /> },
       { path: "instances/:id", element: <InstanceSettingsScreen /> },
-      { path: "instances/:id/mods", element: <InstanceModsScreen /> },
+      { path: "instances/:id/content", element: <InstanceContentScreen /> },
+      { path: "instances/:id/mods", element: <InstanceContentScreen /> },
       { path: "instances/:id/launch", element: <LaunchProgressScreen /> },
     ],
   },

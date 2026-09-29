@@ -6,6 +6,7 @@
 //! projects — for the target folder and the manual-download page).
 
 mod api_types;
+pub mod content;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -22,6 +23,7 @@ use super::{
     ModpackVersionSummary, ProviderError, ResolvedModpackVersion, SearchQuery,
 };
 use crate::download::{DownloadItem, DownloadManager};
+pub use api_types::CfProject;
 use api_types::{parse_loader_id, CfFile, CfManifest, CfMod, ItemResponse, ListResponse};
 
 const BASE: &str = "https://api.curseforge.com/v1";
@@ -104,6 +106,32 @@ impl CurseForgeProvider {
         Ok(out)
     }
 
+    /// Whether a key (the player's or the built-in one) is available.
+    pub fn has_key(&self) -> bool {
+        self.key().is_ok()
+    }
+
+    /// CurseForge projects that exactly match these file fingerprints (see
+    /// [`fingerprint`]), keyed by fingerprint.
+    pub async fn identify(&self, fingerprints: &[u32]) -> Result<HashMap<u32, CfProject>, ProviderError> {
+        let mut file_to_mod: HashMap<u32, u32> = HashMap::new();
+        for chunk in fingerprints.chunks(BATCH) {
+            let response: ItemResponse<api_types::CfFingerprintMatches> =
+                self.post(&format!("/fingerprints/{MINECRAFT_GAME_ID}"), json!({ "fingerprints": chunk })).await?;
+            for m in response.data.exact_matches {
+                file_to_mod.insert(m.file.file_fingerprint, m.id);
+            }
+        }
+        let mut mod_ids: Vec<u32> = file_to_mod.values().copied().collect();
+        mod_ids.sort_unstable();
+        mod_ids.dedup();
+        let mods = self.mods_by_id(&mod_ids).await?;
+        Ok(file_to_mod
+            .into_iter()
+            .filter_map(|(fp, mod_id)| mods.get(&mod_id).map(|m| (fp, m.to_project())))
+            .collect())
+    }
+
     async fn mods_by_id(&self, ids: &[u32]) -> Result<HashMap<u32, CfMod>, ProviderError> {
         let mut out = HashMap::new();
         for chunk in ids.chunks(BATCH) {
@@ -161,6 +189,35 @@ impl CurseForgeProvider {
             pack_name: manifest.name,
         })
     }
+}
+
+/// CurseForge's file fingerprint: 32-bit MurmurHash2 (seed 1) of the file
+/// with every whitespace byte (tab, LF, CR, space) removed.
+pub fn fingerprint(bytes: &[u8]) -> u32 {
+    let normalized: Vec<u8> = bytes.iter().copied().filter(|b| !matches!(b, 9 | 10 | 13 | 32)).collect();
+    murmur2(&normalized, 1)
+}
+
+fn murmur2(data: &[u8], seed: u32) -> u32 {
+    const M: u32 = 0x5bd1_e995;
+    let mut h = seed ^ data.len() as u32;
+    let (chunks, tail) = data.as_chunks::<4>();
+    for chunk in chunks {
+        let mut k = u32::from_le_bytes(*chunk);
+        k = k.wrapping_mul(M);
+        k ^= k >> 24;
+        k = k.wrapping_mul(M);
+        h = h.wrapping_mul(M) ^ k;
+    }
+    if !tail.is_empty() {
+        for (i, byte) in tail.iter().enumerate() {
+            h ^= u32::from(*byte) << (8 * i);
+        }
+        h = h.wrapping_mul(M);
+    }
+    h ^= h >> 13;
+    h = h.wrapping_mul(M);
+    h ^ (h >> 15)
 }
 
 fn build_file_refs(
@@ -325,6 +382,21 @@ mod tests {
             "hashes": [{"value": "AA", "algo": 1}], "fileLength": 42
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn murmur2_matches_the_reference_implementation() {
+        // Values from the `murmurhash2` reference package.
+        assert_eq!(murmur2(b"", 1), 1_540_447_798);
+        assert_eq!(murmur2(b"a", 0x9747_b28c), 2_731_586_172);
+        assert_eq!(murmur2(b"Hello, world!", 0x9747_b28c), 3_199_900_434);
+        assert_eq!(murmur2(b"abcdefg", 1), 184_182_053);
+    }
+
+    #[test]
+    fn fingerprint_ignores_whitespace() {
+        assert_eq!(fingerprint(b"a b
+	c"), fingerprint(b"abc"));
     }
 
     #[test]

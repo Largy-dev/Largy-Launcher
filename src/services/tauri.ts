@@ -23,7 +23,6 @@ import type { LauncherBehavior } from "@/bindings/LauncherBehavior";
 import type { LoaderKind } from "@/bindings/LoaderKind";
 import type { LogLine } from "@/bindings/LogLine";
 import type { MinecraftProfile } from "@/bindings/MinecraftProfile";
-import type { ModEntry } from "@/bindings/ModEntry";
 import type { ModUpdate } from "@/bindings/ModUpdate";
 import type { ModpackDetails } from "@/bindings/ModpackDetails";
 import type { ModpackRef } from "@/bindings/ModpackRef";
@@ -60,7 +59,6 @@ export type {
   LoaderKind,
   LogLine,
   MinecraftProfile,
-  ModEntry,
   ModUpdate,
   ModpackDetails,
   ModpackRef,
@@ -273,23 +271,4 @@ export const launchApi = {
   repair: (instanceId: string) => invoke<void>("repair_instance", { instanceId }),
   isRunning: (instanceId: string) => invoke<boolean>("is_instance_running", { instanceId }),
   stats: (instanceId: string) => invoke<ProcessStats | null>("instance_process_stats", { instanceId }),
-};
-
-export const instanceModsApi = {
-  list: (instanceId: string) => invoke<ModEntry[]>("instance_mods_list", { instanceId }),
-  setEnabled: (instanceId: string, fileName: string, enabled: boolean) =>
-    invoke<void>("instance_mods_set_enabled", { instanceId, fileName, enabled }),
-  delete: (instanceId: string, fileName: string) => invoke<void>("instance_mods_delete", { instanceId, fileName }),
-  add: (instanceId: string, sourcePaths: string[]) => invoke<void>("instance_mods_add", { instanceId, sourcePaths }),
-  checkUpdates: (instanceId: string) => invoke<ModUpdate[]>("instance_mods_check_updates", { instanceId }),
-  /** Resolves to the file names that failed to update. */
-  applyUpdates: (instanceId: string, updates: ModUpdate[]) =>
-    invoke<string[]>("instance_mods_apply_updates", { instanceId, updates }),
-};
-
-export const contentApi = {
-  search: (instanceId: string, kind: ContentKind, query: string, offset = 0) =>
-    invoke<ContentHit[]>("content_search", { instanceId, kind, query, offset }),
-  install: (instanceId: string, projectId: string, kind: ContentKind) =>
-    invoke<string[]>("content_install", { instanceId, projectId, kind }),
 };

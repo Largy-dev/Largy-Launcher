@@ -89,7 +89,13 @@ fn copy_into(
             continue;
         }
         let rel = target.strip_prefix(root).map(Path::to_path_buf).unwrap_or_else(|_| target.clone());
-        if !(target.exists() && skip_existing(&rel)) {
+        let exists = target.exists();
+        if !(exists && skip_existing(&rel)) {
+            // Replace rather than overwrite in place: the old file may be
+            // hard-linked from a restore point (see `instances::snapshots`).
+            if exists {
+                std::fs::remove_file(&target)?;
+            }
             std::fs::copy(entry.path(), &target)?;
         }
         copied.push(rel);

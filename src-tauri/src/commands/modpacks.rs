@@ -247,6 +247,9 @@ pub async fn instances_update_modpack(
 
     let (paths, id, dir) = (state.paths.clone(), instance.id.clone(), instance.directory.clone());
     spawn_blocking(move || backup::backup_saves(&paths, &id, &dir)).await?;
+    let (paths, before) = (state.paths.clone(), instance.clone());
+    let reason = format!("Avant la mise à jour de {}", modpack.pack_name);
+    spawn_blocking(move || crate::instances::snapshots::create(&paths, &before, &reason)).await?;
 
     let (new_installed_files, warnings) = cancellable(
         &guard.cancel,

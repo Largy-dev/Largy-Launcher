@@ -14,7 +14,7 @@ export function PageHeader({ title, description, action, eyebrow }: PageHeaderPr
       <div className="min-w-0">
         {eyebrow && <div className="mb-1 text-xs font-semibold tracking-wider text-primary uppercase">{eyebrow}</div>}
         <h2 className="truncate text-2xl font-bold tracking-tight">{title}</h2>
-        {description && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
+        {description && <div className="mt-1 truncate text-sm text-muted-foreground">{description}</div>}
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </div>

@@ -12,6 +12,8 @@ pub mod providers;
 pub mod servers;
 pub mod settings;
 pub mod skins;
+pub mod snapshots;
+pub mod worlds;
 
 use tauri::State;
 
