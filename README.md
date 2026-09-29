@@ -58,27 +58,33 @@ démarrage et l'installe en un clic.
 | **Tes serveurs en direct** | La liste Multijoueur de chaque instance avec joueurs connectés, ping et MOTD en couleurs, et un bouton pour rejoindre en un clic. |
 | **Raccourci sur le bureau** | Lance une instance en un double-clic, sans passer par le launcher. |
 | **Même sans internet** | Une instance déjà installée se lance hors connexion, avec ton compte Microsoft (en solo). |
+| **Toutes les versions** | Les versions stables, mais aussi les snapshots et les vieilles alpha/bêta pour la nostalgie. |
+| **Les mêmes touches partout** | En option : tes touches, ta sensibilité, ton FOV et tes volumes te suivent d'une instance à l'autre. |
 
 ### Modpacks et mods
 
 | | |
 |---|---|
-| **Modpacks Modrinth, FTB et CurseForge** | Parcours des milliers de packs et installe-les en un clic. Les nouveautés de chaque version s'affichent avant la mise à jour, qui sauvegarde d'abord tes mondes et garde tes options de jeu. |
-| **Mods, resource packs et shaders** | Cherche dans le catalogue Modrinth : seul ce qui est compatible avec ton instance s'affiche, et les dépendances s'installent toutes seules. |
-| **Mises à jour des mods** | Le launcher repère les mods qui ont une version plus récente et les met à jour en un clic. |
-| **Import et export** | Glisse un `.mrpack`, un zip CurseForge ou une instance Prism/MultiMC sur la fenêtre pour l'importer. Exporte n'importe quelle instance en `.mrpack` pour la partager. |
-| **Gestion locale** | Active, désactive ou supprime un mod, glisse des `.jar` sur la fenêtre pour les ajouter. |
+| **Modpacks Modrinth, FTB et CurseForge** | Filtre par version, loader et catégorie, trie par popularité ou nouveauté, installe en un clic. Les nouveautés de chaque version s'affichent avant la mise à jour, qui sauvegarde d'abord tes mondes et garde tes options de jeu. |
+| **Packs entre amis** | Un ami met son pack en ligne (un `.mrpack` sur GitHub, Dropbox…) : colle le lien, et l'instance se synchronise toute seule avant chaque partie dès qu'il change. |
+| **Tes mods, lisibles** | Vrai nom, icône, version, auteurs et lien vers la page Modrinth ou CurseForge de chaque mod, resource pack et shader. Sélection multiple pour tout activer, désactiver ou supprimer d'un coup. |
+| **Problèmes détectés** | Dépendances manquantes et mods déclarés incompatibles entre eux sont signalés avant de lancer ; désactiver un mod dont d'autres ont besoin demande confirmation. |
+| **Mods, resource packs et shaders** | Cherche sur Modrinth et CurseForge : seul ce qui est compatible avec ton instance s'affiche, et les dépendances s'installent toutes seules. |
+| **Mises à jour sans risque** | Les mods ayant une version plus récente se mettent à jour en un clic, et un point de restauration est créé juste avant : un clic pour revenir en arrière. |
+| **Optimiser** | Sodium, Lithium, FerriteCore, ModernFix… les mods de performance adaptés à ton instance, en un clic. |
+| **Import et export** | Récupère tes instances du launcher officiel, de Prism/MultiMC, de CurseForge ou de la Modrinth App. Glisse un `.mrpack`, un zip CurseForge ou un export Prism sur la fenêtre. Exporte n'importe quelle instance en `.mrpack`. |
 
 ### Au quotidien
 
 | | |
 |---|---|
 | **Skins et capes** | Aperçu 3D de ton skin, import d'un PNG, bibliothèque pour changer de skin en un clic, choix de la cape. |
-| **Captures d'écran** | Toutes tes captures (F2) par instance, en grand, à copier ou supprimer. |
+| **Captures d'écran** | Toutes tes captures (F2) par instance, en grand, à copier ou supprimer. Ta dernière capture devient la couverture de l'instance (ou l'image de ton choix). |
+| **Tes mondes** | Nom, mode et version de chaque monde, sauvegarde et restauration monde par monde, import d'une map `.zip`. |
 | **Discord** | Tes amis voient à quoi tu joues et depuis combien de temps. |
 | **Plusieurs comptes** | Connecte plusieurs comptes Microsoft et passe de l'un à l'autre depuis la barre latérale. Un mode hors-ligne existe aussi pour jouer sans compte. |
 | **Toujours là** | Réduis le launcher dans la zone de notification : il continue de compter ton temps de jeu et de surveiller les crashs. |
-| **Comprendre un crash** | Logs colorés et filtrables, diagnostic clair des causes fréquentes (mémoire, mods incompatibles, pilote graphique, Java…) et accès direct au crash report. |
+| **Comprendre un crash** | Logs colorés et filtrables, diagnostic clair des causes fréquentes (mémoire, mods incompatibles, pilote graphique, Java…) et accès direct au crash report. **Partager** envoie le log sur mclo.gs et copie le lien, prêt à coller sur Discord. |
 | **Entretien des instances** | Dupliquer, réparer (vérification de chaque fichier), sauvegarder les mondes, choisir le Java utilisé. |
 | **Tes stats** | Temps de jeu par instance et au total, dernière partie, nombre de mods. |
 | **À ton goût** | Thème sombre, clair ou système, 9 couleurs d'accent ou la tienne, fond flouté de ton modpack, taille de l'interface, animations réglables. |
@@ -124,6 +130,25 @@ version FTB, qui s'installe sans aucun fichier manuel.
 </details>
 
 <details>
+<summary><b>Comment jouer au même pack que mes amis ?</b></summary>
+
+<br>
+
+Celui qui prépare le pack l'exporte : **Réglages de l'instance › Exporter en .mrpack**, puis met le
+fichier en ligne (GitHub, Dropbox…). Les autres vont dans **Modpacks › Rejoindre par lien** et collent
+le lien. Quand le fichier en ligne change, chaque instance se met à jour toute seule avant de jouer.
+</details>
+
+<details>
+<summary><b>Une mise à jour de mods a tout cassé.</b></summary>
+
+<br>
+
+**Réglages de l'instance › Général › Points de restauration** : un point est créé avant chaque mise à
+jour de mods ou du modpack. **Restaurer** remet les mods, configs et versions d'avant.
+</details>
+
+<details>
 <summary><b>Combien de RAM mettre ?</b></summary>
 
 <br>
@@ -137,9 +162,10 @@ Regarde la pastille de couleur dans **Réglages de l'instance › Mémoire** : v
 
 <br>
 
-Ouvre **Réglages de l'instance › Général › Réparer** : chaque fichier du jeu et du mod loader est
-vérifié et retéléchargé si besoin. Si le problème continue, le diagnostic de crash et le journal du
-launcher (**Paramètres › Avancé › Journal du launcher**) aident à trouver la cause.
+Regarde d'abord l'onglet **Contenu › Mods** : un bandeau signale les dépendances manquantes et les
+mods incompatibles. Ensuite, **Réglages de l'instance › Général › Réparer** vérifie chaque fichier du
+jeu et du mod loader. Si le problème continue, **Partager** sur l'écran de crash donne un lien vers le
+log à montrer, et **Paramètres › Avancé › Signaler un problème** prépare un rapport complet.
 </details>
 
 <details>
@@ -169,11 +195,14 @@ Build : `npm run tauri build` → `src-tauri/target/release/bundle/nsis/*-setup.
 ### Tests
 
 ```bash
-# Backend : 150 tests unitaires + lint
+# Backend : 330 tests unitaires + lint (régénère aussi les types TypeScript de src/bindings)
 cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
 
-# Frontend : types, lint, format, 64 tests Vitest
+# Frontend : types, lint, format, 90+ tests Vitest
 npx tsc --noEmit && npm run lint && npm run format:check && npm test
+
+# Interface réelle pilotée par Playwright (ferme d'abord le launcher installé)
+npx tauri build --debug --no-bundle --config tests/e2e/tauri.e2e.json && npm run test:e2e
 
 # Bout en bout contre les vrais services (~300 Mo, hors CI)
 cd src-tauri && cargo test --test smoke -- --ignored --nocapture --test-threads=1
@@ -195,6 +224,7 @@ compris), Forge 1.12.2, NeoForge 1.21.1 / 1.20.1, et résout des modpacks Modrin
 | **TanStack Query / Zustand** | Cache des données du backend / état global et préférences. |
 | **reqwest / tokio** | HTTP asynchrone (Mojang, Microsoft, Modrinth, FTB, CurseForge). |
 | **keyring** | Tokens Microsoft et Minecraft dans le Gestionnaire d'identification Windows. |
+| **ts-rs** | Types TypeScript générés depuis Rust (`src/bindings`) : le front ne peut pas diverger du backend. |
 
 ### Comment ça marche
 
@@ -212,7 +242,11 @@ compris), Forge 1.12.2, NeoForge 1.21.1 / 1.20.1, et résout des modpacks Modrin
 - **Modpacks** (`providers/`) — trait `ModpackProvider` pour Modrinth (`.mrpack`), FTB et
   CurseForge (résolution groupée). Archives extraites sans zip-slip, chemins toujours validés.
 - **Lancement** (`launch/`) — l'instance est verrouillée dès la préparation (annulable), logs
-  envoyés par lots, protection Log4Shell, analyse des crashs à la sortie.
+  envoyés par lots, protection Log4Shell, analyse des crashs à la sortie, options partagées.
+- **Contenu installé** (`instances/installed/`) — métadonnées lues dans chaque jar/zip et mises en
+  cache, identification Modrinth (SHA-1) / CurseForge (empreinte) en arrière-plan, dépendances et
+  incompatibilités par loader.
+- **Points de restauration** (`instances/snapshots.rs`) — jars liés en dur, configs copiées.
 
 ### Structure
 
@@ -220,17 +254,21 @@ compris), Forge 1.12.2, NeoForge 1.21.1 / 1.20.1, et résout des modpacks Modrin
 src-tauri/src/
   auth/          Microsoft, Xbox, Minecraft Services, comptes, coffre de tokens
   download/      moteur de téléchargement
-  instances/     instances, mods, contenu Modrinth, import, export, sauvegardes
+  instances/     instances, contenu installé, Modrinth/CurseForge, mondes, restauration,
+                 import (fichiers et autres launchers), export, sauvegardes
   java/          runtimes Mojang et détection des Java installés
-  launch/        préparation, lancement, logs, détection de crash
+  launch/        préparation, lancement, logs, crashs, partage mclo.gs, options partagées
   minecraft/     manifestes, bibliothèques, assets, arguments
   modloaders/    Fabric/Quilt, Forge, NeoForge
-  providers/     Modrinth, FTB, CurseForge, archives
+  providers/     Modrinth, FTB, CurseForge, packs par lien, archives
   util/          écriture atomique, cache HTTP, versions
 src/
-  screens/       Instances, Modpacks, Paramètres, Réglages d'instance, Mods, Lancement
+  screens/       Instances, Modpacks, Serveurs, Skins, Paramètres, Réglages d'instance,
+                 Contenu (mods, packs, shaders, mondes), Lancement
   components/    shell, instance, launch, console, settings, ui
+  bindings/      types générés depuis Rust (ne pas éditer)
   hooks/ lib/ store/ services/
+tests/e2e/       l'app réelle pilotée par Playwright
 ```
 
 > [!WARNING]
@@ -253,13 +291,22 @@ version de l'app, build, release GitHub avec l'installeur, `latest.json` signé 
 une copie `LargyLauncher-Setup.exe` au nom fixe pour le bouton de téléchargement. Chaque push et pull
 request passe par `.github/workflows/ci.yml` (tests, clippy, tsc, lint, format).
 
+**Signature du code** : avec les secrets `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
+et les variables `TRUSTED_SIGNING_ENDPOINT`, `TRUSTED_SIGNING_ACCOUNT`, `TRUSTED_SIGNING_PROFILE`
+d'un compte [Azure Trusted Signing](https://learn.microsoft.com/azure/trusted-signing/), la release
+signe l'exécutable et l'installeur (plus d'avertissement SmartScreen). Sans eux, elle reste non signée.
+
 **Auto-update** : `tauri-plugin-updater` lit `releases/latest/download/latest.json`. Les artefacts
 sont signés avec une clé privée (secret GitHub `TAURI_SIGNING_PRIVATE_KEY`, jamais dans le dépôt) ;
 la clé publique est dans `src-tauri/tauri.conf.json`.
 
 ### Utiliser ta propre application Azure
 
-L'application Azure du launcher est intégrée et approuvée pour l'API Minecraft. Pour un fork,
+L'application Azure du launcher est intégrée et approuvée pour l'API Minecraft. Pour la connexion
+dans une fenêtre du launcher (sans code à recopier), ajoute à l'application la plateforme
+**Mobile and desktop applications** avec l'URI de redirection
+`https://login.microsoftonline.com/common/oauth2/nativeclient` : le launcher le détecte tout seul et
+garde sinon la connexion par code. Pour un fork,
 enregistre la tienne sur [Entra ID](https://entra.microsoft.com) (App registrations → New
 registration, « Allow public client flows » activé), fais-la valider pour l'API Minecraft
 ([aka.ms/mce-reviewappid](https://aka.ms/mce-reviewappid)), puis mets son identifiant dans
