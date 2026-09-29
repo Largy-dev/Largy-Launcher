@@ -33,8 +33,40 @@ export function problemFiles(report: DependencyReport): Set<string> {
  * Cross-checks the enabled mods' declared dependencies. Disabled mods
  * neither provide nor require anything — the game doesn't load them.
  */
-export function analyseDependencies(items: InstalledItem[]): DependencyReport {
+/**
+ * Mods that rewrite another mod's metadata while the game loads, so what
+ * its jar declares no longer holds. Monocle (shipped in FTB packs) lets Iris
+ * run on Embeddium: Iris's Sodium requirement and Embeddium incompatibility
+ * are lifted.
+ */
+const METADATA_PATCHES: { patcher: string; mod: string; depends: string[]; breaks: string[] }[] = [
+  { patcher: "monocle", mod: "iris", depends: ["sodium"], breaks: ["embeddium"] },
+];
+
+function isPresent(items: InstalledItem[], id: string): boolean {
+  return items.some(
+    (i) => i.provides.includes(id) || i.mod_id === id || i.file_name.toLowerCase().startsWith(`${id}-`),
+  );
+}
+
+/** The enabled mods, with the metadata patches of the installed patchers applied. */
+function effectiveMods(items: InstalledItem[]): InstalledItem[] {
   const enabled = items.filter((i) => i.enabled);
+  const patches = METADATA_PATCHES.filter((p) => isPresent(enabled, p.patcher));
+  if (patches.length === 0) return enabled;
+  return enabled.map((item) => {
+    const applying = patches.filter((p) => item.mod_id === p.mod || item.provides.includes(p.mod));
+    if (applying.length === 0) return item;
+    return {
+      ...item,
+      depends: item.depends.filter((d) => !applying.some((p) => p.depends.includes(d))),
+      breaks: item.breaks.filter((b) => !applying.some((p) => p.breaks.includes(b.id))),
+    };
+  });
+}
+
+export function analyseDependencies(items: InstalledItem[]): DependencyReport {
+  const enabled = effectiveMods(items);
   const providers = new Map<string, InstalledItem[]>();
   for (const item of enabled) {
     for (const id of item.provides) providers.set(id, [...(providers.get(id) ?? []), item]);

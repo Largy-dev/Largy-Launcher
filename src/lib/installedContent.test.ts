@@ -85,6 +85,26 @@ describe("analyseDependencies", () => {
     expect(report.conflicts.has("off.jar")).toBe(false);
   });
 
+  it("knows Monocle lets Iris run on Embeddium (FTB packs)", () => {
+    const iris = item("iris.jar", {
+      name: "Iris",
+      mod_id: "iris",
+      provides: ["iris"],
+      depends: ["sodium"],
+      breaks: [{ id: "embeddium", versions: null, maven: false }],
+    });
+    const embeddium = item("embeddium.jar", { name: "Embeddium", mod_id: "embeddium", provides: ["embeddium"] });
+    const monocle = item("monocle-0.2.3.ms.jar", { provides: ["monocle"] });
+
+    const without = analyseDependencies([iris, embeddium]);
+    expect(without.missing.get("iris.jar")).toEqual(["sodium"]);
+    expect(without.conflicts.get("iris.jar")).toEqual(["Embeddium"]);
+
+    const withMonocle = analyseDependencies([iris, embeddium, monocle]);
+    expect(withMonocle.missing.size).toBe(0);
+    expect(withMonocle.conflicts.size).toBe(0);
+  });
+
   it("ignores disabled mods on both sides", () => {
     const report = analyseDependencies([
       item("create.jar", { provides: ["create"], depends: ["flywheel"] }),
