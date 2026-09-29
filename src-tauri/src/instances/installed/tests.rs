@@ -48,7 +48,12 @@ fn lists_mods_with_their_metadata_and_icon() {
     let s = &items[1];
     assert_eq!(s.name.as_deref(), Some("Sodium"));
     assert_eq!(s.depends, vec!["indium"]);
-    assert_eq!(s.sha1.as_deref(), Some(hex::encode(Sha1::digest(&sodium)).as_str()));
+    // Hashes come in a second, background pass.
+    assert_eq!(s.sha1, None);
+    ensure_hashes(&f.paths, &f.instance, ContentKind::Mod).unwrap();
+    let hashed = list(&f.paths, &f.instance, LoaderKind::Fabric, ContentKind::Mod).unwrap();
+    assert_eq!(hashed[1].sha1.as_deref(), Some(hex::encode(Sha1::digest(&sodium)).as_str()));
+    assert_eq!(hashed[1].fingerprint, Some(crate::providers::curseforge::fingerprint(&sodium)));
     let icon = s.icon_path.as_ref().expect("icon extracted");
     assert_eq!(std::fs::read(icon).unwrap(), PNG);
 }
@@ -168,3 +173,22 @@ fn modrinth_urls_use_the_project_type() {
     assert_eq!(modrinth_url("shader", "bsl"), "https://modrinth.com/shader/bsl");
     assert_eq!(modrinth_url("", "x"), "https://modrinth.com/mod/x");
 }
+
+/// `LARGY_BENCH_MODS=<instance dir> cargo test --release --lib bench_listing -- --ignored --nocapture`
+#[test]
+#[ignore = "benchmark on a real instance"]
+fn bench_listing() {
+    let Some(dir) = std::env::var_os("LARGY_BENCH_MODS") else { return };
+    let cache = tempfile::tempdir().unwrap();
+    let paths = AppPaths::from_root(cache.path().to_path_buf());
+    let started = std::time::Instant::now();
+    let items = list(&paths, Path::new(&dir), LoaderKind::NeoForge, ContentKind::Mod).unwrap();
+    println!("first scan: {} files in {:?}", items.len(), started.elapsed());
+    let started = std::time::Instant::now();
+    list(&paths, Path::new(&dir), LoaderKind::NeoForge, ContentKind::Mod).unwrap();
+    println!("cached scan: {:?}", started.elapsed());
+    let started = std::time::Instant::now();
+    ensure_hashes(&paths, Path::new(&dir), ContentKind::Mod).unwrap();
+    println!("background hashing: {:?}", started.elapsed());
+}
+

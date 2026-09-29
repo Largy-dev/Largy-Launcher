@@ -153,11 +153,12 @@ pub async fn apply(
     downloader: &DownloadManager,
     instance: &Instance,
     slugs: &[String],
+    installed_hashes: &[String],
 ) -> (Vec<String>, Vec<String>) {
     let mut written = Vec::new();
     let mut failed = Vec::new();
     for slug in slugs {
-        match content::install(api, downloader, instance, slug, ContentKind::Mod).await {
+        match content::install(api, downloader, instance, slug, ContentKind::Mod, installed_hashes).await {
             Ok(files) => written.extend(files),
             Err(e) => failed.push(format!("{slug} : {e}")),
         }

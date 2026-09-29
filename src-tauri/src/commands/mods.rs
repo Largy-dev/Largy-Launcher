@@ -148,6 +148,14 @@ pub async fn content_search(
     }
 }
 
+async fn installed_hashes(
+    state: &AppState,
+    instance: &Instance,
+) -> AppResult<std::collections::HashMap<String, String>> {
+    let (paths, dir, loader) = (state.paths.clone(), instance.directory.clone(), instance.loader);
+    spawn_blocking(move || installed::hashes(&paths, &dir, loader, ContentKind::Mod)).await
+}
+
 async fn installed_items(state: &AppState, instance: &Instance, kind: ContentKind) -> AppResult<Vec<InstalledItem>> {
     let (paths, dir, loader) = (state.paths.clone(), instance.directory.clone(), instance.loader);
     spawn_blocking(move || installed::list(&paths, &dir, loader, kind)).await
@@ -166,8 +174,9 @@ pub async fn content_install(
     let instance = instances::get(&state.paths, &instance_id)?;
     match provider {
         RemoteProvider::Modrinth => {
-            content::install(&ModrinthApi::new(state.client.clone()), &state.downloader, &instance, &project_id, kind)
-                .await
+            let hashes: Vec<String> = installed_hashes(&state, &instance).await?.into_keys().collect();
+            let api = ModrinthApi::new(state.client.clone());
+            content::install(&api, &state.downloader, &instance, &project_id, kind, &hashes).await
         }
         RemoteProvider::Curseforge => {
             let present = installed_items(&state, &instance, kind).await?;
@@ -182,7 +191,8 @@ pub async fn content_install(
 #[tauri::command]
 pub async fn instance_mods_check_updates(state: State<'_, AppState>, instance_id: String) -> AppResult<Vec<ModUpdate>> {
     let instance = instances::get(&state.paths, &instance_id)?;
-    let mut updates = content::check_updates(&ModrinthApi::new(state.client.clone()), &instance).await?;
+    let by_hash = installed_hashes(&state, &instance).await?;
+    let mut updates = content::check_updates(&ModrinthApi::new(state.client.clone()), &instance, by_hash).await?;
     let cf = curseforge(&state);
     if cf.has_key() {
         let items = installed_items(&state, &instance, ContentKind::Mod).await?;
@@ -253,11 +263,13 @@ pub async fn instance_optimize_apply(
     let instance = instances::get(&state.paths, &instance_id)?;
     let (paths, before) = (state.paths.clone(), instance.clone());
     spawn_blocking(move || crate::instances::snapshots::create(&paths, &before, "Avant l'optimisation")).await?;
+    let hashes: Vec<String> = installed_hashes(&state, &instance).await?.into_keys().collect();
     let (installed, failed) = crate::instances::optimize::apply(
         &ModrinthApi::new(state.client.clone()),
         &state.downloader,
         &instance,
         &slugs,
+        &hashes,
     )
     .await;
     Ok(OptimizeResult { installed, failed })

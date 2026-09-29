@@ -57,7 +57,7 @@ export function InstalledList({ instance, kind, onBrowse }: InstalledListProps) 
   const items = useMemo(() => list.data ?? [], [list.data]);
 
   // Look up unidentified files on Modrinth / CurseForge in the background.
-  const needsLookup = items.some((i) => !i.is_dir && !i.remote && i.sha1);
+  const needsLookup = items.some((i) => !i.is_dir && !i.remote);
   const identify = useQuery({
     queryKey: ["installed-identify", instance.id, kind],
     queryFn: () => installedApi.identify(instance.id, kind),

@@ -3,11 +3,10 @@
 //! checking installed mods for updates by file hash.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::download::{sha1_of_file, DownloadItem, DownloadManager};
+use crate::download::{DownloadItem, DownloadManager};
 use crate::error::{AppError, AppResult};
 use crate::instances::installed::cache::RemoteProvider;
 use crate::providers::modrinth::api::{SearchHit, Version};
@@ -134,24 +133,6 @@ fn enabled_name(name: &str) -> &str {
     name.strip_suffix(DISABLED_SUFFIX).unwrap_or(name)
 }
 
-async fn hash_folder(dir: &Path) -> AppResult<HashMap<String, String>> {
-    let mut out = HashMap::new();
-    let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
-        return Ok(out);
-    };
-    while let Some(entry) = entries.next_entry().await? {
-        if !entry.file_type().await?.is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.ends_with(".part") {
-            continue;
-        }
-        out.insert(sha1_of_file(&entry.path()).await?, name);
-    }
-    Ok(out)
-}
-
 /// Downloads the primary file of exactly `version`, without its dependencies.
 /// Returns the file name written.
 pub async fn install_exact(
@@ -180,19 +161,21 @@ pub async fn install_exact(
 
 /// Installs a project and, for mods, every required dependency not already
 /// present. Returns the file names written.
+/// `installed_hashes`: SHA-1 of the mods already there (see
+/// `installed::hashes`), so dependencies already present aren't added twice.
 pub async fn install(
     api: &ModrinthApi,
     downloader: &DownloadManager,
     instance: &Instance,
     project_id: &str,
     kind: ContentKind,
+    installed_hashes: &[String],
 ) -> AppResult<Vec<String>> {
     let root = compatible_version(api, instance, kind, project_id).await?;
 
     let mut installed_projects: HashSet<String> = HashSet::new();
     if kind == ContentKind::Mod && root.dependencies.iter().any(|d| d.dependency_type == "required") {
-        let hashes: Vec<String> = hash_folder(&instance.directory.join("mods")).await?.into_keys().collect();
-        if let Ok(known) = api.versions_by_hash(&hashes).await {
+        if let Ok(known) = api.versions_by_hash(installed_hashes).await {
             installed_projects.extend(known.into_values().map(|v| v.project_id));
         }
     }
@@ -240,9 +223,13 @@ pub struct ModUpdate {
     pub size: u64,
 }
 
-/// Every mod in `mods/` Modrinth knows a newer compatible version of.
-pub async fn check_updates(api: &ModrinthApi, instance: &Instance) -> AppResult<Vec<ModUpdate>> {
-    let by_hash = hash_folder(&instance.directory.join("mods")).await?;
+/// Every mod Modrinth knows a newer compatible version of. `by_hash`: SHA-1
+/// → file name on disk of the instance's mods (see `installed::hashes`).
+pub async fn check_updates(
+    api: &ModrinthApi,
+    instance: &Instance,
+    by_hash: HashMap<String, String>,
+) -> AppResult<Vec<ModUpdate>> {
     let by_hash: HashMap<String, String> =
         by_hash.into_iter().filter(|(_, name)| enabled_name(name).ends_with(".jar")).collect();
     if by_hash.is_empty() {
@@ -355,13 +342,4 @@ mod tests {
         assert_eq!(enabled_name("a.jar"), "a.jar");
     }
 
-    #[tokio::test]
-    async fn hash_folder_indexes_files_by_sha1() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("a.jar"), b"abc").unwrap();
-        std::fs::write(dir.path().join("b.jar.part"), b"partial").unwrap();
-        let hashes = hash_folder(dir.path()).await.unwrap();
-        assert_eq!(hashes.len(), 1);
-        assert_eq!(hashes["a9993e364706816aba3e25717850c26c9cd0d89d"], "a.jar");
-    }
 }

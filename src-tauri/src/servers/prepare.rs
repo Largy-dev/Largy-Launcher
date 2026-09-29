@@ -111,13 +111,13 @@ pub async fn prepare(state: &AppState, spec: PrepareSpec) -> AppResult<PrepareRe
     let api = ModrinthApi::new(state.client.clone());
     let mut warnings = Vec::new();
     for slug in &spec.mods {
-        if let Err(e) = content::install(&api, &state.downloader, &instance, slug, ContentKind::Mod).await {
+        if let Err(e) = content::install(&api, &state.downloader, &instance, slug, ContentKind::Mod, &[]).await {
             warnings.push(format!("{slug} : {e}"));
         }
     }
     let mut first_shader = None;
     for slug in &spec.shaders {
-        match content::install(&api, &state.downloader, &instance, slug, ContentKind::Shader).await {
+        match content::install(&api, &state.downloader, &instance, slug, ContentKind::Shader, &[]).await {
             Ok(files) => {
                 if first_shader.is_none() {
                     first_shader = files.into_iter().next();

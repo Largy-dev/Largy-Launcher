@@ -126,7 +126,9 @@ fn is_png(bytes: &[u8]) -> bool {
     bytes.starts_with(b"\x89PNG\r\n\x1a\n")
 }
 
-/// Reads a candidate once: hashes, metadata, and its icon saved to `icons`.
+/// Reads what a candidate says about itself and saves its icon to `icons`.
+/// Only the archive's directory and a few small entries are read — the
+/// whole file is hashed later, in the background ([`ensure_hashes`]).
 fn analyse(candidate: &Candidate, icons: &Path) -> CacheEntry {
     let mut entry = CacheEntry::default();
     let icon_bytes;
@@ -136,17 +138,17 @@ fn analyse(candidate: &Candidate, icons: &Path) -> CacheEntry {
             crate::util::fs::safe_join(&candidate.path, rel).and_then(|p| std::fs::read(p).ok())
         });
     } else {
-        let Ok(bytes) = std::fs::read(&candidate.path) else { return entry };
-        entry.sha1 = Some(hex::encode(Sha1::digest(&bytes)));
-        entry.fingerprint = Some(curseforge::fingerprint(&bytes));
-        match zip::ZipArchive::new(std::io::Cursor::new(&bytes)) {
-            Ok(mut zip) => {
+        let archive = std::fs::File::open(&candidate.path)
+            .ok()
+            .and_then(|f| zip::ZipArchive::new(std::io::BufReader::new(f)).ok());
+        match archive {
+            Some(mut zip) => {
                 entry.meta = metadata::read_archive_from(&mut zip);
                 icon_bytes = entry.meta.icon_entry.clone().and_then(|name| {
                     metadata::read_entry(&mut zip, name.trim_start_matches('/'))
                 });
             }
-            Err(_) => icon_bytes = None,
+            None => icon_bytes = None,
         }
     }
     if let Some(bytes) = icon_bytes.filter(|b| is_png(b) && b.len() <= MAX_ICON_BYTES) {
@@ -159,22 +161,51 @@ fn analyse(candidate: &Candidate, icons: &Path) -> CacheEntry {
     entry
 }
 
-/// Analyses `todo` on every core; returns entries by candidate index.
-fn analyse_all(todo: &[&Candidate], icons: &Path) -> Vec<CacheEntry> {
+/// `f` over `items` on every core (at most 8), results in order.
+fn parallel_map<T: Sync, R: Send + Default + Clone>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
     let next = AtomicUsize::new(0);
-    let results = parking_lot::Mutex::new(vec![CacheEntry::default(); todo.len()]);
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8).min(todo.len().max(1));
+    let results = parking_lot::Mutex::new(vec![R::default(); items.len()]);
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8).min(items.len().max(1));
     std::thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::Relaxed);
-                let Some(candidate) = todo.get(i) else { break };
-                let entry = analyse(candidate, icons);
-                results.lock()[i] = entry;
+                let Some(item) = items.get(i) else { break };
+                let result = f(item);
+                results.lock()[i] = result;
             });
         }
     });
     results.into_inner()
+}
+
+/// SHA-1 (Modrinth) and fingerprint (CurseForge) of a file, in one read.
+fn hash_file(path: &Path) -> Option<(String, u32)> {
+    let bytes = std::fs::read(path).ok()?;
+    Some((hex::encode(Sha1::digest(&bytes)), curseforge::fingerprint(&bytes)))
+}
+
+/// Hashes the files of `kind` the cache has no hashes for yet — the slow
+/// part (every byte of every jar), kept off the first display.
+pub fn ensure_hashes(paths: &AppPaths, instance_dir: &Path, kind: ContentKind) -> AppResult<()> {
+    let found = candidates(&instance_dir.join(kind.folder()), kind)?;
+    let keys: Vec<String> = found.iter().map(Candidate::key).collect();
+    let known = cache::get_many(paths, &keys);
+    let todo: Vec<&Candidate> =
+        found.iter().filter(|c| !c.is_dir && known.get(&c.key()).is_some_and(|e| e.sha1.is_none())).collect();
+    if todo.is_empty() {
+        return Ok(());
+    }
+    let hashes = parallel_map(&todo, |c| hash_file(&c.path));
+    cache::update(paths, |entries| {
+        for (candidate, hash) in todo.iter().zip(hashes) {
+            if let (Some(entry), Some((sha1, fingerprint))) = (entries.get_mut(&candidate.key()), hash) {
+                entry.sha1 = Some(sha1);
+                entry.fingerprint = Some(fingerprint);
+            }
+        }
+    });
+    Ok(())
 }
 
 /// How much content an instance holds — counts only, nothing read or hashed.
@@ -217,6 +248,24 @@ pub fn summary(instance_dir: &Path) -> ContentSummary {
     }
 }
 
+/// SHA-1 → file name on disk (`.disabled` included) of every file of
+/// `kind`, from the cache — hashing only what it doesn't know yet.
+pub fn hashes(
+    paths: &AppPaths,
+    instance_dir: &Path,
+    loader: LoaderKind,
+    kind: ContentKind,
+) -> AppResult<HashMap<String, String>> {
+    ensure_hashes(paths, instance_dir, kind)?;
+    Ok(list(paths, instance_dir, loader, kind)?
+        .into_iter()
+        .filter_map(|i| {
+            let on_disk = if i.enabled { i.file_name } else { format!("{}{DISABLED_SUFFIX}", i.file_name) };
+            i.sha1.map(|sha1| (sha1, on_disk))
+        })
+        .collect())
+}
+
 /// Everything installed in `kind`'s folder, with metadata (dependencies as
 /// `loader` sees them).
 pub fn list(paths: &AppPaths, instance_dir: &Path, loader: LoaderKind, kind: ContentKind) -> AppResult<Vec<InstalledItem>> {
@@ -227,19 +276,24 @@ pub fn list(paths: &AppPaths, instance_dir: &Path, loader: LoaderKind, kind: Con
     let todo: Vec<&Candidate> = found.iter().filter(|c| !known.contains_key(&c.key())).collect();
     let icons = cache::icons_dir(paths);
     let fresh: Vec<(String, CacheEntry)> =
-        todo.iter().map(|c| c.key()).zip(analyse_all(&todo, &icons)).collect();
+        todo.iter().map(|c| c.key()).zip(parallel_map(&todo, |c| analyse(c, &icons))).collect();
 
+    // The cache is only written when something changed, or to refresh
+    // `last_seen` (what keeps entries from being forgotten) once a day.
     let now = crate::auth::now_unix();
-    cache::update(paths, |entries| {
-        for (key, entry) in &fresh {
-            entries.insert(key.clone(), CacheEntry { last_seen: now, ..entry.clone() });
-        }
-        for key in &keys {
-            if let Some(e) = entries.get_mut(key) {
-                e.last_seen = now;
+    let stale_seen = known.values().any(|e| now - e.last_seen > cache::SEEN_REFRESH_SECS);
+    if !fresh.is_empty() || stale_seen {
+        cache::update(paths, |entries| {
+            for (key, entry) in &fresh {
+                entries.insert(key.clone(), CacheEntry { last_seen: now, ..entry.clone() });
             }
-        }
-    });
+            for key in &keys {
+                if let Some(e) = entries.get_mut(key) {
+                    e.last_seen = now;
+                }
+            }
+        });
+    }
     known.extend(fresh);
 
     Ok(found
@@ -300,6 +354,12 @@ pub async fn identify(
             .await
             .map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))??
     };
+    {
+        let (paths, dir) = (paths.clone(), instance_dir.to_path_buf());
+        tokio::task::spawn_blocking(move || ensure_hashes(&paths, &dir, kind))
+            .await
+            .map_err(|e| AppError::Other(format!("tâche de fond interrompue: {e}")))??;
+    }
     let now = crate::auth::now_unix();
     let keys: Vec<String> = items
         .iter()

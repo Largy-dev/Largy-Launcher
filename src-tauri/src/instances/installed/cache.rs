@@ -17,9 +17,12 @@ use crate::paths::AppPaths;
 use crate::util::fs::write_atomic;
 
 /// Bumped when [`LocalMeta`] parsing changes, so every file is read again.
-const SCHEMA: u32 = 3;
+const SCHEMA: u32 = 4;
 /// Entries of files not seen for this long are forgotten.
 const FORGET_AFTER_SECS: i64 = 90 * 24 * 3600;
+/// `last_seen` is refreshed at most this often (a listing doesn't rewrite
+/// the cache just to say "still here").
+pub const SEEN_REFRESH_SECS: i64 = 24 * 3600;
 
 /// Serialises load-merge-save cycles between concurrent listings.
 static LOCK: LazyLock<Mutex<()>> = LazyLock::new(Default::default);
