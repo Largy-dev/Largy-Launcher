@@ -1,24 +1,20 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { NavLink, useNavigate } from "react-router";
+import { useMemo, useState } from "react";
+import { useMatch, useNavigate } from "react-router";
 import { motion } from "motion/react";
-import {
-  Blocks,
-  ChevronUp,
-  History,
-  LayoutGrid,
-  LogIn,
-  LogOut,
-  Palette,
-  Server,
-  Settings,
-  Shirt,
-  UserPlus,
-  UserRound,
-} from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ArrowRightLeft, Bug, CodeXml, FileDown, Link2, Loader2, Plus, Search, Sparkles } from "lucide-react";
 
 import { InstanceIcon } from "@/components/instance/InstanceIcon";
-import { Button } from "@/components/ui/button";
+import { LOADER_META } from "@/components/instance/LoaderBadge";
+import { useInstanceMenu } from "@/components/instance/InstanceMenu";
+import { ReportIssueDialog } from "@/components/ReportIssueDialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,238 +22,237 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAccounts } from "@/hooks/useAccounts";
-import { useSettings } from "@/hooks/useSettings";
 import { useAppVersion } from "@/hooks/useAppVersion";
+import { useImportInstance } from "@/hooks/useImportInstance";
+import { byRecent, useInstances, useSelectedInstance } from "@/hooks/useInstances";
 import { useNow } from "@/hooks/useInstanceInfo";
 import { formatClock } from "@/lib/format";
+import { REPO_URL } from "@/lib/issueReport";
 import { spring } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { LoginDialog } from "@/screens/Login/LoginScreen";
-import { instancesApi, type Instance } from "@/services/tauri";
+import { JoinPackDialog } from "@/screens/ModpackBrowser/JoinPackDialog";
+import { CreateInstanceDialog } from "@/screens/InstanceList/CreateInstanceDialog";
+import { ExternalImportDialog } from "@/screens/InstanceList/ExternalImportDialog";
+import type { Instance } from "@/services/tauri";
 import { runtimeOf, useAppStore } from "@/store/appStore";
 
-import { NotificationCenter } from "./NotificationCenter";
+import { UpdateCard } from "./UpdateCard";
 
-const NAV_ITEMS = [
-  { to: "/", label: "Instances", icon: LayoutGrid },
-  { to: "/modpacks", label: "Modpacks", icon: Blocks },
-  { to: "/servers", label: "Serveurs", icon: Server },
-  { to: "/skins", label: "Skins", icon: Shirt },
-  { to: "/settings", label: "Paramètres", icon: Settings },
-];
+/** Shows the search box once the list gets long enough to need it. */
+const SEARCH_THRESHOLD = 7;
 
-function SectionTitle({ icon: Icon, children }: { icon: typeof History; children: string }) {
-  return (
-    <p className="flex items-center gap-1.5 px-2.5 pt-4 pb-1 text-[0.68rem] font-semibold tracking-wider text-sidebar-foreground/40 uppercase">
-      <Icon className="size-3" aria-hidden="true" />
-      {children}
-    </p>
-  );
-}
-
-function InstanceShortcut({ instance }: { instance: Instance }) {
+function InstanceItem({ instance, selected }: { instance: Instance; selected: boolean }) {
   const navigate = useNavigate();
   const runtime = useAppStore((s) => runtimeOf(s.runtime, instance.id));
-  const setActiveInstanceId = useAppStore((s) => s.setActiveInstanceId);
+  const installing = useAppStore((s) => s.downloadProgress?.task_id === instance.id);
   const now = useNow(1000, runtime.running && !!runtime.startedAt);
+  const menu = useInstanceMenu(instance);
+  const preparing = runtime.running && runtime.phase !== "running";
+
+  const subtitle = runtime.running
+    ? preparing
+      ? "Lancement…"
+      : runtime.startedAt
+        ? `En jeu · ${formatClock((now - runtime.startedAt) / 1000)}`
+        : "En jeu"
+    : installing
+      ? "Installation…"
+      : `${LOADER_META[instance.loader].label} · ${instance.minecraft_version}`;
 
   return (
-    <button
-      onClick={() => {
-        setActiveInstanceId(instance.id);
-        navigate(runtime.running ? `/instances/${instance.id}/launch` : `/instances/${instance.id}`);
-      }}
-      className="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    >
-      <InstanceIcon instance={instance} className="size-6 rounded-md transition-transform group-hover:scale-110" />
-      <span className="min-w-0 flex-1 truncate">{instance.name}</span>
-      {runtime.running && (
-        <span className="flex items-center gap-1.5 text-[0.68rem] text-primary tabular-nums">
-          {runtime.startedAt && formatClock((now - runtime.startedAt) / 1000)}
-          <span className="size-2 animate-pulse-glow rounded-full bg-primary" aria-label="En cours" />
-        </span>
-      )}
-    </button>
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            onClick={() => navigate(`/instances/${instance.id}`)}
+            aria-current={selected ? "page" : undefined}
+            className={cn(
+              "group relative flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors",
+              selected ? "text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent",
+            )}
+          >
+            {selected && (
+              <motion.span
+                layoutId="sidebar-selected"
+                transition={spring}
+                className="absolute inset-0 rounded-xl bg-sidebar-accent ring-1 ring-sidebar-border"
+              />
+            )}
+            <span className="relative">
+              <InstanceIcon instance={instance} className="size-9 rounded-lg" />
+              {runtime.running && (
+                <span
+                  className="absolute -right-0.5 -bottom-0.5 size-3 animate-pulse-glow rounded-full border-2 border-background bg-success"
+                  aria-label="En cours"
+                />
+              )}
+            </span>
+            <span className="relative min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{instance.name}</span>
+              <span
+                className={cn(
+                  "block truncate text-[0.7rem] tabular-nums",
+                  runtime.running ? "text-success" : "text-sidebar-foreground/45",
+                )}
+              >
+                {subtitle}
+              </span>
+            </span>
+            {instance.pinned && (
+              <span className="relative size-1.5 shrink-0 rounded-full bg-primary/70" title="Épinglée" />
+            )}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {menu.items({ Item: ContextMenuItem, Separator: ContextMenuSeparator }, { withPlay: true })}
+        </ContextMenuContent>
+      </ContextMenu>
+      {menu.dialogs}
+    </>
   );
 }
 
-function AccountCard() {
-  const account = useAppStore((s) => s.account);
-  const { data: settings } = useSettings();
-  const { others, switchTo, forget } = useAccounts();
-  const navigate = useNavigate();
-  const [loginOpen, setLoginOpen] = useState(false);
-
-  if (!account) {
-    if (settings?.offline_mode) {
-      return (
-        <button
-          onClick={() => navigate("/settings?tab=account")}
-          className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-sidebar-accent"
-        >
-          <div className="flex size-8 items-center justify-center rounded-md bg-muted">
-            <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{settings.offline_username.trim() || "Steve"}</p>
-            <p className="text-[0.68rem] text-warning">Hors-ligne</p>
-          </div>
-        </button>
-      );
-    }
-    return (
-      <>
-        <Button onClick={() => setLoginOpen(true)} className="bg-gradient-brand shadow-glow w-full gap-2">
-          <LogIn aria-hidden="true" />
-          Se connecter
-        </Button>
-        <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
-      </>
-    );
-  }
+function AddInstanceMenu() {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const { pickAndImport, importing } = useImportInstance();
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-sidebar-accent">
-          <img
-            src={`https://mc-heads.net/avatar/${account.profile.id}/64`}
-            alt=""
-            className="size-8 rounded-md [image-rendering:pixelated]"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{account.profile.name}</p>
-            {account.offline ? (
-              <p className="text-[0.68rem] text-warning">Hors connexion</p>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            title="Ajouter une instance"
+            aria-label="Ajouter une instance"
+            className="flex size-7 items-center justify-center rounded-lg text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            {importing ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
-              <p className="text-[0.68rem] text-success">Compte Microsoft</p>
+              <Plus className="size-4" aria-hidden="true" />
             )}
-          </div>
-          <ChevronUp className="size-3.5 text-sidebar-foreground/40" aria-hidden="true" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-52">
-        <DropdownMenuItem onClick={() => navigate("/settings?tab=account")} className="gap-2">
-          <UserRound className="size-4" aria-hidden="true" />
-          Mon compte
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/skins")} className="gap-2">
-          <Shirt className="size-4" aria-hidden="true" />
-          Mon skin
-        </DropdownMenuItem>
-        {others.map((other) => (
-          <DropdownMenuItem key={other.id} onClick={() => switchTo.mutate(other.id)} className="gap-2">
-            <img
-              src={`https://mc-heads.net/avatar/${other.id}/32`}
-              alt=""
-              className="size-4 rounded-sm [image-rendering:pixelated]"
-            />
-            {other.name}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuItem className="gap-2" onClick={() => setCreateOpen(true)}>
+            <Sparkles className="size-3.5" aria-hidden="true" />
+            <span>
+              Nouvelle instance…
+              <span className="block text-xs text-muted-foreground">Vanilla, Fabric, Forge, NeoForge, Quilt</span>
+            </span>
           </DropdownMenuItem>
-        ))}
-        <DropdownMenuItem onClick={() => setLoginOpen(true)} className="gap-2">
-          <UserPlus className="size-4" aria-hidden="true" />
-          Ajouter un compte
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => forget.mutate(account.profile.id)} className="gap-2 text-destructive">
-          <LogOut className="size-4" aria-hidden="true" />
-          Se déconnecter
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
-    </DropdownMenu>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2" onClick={pickAndImport}>
+            <FileDown className="size-3.5" aria-hidden="true" />
+            <span>
+              Importer un fichier…
+              <span className="block text-xs text-muted-foreground">.mrpack, zip CurseForge, export Prism</span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => setExternalOpen(true)}>
+            <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+            <span>
+              Depuis un autre launcher…
+              <span className="block text-xs text-muted-foreground">Officiel, Prism, CurseForge, Modrinth App</span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => setJoinOpen(true)}>
+            <Link2 className="size-3.5" aria-hidden="true" />
+            <span>
+              Rejoindre un pack par lien…
+              <span className="block text-xs text-muted-foreground">Un .mrpack partagé par un ami ou un serveur</span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <CreateInstanceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ExternalImportDialog open={externalOpen} onOpenChange={setExternalOpen} />
+      <JoinPackDialog open={joinOpen} onOpenChange={setJoinOpen} />
+    </>
   );
 }
 
 export function Sidebar() {
-  const navigate = useNavigate();
   const version = useAppVersion();
-  const runtime = useAppStore((s) => s.runtime);
-  const { data: instances } = useQuery({ queryKey: ["instances"], queryFn: instancesApi.list });
+  const { data: instances, isLoading } = useInstances();
+  const selected = useSelectedInstance();
+  const atRoot = useMatch("/");
+  const atInstance = useMatch("/instances/:id");
+  const onHome = atRoot !== null || atInstance !== null;
+  const [search, setSearch] = useState("");
+  const [reporting, setReporting] = useState(false);
 
-  const running = (instances ?? []).filter((i) => runtime[i.id]?.running);
-  const recent = [...(instances ?? [])]
-    .filter((i) => !runtime[i.id]?.running)
-    .sort((a, b) => (b.last_played_at ?? b.created_at) - (a.last_played_at ?? a.created_at))
-    .slice(0, 5);
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return [...(instances ?? [])]
+      .filter((i) => !needle || i.name.toLowerCase().includes(needle) || i.minecraft_version.includes(needle))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || byRecent(a, b));
+  }, [instances, search]);
 
   return (
-    <aside className="glass-strong z-10 flex w-60 shrink-0 flex-col border-y-0 border-l-0 text-sidebar-foreground">
-      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-        <motion.div
-          whileHover={{ rotate: -8, scale: 1.08 }}
-          transition={spring}
-          className="bg-gradient-brand shadow-glow flex size-9 shrink-0 items-center justify-center rounded-xl text-base font-black text-primary-foreground"
-        >
-          L
-        </motion.div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-sm leading-tight font-bold">Largy Launcher</h1>
-          <p className="text-[0.68rem] text-sidebar-foreground/45">{version ? `v${version}` : "Minecraft"}</p>
-        </div>
-        <NotificationCenter />
+    <aside className="z-10 flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground backdrop-blur-2xl">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+        <p className="flex-1 text-sm font-semibold">
+          Instances
+          {instances && instances.length > 0 && (
+            <span className="ml-1.5 text-xs font-normal text-sidebar-foreground/40 tabular-nums">
+              {instances.length}
+            </span>
+          )}
+        </p>
+        <AddInstanceMenu />
       </div>
 
-      <nav aria-label="Navigation principale" className="flex flex-col gap-0.5 px-2">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === "/"} className="relative">
-            {({ isActive }) => (
-              <span
-                className={cn(
-                  "relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                  isActive
-                    ? "font-semibold text-sidebar-foreground"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
-                )}
-              >
-                {isActive && (
-                  <motion.span
-                    layoutId="nav-active"
-                    transition={spring}
-                    className="absolute inset-0 rounded-lg bg-accent ring-1 ring-primary/25"
-                  >
-                    <span className="bg-gradient-brand absolute top-1.5 bottom-1.5 left-0 w-1 rounded-full" />
-                  </motion.span>
-                )}
-                <Icon className={cn("relative size-4", isActive && "text-primary")} aria-hidden="true" />
-                <span className="relative">{label}</span>
-              </span>
-            )}
-          </NavLink>
+      {(instances?.length ?? 0) >= SEARCH_THRESHOLD && (
+        <div className="relative mx-3 mb-1">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sidebar-foreground/40"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            placeholder="Rechercher…"
+            aria-label="Rechercher une instance"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 w-full rounded-lg bg-sidebar-accent pr-2 pl-8 text-sm outline-none placeholder:text-sidebar-foreground/40 focus:ring-2 focus:ring-ring/40"
+          />
+        </div>
+      )}
+
+      <nav aria-label="Instances" className="flex-1 space-y-0.5 overflow-y-auto px-2 py-1">
+        {isLoading &&
+          [0, 1, 2].map((i) => <div key={i} className="mx-1 my-1 h-11 animate-pulse rounded-xl bg-sidebar-accent" />)}
+        {visible.map((instance) => (
+          <InstanceItem key={instance.id} instance={instance} selected={onHome && selected?.id === instance.id} />
         ))}
+        {instances && instances.length > 0 && visible.length === 0 && (
+          <p className="px-2 py-4 text-center text-xs text-sidebar-foreground/45">Aucune instance ne correspond.</p>
+        )}
       </nav>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
-        {running.length > 0 && (
-          <>
-            <SectionTitle icon={LayoutGrid}>En cours</SectionTitle>
-            {running.map((instance) => (
-              <InstanceShortcut key={instance.id} instance={instance} />
-            ))}
-          </>
-        )}
-        {recent.length > 0 && (
-          <>
-            <SectionTitle icon={History}>Récentes</SectionTitle>
-            {recent.map((instance) => (
-              <InstanceShortcut key={instance.id} instance={instance} />
-            ))}
-          </>
-        )}
+      <div className="space-y-2 p-3">
+        <UpdateCard />
+        <div className="space-y-0.5">
+          <button
+            onClick={() => setReporting(true)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <Bug className="size-4" aria-hidden="true" />
+            Signaler un problème
+          </button>
+          <button
+            onClick={() => openUrl(REPO_URL)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <CodeXml className="size-4" aria-hidden="true" />
+            Code source
+          </button>
+        </div>
+        <p className="px-2 text-[0.68rem] text-sidebar-foreground/35">Largy Launcher {version ? `v${version}` : ""}</p>
       </div>
-
-      <div className="space-y-1.5 border-t border-sidebar-border p-2.5">
-        <button
-          onClick={() => navigate("/settings?tab=appearance")}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        >
-          <Palette className="size-3.5" aria-hidden="true" />
-          Personnaliser l'apparence
-        </button>
-        <AccountCard />
-      </div>
+      <ReportIssueDialog open={reporting} onOpenChange={setReporting} />
     </aside>
   );
 }

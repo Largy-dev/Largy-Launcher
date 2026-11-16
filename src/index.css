@@ -55,75 +55,82 @@
 }
 
 /*
-  Palette « gaming » : surfaces bleu-nuit profondes en sombre, gris-bleu clairs
-  en clair. Toutes les teintes d'accent dérivent d'une seule couleur de base
-  (--accent-base / --accent-fg) posée par [data-accent] — voir src/lib/theme.ts.
+  Palette « crépuscule » : surfaces indigo-nuit profondes en sombre, lavande
+  très claire en clair. Toutes les teintes d'accent dérivent d'une seule
+  couleur de base (--accent-base / --accent-fg) posée par [data-accent] —
+  voir src/lib/theme.ts.
 */
 :root {
-  --background: #f4f6fb;
-  --foreground: #0f172a;
+  --background: #f4f3fa;
+  --foreground: #16132b;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #16132b;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --secondary: #eaeef6;
-  --secondary-foreground: #0f172a;
-  --muted: #eaeef6;
-  --muted-foreground: #5b6479;
+  --popover-foreground: #16132b;
+  --secondary: #ebe9f5;
+  --secondary-foreground: #16132b;
+  --muted: #ebe9f5;
+  --muted-foreground: #5f5a7a;
   --destructive: #dc2626;
   --success: #16a34a;
   --warning: #d97706;
   --info: #2563eb;
-  --border: #dbe1ec;
-  --input: #dbe1ec;
-  --radius: 0.625rem;
-  --sidebar: #eaeef6;
-  --sidebar-foreground: #0f172a;
-  --sidebar-accent: #dde3ef;
-  --sidebar-accent-foreground: #0f172a;
-  --sidebar-border: #d5dbe8;
-  --surface-glass: color-mix(in oklab, #ffffff 72%, transparent);
-  --surface-glass-strong: color-mix(in oklab, #ffffff 88%, transparent);
+  --border: #dcd9ea;
+  --input: #dcd9ea;
+  --radius: 0.75rem;
+  --sidebar: color-mix(in oklab, #ffffff 70%, transparent);
+  --sidebar-foreground: #16132b;
+  --sidebar-accent: color-mix(in oklab, #16132b 7%, transparent);
+  --sidebar-accent-foreground: #16132b;
+  --sidebar-border: #dcd9ea;
+  --surface-glass: color-mix(in oklab, #ffffff 70%, transparent);
+  --surface-glass-strong: color-mix(in oklab, #ffffff 86%, transparent);
+  --surface-hover: color-mix(in oklab, #16132b 6%, transparent);
+  --sky-top: #e9e4ff;
+  --sky-glow: #ffb98a;
   --loader-vanilla: #4f9a36;
   --loader-forge: #d9681c;
   --loader-neoforge: #e5484d;
   --loader-fabric: #b88a4a;
   --loader-quilt: #9333ea;
-  --accent-base: #16a34a;
+  --accent-base: #6d4cff;
   --accent-fg: #ffffff;
 }
 
 .dark {
-  --background: #0a0d16;
-  --foreground: #e7ebf5;
-  --card: #121827;
-  --card-foreground: #e7ebf5;
-  --popover: #141b2c;
-  --popover-foreground: #e7ebf5;
-  --secondary: #1a2236;
-  --secondary-foreground: #e7ebf5;
-  --muted: #182033;
-  --muted-foreground: #8d97ae;
+  --background: #0d0b1a;
+  --foreground: #ecebf7;
+  --card: #17142a;
+  --card-foreground: #ecebf7;
+  --popover: #1a172f;
+  --popover-foreground: #ecebf7;
+  --secondary: #221e3a;
+  --secondary-foreground: #ecebf7;
+  --muted: #1f1b35;
+  --muted-foreground: #9b97b7;
   --destructive: #f25f5c;
   --success: #4ade80;
   --warning: #fbbf24;
   --info: #60a5fa;
-  --border: #222c43;
-  --input: #26304a;
-  --sidebar: #0d1220;
-  --sidebar-foreground: #e7ebf5;
-  --sidebar-accent: #182033;
-  --sidebar-accent-foreground: #e7ebf5;
-  --sidebar-border: #1b2438;
-  --surface-glass: color-mix(in oklab, #121827 62%, transparent);
-  --surface-glass-strong: color-mix(in oklab, #121827 84%, transparent);
+  --border: color-mix(in oklab, #ffffff 9%, transparent);
+  --input: color-mix(in oklab, #ffffff 12%, transparent);
+  --sidebar: color-mix(in oklab, #120f24 72%, transparent);
+  --sidebar-foreground: #ecebf7;
+  --sidebar-accent: color-mix(in oklab, #ffffff 7%, transparent);
+  --sidebar-accent-foreground: #ecebf7;
+  --sidebar-border: color-mix(in oklab, #ffffff 7%, transparent);
+  --surface-glass: color-mix(in oklab, #1a1630 58%, transparent);
+  --surface-glass-strong: color-mix(in oklab, #18142c 85%, transparent);
+  --surface-hover: color-mix(in oklab, #ffffff 6%, transparent);
+  --sky-top: #1b1640;
+  --sky-glow: #ff8a5c;
   --loader-vanilla: #6cc24a;
   --loader-forge: #f28c38;
   --loader-neoforge: #ff6b6b;
   --loader-fabric: #dbb27a;
   --loader-quilt: #b574ff;
-  --accent-base: #4ade80;
-  --accent-fg: #052e16;
+  --accent-base: #7c5cff;
+  --accent-fg: #ffffff;
 }
 
 /* Accent presets — only the base color and its readable foreground change. */
@@ -144,12 +151,12 @@
   --accent-fg: #0b1a33;
 }
 :root[data-accent="violet"] {
-  --accent-base: #7c3aed;
+  --accent-base: #6d4cff;
   --accent-fg: #ffffff;
 }
 .dark[data-accent="violet"] {
-  --accent-base: #a78bfa;
-  --accent-fg: #1e1033;
+  --accent-base: #7c5cff;
+  --accent-fg: #ffffff;
 }
 :root[data-accent="red"] {
   --accent-base: #dc2626;
@@ -250,6 +257,36 @@
   border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
 }
 
+/* Panneau de verre des onglets / cartes : léger, bordure claire, coins arrondis. */
+@utility panel {
+  background-color: var(--surface-glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.6);
+}
+
+/* Petit bouton carré « verre » à côté du bouton Jouer. */
+@utility tile {
+  background-color: var(--surface-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.2);
+}
+
+/* Horizontal strips (tabs) that scroll without showing a bar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Inside a tab panel, nested glass cards turn into quiet tinted surfaces. */
+[data-panel] .glass {
+  background-color: color-mix(in oklab, var(--foreground) 3%, transparent);
+  backdrop-filter: none;
+}
+
 @utility bg-gradient-brand {
   background-image: var(--gradient-brand);
 }
@@ -313,24 +350,27 @@
   transition-duration: 0.001ms !important;
 }
 
-/* Thin, themed scrollbar (WebView2/Chromium) instead of the default OS one. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background-color: var(--border);
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--muted-foreground);
+/* Thin, themed scrollbar (WebView2/Chromium) instead of the default OS one —
+   in the base layer so utilities like `no-scrollbar` can override it. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
 }

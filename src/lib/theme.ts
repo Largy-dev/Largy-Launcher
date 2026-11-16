@@ -1,12 +1,12 @@
-export const ACCENTS = ["green", "blue", "violet", "red", "orange", "cyan", "pink", "black", "white"] as const;
+export const ACCENTS = ["violet", "green", "blue", "red", "orange", "cyan", "pink", "black", "white"] as const;
 
 export type PresetAccent = (typeof ACCENTS)[number];
 export type Accent = PresetAccent | "custom";
 
 export const ACCENT_LABELS: Record<PresetAccent, string> = {
+  violet: "Violet",
   green: "Vert",
   blue: "Bleu",
-  violet: "Violet",
   red: "Rouge",
   orange: "Orange",
   cyan: "Cyan",
@@ -17,9 +17,9 @@ export const ACCENT_LABELS: Record<PresetAccent, string> = {
 
 /** Swatch color shown in the picker itself — independent of light/dark mode. */
 export const ACCENT_SWATCHES: Record<PresetAccent, string> = {
+  violet: "#7c5cff",
   green: "#22c55e",
   blue: "#3b82f6",
-  violet: "#8b5cf6",
   red: "#ef4444",
   orange: "#f97316",
   cyan: "#06b6d4",
@@ -39,7 +39,7 @@ export interface ThemeSettings {
   animations: AnimationLevel;
 }
 
-export const DEFAULT_ACCENT: PresetAccent = "green";
+export const DEFAULT_ACCENT: PresetAccent = "violet";
 
 export function isAccent(value: unknown): value is Accent {
   return value === "custom" || (typeof value === "string" && (ACCENTS as readonly string[]).includes(value));

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import type { RawLogLine } from "@/lib/logParse";
+import type { Update } from "@/lib/updater";
 import type { AccountSession, CrashAnalysis, DownloadProgress, InstallWarning, LaunchPhase } from "@/services/tauri";
 
 export interface PendingInstallWarnings {
@@ -50,6 +51,10 @@ interface AppStore {
   crashAnalysis: Record<string, CrashAnalysis | null>;
   setCrashAnalysis: (instanceId: string, analysis: CrashAnalysis | null) => void;
   clearCrashAnalysis: (instanceId: string) => void;
+
+  /** A newer launcher release found at startup, offered in the sidebar. */
+  appUpdate: Update | null;
+  setAppUpdate: (update: Update | null) => void;
 
   installWarnings: PendingInstallWarnings | null;
   setInstallWarnings: (warnings: PendingInstallWarnings) => void;
@@ -119,6 +124,9 @@ export const useAppStore = create<AppStore>((set) => {
     setCrashAnalysis: (instanceId, analysis) =>
       set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: analysis } })),
     clearCrashAnalysis: (instanceId) => set((s) => ({ crashAnalysis: { ...s.crashAnalysis, [instanceId]: null } })),
+
+    appUpdate: null,
+    setAppUpdate: (appUpdate) => set({ appUpdate }),
 
     installWarnings: null,
     setInstallWarnings: (warnings) => set({ installWarnings: warnings }),

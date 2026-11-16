@@ -1,26 +1,10 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams, useSearchParams } from "react-router";
-import {
-  ArrowLeft,
-  Check,
-  Coffee,
-  FolderOpen,
-  Gamepad2,
-  Images,
-  Info,
-  Loader2,
-  MemoryStick,
-  Puzzle,
-  Server,
-} from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
+import { Check, Coffee, FolderOpen, Gamepad2, Info, Loader2, MemoryStick } from "lucide-react";
 
 import { InstanceActions } from "@/components/instance/InstanceActions";
-import { InstanceIcon } from "@/components/instance/InstanceIcon";
-import { LoaderBadge } from "@/components/instance/LoaderBadge";
-import { PlayButton } from "@/components/instance/PlayButton";
 import { MemorySlider } from "@/components/MemorySlider";
-import { PageHeader } from "@/components/PageHeader";
 import {
   JvmArgWarnings,
   SettingRow,
@@ -43,21 +27,15 @@ import { notify } from "@/lib/notify";
 import { minecraftMinor } from "@/lib/ramAdvice";
 import { cn } from "@/lib/utils";
 import { errorMessage, instancesApi, type Instance } from "@/services/tauri";
-import { useAppStore } from "@/store/appStore";
+import { JvmPresetsSection } from "@/screens/InstanceSettings/JvmPresetsSection";
+import { OrganizationSection } from "@/screens/InstanceSettings/OrganizationSection";
+import { SnapshotsSection } from "@/screens/InstanceSettings/SnapshotsSection";
 
-import { JvmPresetsSection } from "./JvmPresetsSection";
-import { OrganizationSection } from "./OrganizationSection";
-import { ScreenshotsTab } from "./ScreenshotsTab";
-import { SnapshotsSection } from "./SnapshotsSection";
-import { ServersTab } from "./ServersTab";
-
-type TabId = "general" | "game" | "servers" | "screenshots" | "memory" | "java";
+type TabId = "general" | "game" | "memory" | "java";
 
 const TABS: SettingsTab<TabId>[] = [
   { id: "general", label: "Général", icon: Info, description: "Nom, emplacement, outils et statistiques." },
   { id: "game", label: "Jeu", icon: Gamepad2, description: "Fenêtre du jeu et connexion directe à un serveur." },
-  { id: "servers", label: "Serveurs", icon: Server, description: "Tes serveurs multijoueur, leur statut en direct." },
-  { id: "screenshots", label: "Captures", icon: Images, description: "Les captures d'écran prises en jeu (F2)." },
   { id: "memory", label: "Mémoire", icon: MemoryStick, description: "La RAM allouée au jeu, avec un conseil adapté." },
   { id: "java", label: "Java", icon: Coffee, description: "Version de Java, optimisations et arguments de la JVM." },
 ];
@@ -92,20 +70,13 @@ function draftOf(instance: Instance): Draft {
 
 const numberOrNull = (raw: string) => (raw.trim() === "" ? null : Math.max(0, Math.round(Number(raw)) || 0));
 
-export function InstanceSettingsScreen() {
-  const { id } = useParams<{ id: string }>();
-  const instanceId = id ?? "";
-  const navigate = useNavigate();
+/** Everything that changes how this instance launches, plus its maintenance tools. */
+export function SettingsTab({ instance }: { instance: Instance }) {
+  const instanceId = instance.id;
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "general") as TabId;
-  const setActiveInstanceId = useAppStore((s) => s.setActiveInstanceId);
+  const tab = (TABS.find((t) => t.id === params.get("section"))?.id ?? "general") as TabId;
 
-  const { data: instance } = useQuery({
-    queryKey: ["instance", instanceId],
-    queryFn: () => instancesApi.get(instanceId),
-    enabled: instanceId !== "",
-  });
   const { data: settings } = useSettings();
   const { data: memory } = useSystemMemory();
   const modCount = useModCount(instance);
@@ -113,20 +84,18 @@ export function InstanceSettingsScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
 
   useEffect(() => {
-    if (!instance) return;
-    setActiveInstanceId(instance.id);
-    // Seeds the local draft from the query once it loads; doesn't cascade
-    // since `instance` only changes on refetch.
+    // Seeds the local draft from the instance, and again whenever it's
+    // refetched; doesn't cascade since `instance` only changes on refetch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(draftOf(instance));
-  }, [instance, setActiveInstanceId]);
+  }, [instance]);
 
-  const saved = instance ? draftOf(instance) : null;
-  const dirty = !!draft && !!saved && JSON.stringify(draft) !== JSON.stringify(saved);
+  const saved = draftOf(instance);
+  const dirty = !!draft && JSON.stringify(draft) !== JSON.stringify(saved);
 
   const saveMutation = useMutation({
     mutationFn: async (next: Draft) => {
-      if (next.name.trim() !== saved?.name) await instancesApi.rename(instanceId, next.name);
+      if (next.name.trim() !== saved.name) await instancesApi.rename(instanceId, next.name);
       return instancesApi.updateSettings(instanceId, {
         min_memory_mb: next.minMb,
         max_memory_mb: next.maxMb,
@@ -147,7 +116,7 @@ export function InstanceSettingsScreen() {
     onError: (e) => notify.error({ title: "Enregistrement impossible", message: errorMessage(e) }),
   });
 
-  if (!instance || !draft) {
+  if (!draft) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -161,42 +130,20 @@ export function InstanceSettingsScreen() {
   const minor = minecraftMinor(instance.minecraft_version);
 
   return (
-    <div className="flex flex-1 flex-col">
-      <PageHeader
-        eyebrow="Instance"
-        title={
-          <span className="flex items-center gap-3">
-            <InstanceIcon instance={instance} className="size-10 rounded-xl" />
-            <span className="truncate">{instance.name}</span>
-          </span>
+    <div className="flex flex-col">
+      <SettingsLayout
+        tabs={TABS}
+        active={tab}
+        onChange={(next) =>
+          setParams(
+            (p) => {
+              p.set("section", next);
+              return p;
+            },
+            { replace: true },
+          )
         }
-        description={
-          <span className="flex items-center gap-2">
-            <LoaderBadge loader={instance.loader} version={instance.loader_version} />
-            Minecraft {instance.minecraft_version}
-          </span>
-        }
-        action={
-          <>
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => navigate("/")}>
-              <ArrowLeft aria-hidden="true" />
-              Retour
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => navigate(`/instances/${instanceId}/content`)}
-            >
-              <Puzzle aria-hidden="true" />
-              {instance.loader === "vanilla" || modCount === null ? "Contenu" : `Contenu · ${modCount} mods`}
-            </Button>
-            <PlayButton instance={instance} />
-          </>
-        }
-      />
-
-      <SettingsLayout tabs={TABS} active={tab} onChange={(next) => setParams({ tab: next }, { replace: true })}>
+      >
         {tab === "general" && (
           <>
             <SettingSection>
@@ -308,10 +255,6 @@ export function InstanceSettingsScreen() {
             )}
           </SettingSection>
         )}
-
-        {tab === "servers" && <ServersTab instance={instance} />}
-
-        {tab === "screenshots" && <ScreenshotsTab instance={instance} />}
 
         {tab === "memory" && (
           <SettingSection>
@@ -433,6 +376,9 @@ export function InstanceSettingsScreen() {
         saving={saveMutation.isPending}
         onSave={() => saveMutation.mutateAsync(draft)}
         onReset={() => setDraft(draftOf(instance))}
+        leaves={(current, next) =>
+          current.pathname !== next.pathname || new URLSearchParams(next.search).get("tab") !== "settings"
+        }
       />
     </div>
   );

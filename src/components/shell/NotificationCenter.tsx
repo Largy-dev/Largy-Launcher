@@ -26,7 +26,7 @@ export function NotificationCenter() {
         <button
           title="Notifications"
           aria-label={`Notifications${unread ? ` (${unread} non lues)` : ""}`}
-          className="relative flex size-8 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          className="relative flex size-full items-center justify-center rounded-[inherit] text-muted-foreground transition-colors hover:text-foreground"
         >
           <Bell className="size-4" aria-hidden="true" />
           <AnimatePresence>
@@ -43,7 +43,7 @@ export function NotificationCenter() {
           </AnimatePresence>
         </button>
       </PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-80 p-0">
+      <PopoverContent side="bottom" align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <p className="text-sm font-semibold">Notifications</p>
           <div className="flex gap-1">

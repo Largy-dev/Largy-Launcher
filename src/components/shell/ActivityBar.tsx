@@ -19,7 +19,7 @@ export function ActivityBar() {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
-          className="glass-strong sticky top-0 z-20 -mx-6 -mt-6 mb-4 flex items-center gap-3 border-x-0 border-t-0 px-6 py-2 text-xs"
+          className="glass-strong sticky top-0 z-20 mb-4 flex items-center gap-3 rounded-xl px-4 py-2 text-xs"
           role="status"
         >
           <Download className="size-3.5 shrink-0 animate-pulse text-primary" aria-hidden="true" />

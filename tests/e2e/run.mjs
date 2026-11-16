@@ -88,7 +88,7 @@ try {
 
   console.log("Largy Launcher E2E");
   await step("home renders", async () => {
-    await page.waitForFunction(() => /Mes instances|Prêt pour l'aventure/.test(document.body.innerText), null, {
+    await page.waitForFunction(() => /Aperçu|Prêt pour l'aventure/.test(document.body.innerText), null, {
       timeout: 30_000,
     });
   });
@@ -105,15 +105,21 @@ try {
     await text("E2E Vanilla");
   });
 
-  await step("content screen shows its tabs", async () => {
-    await go(`#/instances/${instanceId}/content`);
+  await step("the instance page shows its tabs", async () => {
+    await go(`#/instances/${instanceId}`);
+    await page.getByRole("tab", { name: /Packs/ }).click();
     await text("Resource packs");
     await page.getByRole("tab", { name: /Mondes/ }).click();
     await text("Aucun monde");
   });
 
-  await step("the catalogue lists compatible resource packs", async () => {
+  await step("old content links still land on the right tab", async () => {
     await go(`#/instances/${instanceId}/content?tab=resource_pack`);
+    await page.waitForFunction(() => location.hash.includes("tab=packs"), null, { timeout: 10_000 });
+  });
+
+  await step("the catalogue lists compatible resource packs", async () => {
+    await go(`#/instances/${instanceId}?tab=packs`);
     await page.getByRole("button", { name: "Parcourir", exact: true }).click();
     await text("Ajouter du contenu");
     await page.getByRole("button", { name: "Installer" }).first().waitFor({ timeout: 30_000 });
@@ -121,7 +127,7 @@ try {
   });
 
   await step("a restore point can be created", async () => {
-    await go(`#/instances/${instanceId}`);
+    await go(`#/instances/${instanceId}?tab=settings`);
     const create = page.getByRole("button", { name: "Créer maintenant" });
     await create.scrollIntoViewIfNeeded();
     await create.click();

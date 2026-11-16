@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useBlocker } from "react-router";
+import { useBlocker, type Location } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
 
@@ -33,10 +33,10 @@ interface SettingsLayoutProps<T extends string> {
 export function SettingsLayout<T extends string>({ tabs, active, onChange, children }: SettingsLayoutProps<T>) {
   const current = tabs.find((t) => t.id === active) ?? tabs[0];
   return (
-    <div className="flex flex-1 gap-6">
+    <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
       <nav
         aria-label="Sections"
-        className="glass sticky top-0 flex h-fit w-52 shrink-0 flex-col gap-0.5 rounded-2xl p-2"
+        className="glass flex h-fit shrink-0 gap-0.5 overflow-x-auto rounded-2xl p-2 no-scrollbar lg:sticky lg:top-0 lg:w-52 lg:flex-col"
       >
         {tabs.map(({ id, label, icon: Icon }) => {
           const selected = id === active;
@@ -46,7 +46,7 @@ export function SettingsLayout<T extends string>({ tabs, active, onChange, child
               onClick={() => onChange(id)}
               aria-current={selected ? "page" : undefined}
               className={cn(
-                "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                "relative flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors",
                 selected ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -174,16 +174,18 @@ interface UnsavedChangesProps {
   saving: boolean;
   onSave: () => Promise<unknown> | void;
   onReset: () => void;
+  /** Whether going to `next` leaves the edited form — by default, any change of page. */
+  leaves?: (current: Location, next: Location) => boolean;
 }
+
+const leavesPage = (current: Location, next: Location) => current.pathname !== next.pathname;
 
 /**
  * Floating "unsaved changes" bar, plus a guard dialog when leaving the page
  * with pending edits. Saving from the dialog continues the navigation.
  */
-export function UnsavedChanges({ dirty, saving, onSave, onReset }: UnsavedChangesProps) {
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname,
-  );
+export function UnsavedChanges({ dirty, saving, onSave, onReset, leaves = leavesPage }: UnsavedChangesProps) {
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && leaves(currentLocation, nextLocation));
 
   async function saveAndLeave() {
     try {
@@ -203,7 +205,7 @@ export function UnsavedChanges({ dirty, saving, onSave, onReset }: UnsavedChange
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
             transition={spring}
-            className="glass-strong fixed bottom-5 left-1/2 z-30 ml-30 flex -translate-x-1/2 items-center gap-4 rounded-2xl py-2.5 pr-2.5 pl-5 shadow-2xl"
+            className="glass-strong fixed bottom-5 left-1/2 z-30 ml-32 flex -translate-x-1/2 items-center gap-4 rounded-2xl py-2.5 pr-2.5 pl-5 shadow-2xl"
           >
             <span className="size-2 animate-pulse rounded-full bg-warning" aria-hidden="true" />
             <p className="text-sm font-medium">Modifications non enregistrées</p>

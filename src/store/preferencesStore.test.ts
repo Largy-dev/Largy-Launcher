@@ -9,10 +9,10 @@ describe("usePreferences", () => {
   });
 
   it("persists changes to localStorage", () => {
-    usePreferences.getState().set({ accent: "cyan", cardDensity: "list" });
+    usePreferences.getState().set({ accent: "cyan", blurIntensity: 25 });
     const saved = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) ?? "{}");
     expect(saved.state.accent).toBe("cyan");
-    expect(saved.state.cardDensity).toBe("list");
+    expect(saved.state.blurIntensity).toBe(25);
   });
 
   it("merges nested notification preferences instead of replacing them", () => {

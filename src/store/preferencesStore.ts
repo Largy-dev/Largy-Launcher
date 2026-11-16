@@ -4,8 +4,6 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 import { DEFAULT_ACCENT, loadLegacyAccent, type Accent, type AnimationLevel, type ThemeMode } from "@/lib/theme";
 
 export type BackgroundStyle = "image" | "gradient" | "solid";
-export type CardDensity = "grid" | "compact" | "list";
-export type InstanceSort = "recent" | "name" | "playtime";
 
 export interface NotificationPreferences {
   /** Native Windows notifications when the launcher window isn't focused. */
@@ -34,26 +32,20 @@ export interface Preferences {
   background: BackgroundStyle;
   blurIntensity: number;
   animations: AnimationLevel;
-  cardDensity: CardDensity;
-  instanceSort: InstanceSort;
   uiScale: number;
   notifications: NotificationPreferences;
   /** Minutes of continuous play between two playtime reminders. */
   playtimeReminderMinutes: number;
   logs: LogPreferences;
-  /** The home screen's tips card was dismissed for good. */
-  tipsDismissed: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   themeMode: "dark",
   accent: DEFAULT_ACCENT,
-  customAccent: "#22c55e",
+  customAccent: "#7c5cff",
   background: "image",
   blurIntensity: 60,
   animations: "full",
-  cardDensity: "grid",
-  instanceSort: "recent",
   uiScale: 100,
   notifications: {
     native: true,
@@ -65,7 +57,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   },
   playtimeReminderMinutes: 60,
   logs: { autoScroll: true, wrap: true },
-  tipsDismissed: false,
 };
 
 interface PreferencesStore extends Preferences {

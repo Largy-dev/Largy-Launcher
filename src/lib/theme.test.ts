@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { applyTheme, isAccent, loadLegacyAccent, readableForeground, type ThemeSettings } from "./theme";
+import {
+  DEFAULT_ACCENT,
+  applyTheme,
+  isAccent,
+  loadLegacyAccent,
+  readableForeground,
+  type ThemeSettings,
+} from "./theme";
 
 const base: ThemeSettings = {
   themeMode: "dark",
@@ -40,7 +47,7 @@ describe("applyTheme", () => {
 
   it("falls back to the default accent when the custom color is invalid", () => {
     applyTheme({ ...base, accent: "custom", customAccent: "nope" });
-    expect(document.documentElement.getAttribute("data-accent")).toBe("green");
+    expect(document.documentElement.getAttribute("data-accent")).toBe(DEFAULT_ACCENT);
   });
 
   it("scales the root font size and exposes the motion level", () => {

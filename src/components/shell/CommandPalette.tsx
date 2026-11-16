@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Compass, LayoutGrid, Search, Server, Settings2 } from "lucide-react";
+import { Compass, House, Search, Server, Settings2, Shirt } from "lucide-react";
 
 import { InstanceIcon } from "@/components/instance/InstanceIcon";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,13 +17,27 @@ interface Entry {
 }
 
 const STATIC_ENTRIES: Omit<Entry, "go">[] = [
-  { key: "home", label: "Instances", icon: <LayoutGrid className="size-4" aria-hidden="true" /> },
+  { key: "home", label: "Accueil", icon: <House className="size-4" aria-hidden="true" /> },
   { key: "modpacks", label: "Modpacks", icon: <Compass className="size-4" aria-hidden="true" /> },
   { key: "servers", label: "Serveurs", icon: <Server className="size-4" aria-hidden="true" /> },
+  { key: "skins", label: "Skins", icon: <Shirt className="size-4" aria-hidden="true" /> },
   { key: "settings", label: "Paramètres", icon: <Settings2 className="size-4" aria-hidden="true" /> },
 ];
 
-const ROUTES: Record<string, string> = { home: "/", modpacks: "/modpacks", servers: "/servers", settings: "/settings" };
+const ROUTES: Record<string, string> = {
+  home: "/",
+  modpacks: "/modpacks",
+  servers: "/servers",
+  skins: "/skins",
+  settings: "/settings",
+};
+
+const OPEN_EVENT = "largy:open-command-palette";
+
+/** Opens the quick switcher from a button (it otherwise answers to Ctrl/Cmd+K). */
+export function openCommandPalette() {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
 
 /** Ctrl/Cmd+K quick switcher: jump to any instance or the main sections. */
 export function CommandPalette() {
@@ -40,8 +54,16 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     }
+    function onOpen() {
+      setQuery("");
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, []);
 
   function setOpenAndResetQuery(next: boolean) {

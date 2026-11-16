@@ -1,16 +1,4 @@
-import {
-  Check,
-  Image,
-  LayoutGrid,
-  LayoutList,
-  Monitor,
-  Moon,
-  Paintbrush,
-  Rows3,
-  Square,
-  Sun,
-  Sparkle,
-} from "lucide-react";
+import { Check, Image, Monitor, Moon, Paintbrush, Square, Sun, Sparkle } from "lucide-react";
 
 import { ChoiceGroup, SettingRow, SettingSection } from "@/components/settings/SettingsKit";
 import { Button } from "@/components/ui/button";
@@ -21,39 +9,43 @@ import { usePreferences } from "@/store/preferencesStore";
 
 const UI_SCALES = [90, 100, 110, 120];
 
-/** Mini preview of the current theme: sidebar, hero and a card, in the live tokens. */
+/** Mini preview of the current theme: instance list, top tabs, title, Jouer and the tab panel. */
 function ThemePreview() {
   return (
-    <div className="relative h-36 overflow-hidden rounded-xl border border-border bg-background" aria-hidden="true">
+    <div className="relative h-40 overflow-hidden rounded-xl border border-border bg-background" aria-hidden="true">
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage:
+          backgroundImage: [
+            "radial-gradient(22rem 8rem at 60% 110%, color-mix(in oklab, var(--sky-glow) 45%, transparent), transparent 70%)",
             "radial-gradient(20rem 10rem at 90% 0%, color-mix(in oklab, var(--accent-base) 30%, transparent), transparent 70%)",
+            "linear-gradient(to bottom, var(--sky-top), var(--background) 70%)",
+          ].join(","),
         }}
       />
-      <div className="glass-strong absolute inset-y-0 left-0 w-16 space-y-1.5 border-y-0 border-l-0 p-2">
-        <div className="bg-gradient-brand size-5 rounded-md" />
-        <div className="h-2 rounded bg-accent" />
-        <div className="h-2 w-3/4 rounded bg-muted" />
-        <div className="h-2 w-2/3 rounded bg-muted" />
-      </div>
-      <div className="absolute inset-y-0 right-0 left-16 space-y-2 p-3">
-        <div className="glass flex items-center gap-2 rounded-lg p-2">
-          <div className="size-7 rounded-md bg-loader-neoforge/60" />
-          <div className="flex-1 space-y-1">
-            <div className="h-2 w-1/2 rounded bg-foreground/70" />
-            <div className="h-1.5 w-1/3 rounded bg-muted-foreground/50" />
+      <div className="absolute inset-y-0 left-0 w-16 space-y-1.5 border-r border-sidebar-border bg-sidebar p-2">
+        <div className="h-1.5 w-2/3 rounded bg-foreground/50" />
+        {["--loader-fabric", "--loader-forge", "--loader-vanilla"].map((v, i) => (
+          <div key={v} className={cn("flex items-center gap-1 rounded-md p-0.5", i === 0 && "bg-sidebar-accent")}>
+            <div className="size-3.5 rounded" style={{ backgroundColor: `var(${v})` }} />
+            <div className="h-1.5 flex-1 rounded bg-foreground/30" />
           </div>
-          <div className="bg-gradient-brand shadow-glow h-5 w-12 rounded-md" />
+        ))}
+      </div>
+      <div className="absolute inset-y-0 right-0 left-16 p-3">
+        <div className="tile flex w-fit gap-1 p-0.5">
+          <div className="h-2.5 w-8 rounded bg-foreground/20" />
+          <div className="h-2.5 w-6 rounded bg-foreground/8" />
+          <div className="h-2.5 w-6 rounded bg-foreground/8" />
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {["--loader-fabric", "--loader-forge", "--loader-vanilla"].map((v) => (
-            <div key={v} className="glass h-12 overflow-hidden rounded-lg">
-              <div className="h-4" style={{ backgroundColor: `color-mix(in oklab, var(${v}) 50%, transparent)` }} />
-            </div>
-          ))}
+        <div className="mt-3 h-4 w-28 rounded bg-foreground/80" />
+        <div className="mt-1.5 h-1.5 w-40 rounded bg-foreground/30" />
+        <div className="mt-2.5 flex gap-1.5">
+          <div className="bg-gradient-brand shadow-glow h-5 w-14 rounded-md" />
+          <div className="tile h-5 w-12" />
+          <div className="tile size-5" />
         </div>
+        <div className="panel mt-2.5 h-12" />
       </div>
     </div>
   );
@@ -149,7 +141,7 @@ export function AppearanceTab() {
       <SettingSection title="Ambiance">
         <SettingRow
           label="Fond d'écran"
-          description="L'image de l'instance mise en avant, floutée derrière l'interface."
+          description="Un ciel de crépuscule, avec la couverture (ou l'icône) de l'instance sélectionnée par-dessus."
           control={
             <ChoiceGroup
               value={prefs.background}
@@ -196,20 +188,6 @@ export function AppearanceTab() {
       </SettingSection>
 
       <SettingSection title="Disposition">
-        <SettingRow
-          label="Affichage des instances"
-          control={
-            <ChoiceGroup
-              value={prefs.cardDensity}
-              onChange={(cardDensity) => set({ cardDensity })}
-              options={[
-                { value: "grid", label: "Grille", icon: LayoutGrid },
-                { value: "compact", label: "Compacte", icon: Rows3 },
-                { value: "list", label: "Liste", icon: LayoutList },
-              ]}
-            />
-          }
-        />
         <SettingRow
           label="Taille de l'interface"
           description="Agrandit ou réduit tout le texte et les éléments."

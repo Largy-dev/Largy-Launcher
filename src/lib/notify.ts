@@ -17,6 +17,8 @@ export interface NotifyOptions {
   sticky?: boolean;
   /** Record in the notification center (default true). */
   history?: boolean;
+  /** Pop a toast (default true) — off when something else on screen already says it. */
+  toast?: boolean;
 }
 
 export function shouldSendNative(
@@ -49,6 +51,7 @@ function show(kind: NotificationKind, options: NotifyOptions): string | number {
     });
   }
   if (options.native) void sendNative(options.title, options.message, options.native);
+  if (options.toast === false) return "";
   return toast[kind](options.title, {
     description: options.message,
     action: options.action,

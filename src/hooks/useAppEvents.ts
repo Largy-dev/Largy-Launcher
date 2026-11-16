@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 
 import { formatDuration } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { checkForAppUpdate, installAppUpdate } from "@/lib/updater";
+import { checkForAppUpdate } from "@/lib/updater";
 import {
   auth,
   errorMessage,
@@ -48,20 +47,14 @@ export function useAppEvents() {
     checkForAppUpdate()
       .then((update) => {
         if (!update) return;
+        // The sidebar shows a permanent card; the notification only goes to
+        // the history (and Windows, when the launcher sits in the background).
+        useAppStore.getState().setAppUpdate(update);
         notify.info({
           title: "Nouvelle version disponible",
           message: `v${update.currentVersion} → v${update.version}`,
           native: "updates",
-          sticky: true,
-          action: {
-            label: "Mettre à jour",
-            onClick: () => {
-              const id = toast.loading("Téléchargement de la mise à jour…");
-              installAppUpdate(update, (percent) => toast.loading(`Téléchargement… ${percent}%`, { id })).catch((e) =>
-                toast.error(errorMessage(e), { id }),
-              );
-            },
-          },
+          toast: false,
         });
       })
       .catch(() => {
@@ -99,7 +92,7 @@ export function useAppEvents() {
             sticky: true,
             action: report
               ? { label: "Crash report", onClick: () => instancesApi.revealFile(e.instance_id, report) }
-              : { label: "Voir les logs", onClick: () => navigate(`/instances/${e.instance_id}/launch`) },
+              : { label: "Voir les logs", onClick: () => navigate(`/instances/${e.instance_id}?tab=console`) },
           });
         } else if (session > 0) {
           notify.info({

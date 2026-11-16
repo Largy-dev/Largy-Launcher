@@ -11,6 +11,7 @@ import type { DownloadProgress } from "@/bindings/DownloadProgress";
 import type { ExportSummary } from "@/bindings/ExportSummary";
 import type { GlobalSettings } from "@/bindings/GlobalSettings";
 import type { InstallWarning } from "@/bindings/InstallWarning";
+import type { KnownIssue } from "@/bindings/KnownIssue";
 import type { Instance } from "@/bindings/Instance";
 import type { InstanceExit } from "@/bindings/InstanceExit";
 import type { InstanceInstallResult } from "@/bindings/InstanceInstallResult";
@@ -50,6 +51,7 @@ export type {
   ExportSummary,
   GlobalSettings,
   InstallWarning,
+  KnownIssue,
   Instance,
   InstanceExit,
   InstanceInstallResult,
@@ -275,6 +277,12 @@ export const instancesApi = {
   backupWorlds: (id: string) => invoke<string | null>("instances_backup_worlds", { id }),
   /** Puts a « play this instance » shortcut on the desktop; resolves to its path. */
   createShortcut: (id: string) => invoke<string>("instances_create_shortcut", { id }),
+  /** Known problems the launcher can fix for this instance (the "Réparer" dialog). */
+  diagnose: (id: string) => invoke<KnownIssue[]>("instance_diagnose", { id }),
+  fixIssue: (id: string, issue: string) => invoke<void>("instance_fix_issue", { id, issue }),
+  /** Re-checks every file of the installed modpack version; resolves to what couldn't be fetched. */
+  repairModpackFiles: (instanceId: string) =>
+    invoke<InstallWarning[]>("instances_repair_modpack_files", { instanceId }),
   screenshots: (id: string) => invoke<Screenshot[]>("instance_screenshots_list", { id }),
   deleteScreenshot: (id: string, fileName: string) => invoke<void>("instance_screenshots_delete", { id, fileName }),
 };

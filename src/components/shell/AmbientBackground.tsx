@@ -1,35 +1,56 @@
-import { useQuery } from "@tanstack/react-query";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { AnimatePresence, motion } from "motion/react";
 
-import { instancesApi, type Instance } from "@/services/tauri";
-import { useAppStore } from "@/store/appStore";
+import { useSelectedInstance } from "@/hooks/useInstances";
 import { usePreferences } from "@/store/preferencesStore";
 
-/** The instance the launcher is "about": the one being looked at, else the last played. */
-export function useFeaturedInstance(): Instance | undefined {
-  const activeId = useAppStore((s) => s.activeInstanceId);
-  const { data: instances } = useQuery({ queryKey: ["instances"], queryFn: instancesApi.list });
-  if (!instances || instances.length === 0) return undefined;
-  const active = activeId ? instances.find((i) => i.id === activeId) : undefined;
-  if (active) return active;
-  return [...instances].sort((a, b) => (b.last_played_at ?? b.created_at) - (a.last_played_at ?? a.created_at))[0];
-}
+/** A few hundred pixels of faint stars, tiled over the top of the sky. */
+const STARS = [
+  "radial-gradient(1px 1px at 20px 30px, #fff 50%, transparent)",
+  "radial-gradient(1px 1px at 120px 80px, #fff 50%, transparent)",
+  "radial-gradient(1.5px 1.5px at 200px 20px, #fff 50%, transparent)",
+  "radial-gradient(1px 1px at 60px 150px, #fff 50%, transparent)",
+  "radial-gradient(1px 1px at 250px 170px, #fff 50%, transparent)",
+  "radial-gradient(1.5px 1.5px at 160px 220px, #fff 50%, transparent)",
+  "radial-gradient(1px 1px at 290px 110px, #fff 50%, transparent)",
+].join(",");
 
 /**
- * Full-window backdrop behind the app: the featured instance's art, heavily
- * blurred, under an accent-tinted gradient — or just the gradient / a plain
- * surface depending on the user's preference.
+ * Full-window backdrop: a dusk sky (stars on top, a warm glow on the horizon
+ * behind the content) with the selected instance's cover — or its icon,
+ * heavily blurred — laid over it. "Dégradé" keeps only the sky, "Uni" none.
  */
 export function AmbientBackground() {
   const background = usePreferences((s) => s.background);
   const blurIntensity = usePreferences((s) => s.blurIntensity);
-  const featured = useFeaturedInstance();
-  const image = background === "image" ? featured?.icon_url : null;
+  const selected = useSelectedInstance();
 
   if (background === "solid") return null;
 
+  const cover = selected?.cover_path ? convertFileSrc(selected.cover_path) : null;
+  const image = background === "image" ? (cover ?? selected?.icon_url ?? null) : null;
+  const sharp = !!cover;
+
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-background">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: [
+            "radial-gradient(70rem 26rem at 62% 108%, color-mix(in oklab, var(--sky-glow) 42%, transparent), transparent 70%)",
+            "radial-gradient(45rem 30rem at 85% -5%, color-mix(in oklab, var(--accent-base) 26%, transparent), transparent 70%)",
+            "linear-gradient(to bottom, var(--sky-top) 0%, var(--background) 55%, color-mix(in oklab, var(--sky-glow) 12%, var(--background)) 100%)",
+          ].join(","),
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-0 dark:opacity-40"
+        style={{
+          backgroundImage: STARS,
+          backgroundSize: "320px 260px",
+          maskImage: "linear-gradient(to bottom, black, transparent 60%)",
+        }}
+      />
       <AnimatePresence>
         {image && (
           <motion.img
@@ -37,22 +58,28 @@ export function AmbientBackground() {
             src={image}
             alt=""
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.35 }}
+            animate={{ opacity: sharp ? 0.5 : 0.3 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8 }}
-            className="absolute inset-[-10%] size-[120%] object-cover"
-            style={{ filter: `blur(${24 + blurIntensity * 0.8}px) saturate(1.4)` }}
+            className={
+              sharp
+                ? "absolute inset-x-0 top-0 h-[75%] w-full object-cover"
+                : "absolute inset-[-10%] size-[120%] object-cover"
+            }
+            style={{
+              filter: sharp
+                ? `blur(${Math.round(blurIntensity * 0.12)}px) saturate(1.15)`
+                : `blur(${24 + blurIntensity * 0.8}px) saturate(1.4)`,
+              maskImage: sharp ? "linear-gradient(to bottom, black 20%, transparent)" : undefined,
+            }}
           />
         )}
       </AnimatePresence>
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: [
-            "radial-gradient(60rem 40rem at 85% -10%, color-mix(in oklab, var(--accent-base) 22%, transparent), transparent 70%)",
-            "radial-gradient(50rem 35rem at -10% 110%, color-mix(in oklab, #6d5dfc 14%, transparent), transparent 70%)",
-            "linear-gradient(to bottom, color-mix(in oklab, var(--background) 55%, transparent), var(--background) 85%)",
-          ].join(","),
+          backgroundImage:
+            "linear-gradient(to right, color-mix(in oklab, var(--background) 55%, transparent), transparent 45%)",
         }}
       />
     </div>

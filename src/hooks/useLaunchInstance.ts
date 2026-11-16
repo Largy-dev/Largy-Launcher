@@ -42,7 +42,7 @@ async function syncLinkedPack(instance: Instance): Promise<void> {
 
 /**
  * Starts any instance (optionally straight onto a server): checks there is
- * an account to play with, then opens the launch screen.
+ * an account to play with, then opens the instance's console tab.
  */
 export function usePlayInstance() {
   const navigate = useNavigate();
@@ -79,7 +79,7 @@ export function usePlayInstance() {
       return;
     }
     if (runtimeOf(useAppStore.getState().runtime, instance.id).running) {
-      navigate(`/instances/${instance.id}/launch`);
+      navigate(`/instances/${instance.id}?tab=console`);
       return;
     }
     try {
@@ -91,7 +91,7 @@ export function usePlayInstance() {
     clearLogs(instance.id);
     clearCrashAnalysis(instance.id);
     setRunning(instance.id, true);
-    navigate(`/instances/${instance.id}/launch`);
+    navigate(`/instances/${instance.id}?tab=console`);
     try {
       await launchApi.launch(instance.id, server);
     } catch (e) {
