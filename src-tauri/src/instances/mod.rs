@@ -6,6 +6,7 @@
 pub mod backup;
 pub mod content;
 pub mod cover;
+pub mod doctor;
 pub mod content_curseforge;
 pub mod export;
 pub mod external;

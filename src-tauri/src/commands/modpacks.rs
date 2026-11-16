@@ -9,6 +9,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::download::DownloadItem;
 use crate::error::{AppError, AppResult};
+use crate::download::Verify;
+use crate::instances::doctor::disabled_twin;
 use crate::instances::{self, backup, export, import, manual_downloads, CreateInstanceInput, Instance, ModpackRef};
 use crate::providers::curseforge::CurseForgeProvider;
 use crate::providers::modrinth::{self, ModrinthApi};
@@ -44,21 +46,8 @@ async fn download_and_track_files(
     instance_dir: &Path,
     preserve_user_files: bool,
 ) -> AppResult<(Vec<PathBuf>, Vec<InstallWarning>)> {
-    let (items, mut warnings) = resolve_download_items(provider, resolved, instance_dir).await;
-    let failures = state.downloader.run_batch_lenient(app, instance_id, "Fichiers du modpack", items.clone(), 8).await;
-    let failed: HashSet<PathBuf> = failures.iter().map(|(item, _)| item.dest.clone()).collect();
-    for (item, error) in failures {
-        warnings.push(InstallWarning {
-            file_name: item.dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-            message: format!("Téléchargement impossible : {error}"),
-            ..Default::default()
-        });
-    }
-    let mut installed_files: Vec<PathBuf> = items
-        .iter()
-        .filter(|i| !failed.contains(&i.dest))
-        .filter_map(|i| i.dest.strip_prefix(instance_dir).ok().map(Path::to_path_buf))
-        .collect();
+    let (mut installed_files, warnings) =
+        download_pack_files(app, &state.downloader, provider, resolved, instance_id, instance_dir).await;
 
     let overrides = resolved.overrides_dirs.clone();
     let dest = instance_dir.to_path_buf();
@@ -79,17 +68,51 @@ async fn download_and_track_files(
     Ok((installed_files, warnings))
 }
 
+/// Downloads (or checks) the pack's own files. Returns the instance-relative
+/// path of each file now in place — as the pack names it, even when the
+/// player's copy is a disabled `.jar.disabled` — and per-file warnings.
+async fn download_pack_files(
+    app: &AppHandle,
+    downloader: &crate::download::DownloadManager,
+    provider: Option<&dyn ModpackProvider>,
+    resolved: &ResolvedModpackVersion,
+    instance_id: &str,
+    instance_dir: &Path,
+) -> (Vec<PathBuf>, Vec<InstallWarning>) {
+    let (planned, mut warnings) = resolve_download_items(provider, resolved, instance_dir).await;
+    let items: Vec<DownloadItem> = planned.iter().map(|(item, _)| item.clone()).collect();
+    let failures = downloader.run_batch_lenient(app, instance_id, "Fichiers du modpack", items, 8).await;
+    let failed: HashSet<PathBuf> = failures.iter().map(|(item, _)| item.dest.clone()).collect();
+    for (item, error) in failures {
+        warnings.push(InstallWarning {
+            file_name: item.dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            message: format!("Téléchargement impossible : {error}"),
+            ..Default::default()
+        });
+    }
+    let placed = planned.into_iter().filter(|(item, _)| !failed.contains(&item.dest)).map(|(_, rel)| rel).collect();
+    (placed, warnings)
+}
+
+/// What to download for each pack file, paired with the file's
+/// instance-relative path. A mod the player disabled (`x.jar.disabled`
+/// with no `x.jar`) is downloaded under its disabled name, so updating or
+/// repairing the pack doesn't silently turn it back on.
 async fn resolve_download_items(
     provider: Option<&dyn ModpackProvider>,
     resolved: &ResolvedModpackVersion,
     instance_dir: &Path,
-) -> (Vec<DownloadItem>, Vec<InstallWarning>) {
+) -> (Vec<(DownloadItem, PathBuf)>, Vec<InstallWarning>) {
     let mut items = Vec::new();
     let mut warnings = resolved.warnings.clone();
     for file in &resolved.files {
-        let Some(dest) = crate::util::fs::safe_join(instance_dir, &file.path) else {
+        let Some(mut dest) = crate::util::fs::safe_join(instance_dir, &file.path) else {
             continue;
         };
+        let twin = disabled_twin(&dest);
+        if !dest.exists() && twin.exists() {
+            dest = twin;
+        }
         let info = match provider {
             Some(p) => p.resolve_file_download(file).await,
             None => match &file.direct_url {
@@ -98,12 +121,10 @@ async fn resolve_download_items(
             },
         };
         match info {
-            Ok(FileDownloadInfo::Direct { url }) => items.push(DownloadItem {
-                url,
-                dest,
-                sha1: file.sha1.clone(),
-                size: (file.size > 0).then_some(file.size),
-            }),
+            Ok(FileDownloadInfo::Direct { url }) => items.push((
+                DownloadItem { url, dest, sha1: file.sha1.clone(), size: (file.size > 0).then_some(file.size) },
+                file.path.clone(),
+            )),
             Ok(FileDownloadInfo::ManualRequired { browser_url, expected_filename }) => warnings.push(InstallWarning {
                 file_name: expected_filename,
                 message: "L'auteur a désactivé le téléchargement automatique pour ce fichier.".to_string(),
@@ -262,6 +283,7 @@ pub async fn instances_update_modpack(
     spawn_blocking(move || {
         for rel in &stale {
             if let Some(path) = crate::util::fs::safe_join(&instance_dir, rel) {
+                let _ = std::fs::remove_file(disabled_twin(&path));
                 let _ = std::fs::remove_file(path);
             }
         }
@@ -282,6 +304,69 @@ pub async fn instances_update_modpack(
     .await?;
     instances_changed(&app);
     Ok(InstanceInstallResult { instance, warnings })
+}
+
+/// "Réparer" for a modpack instance: every file of the installed version is
+/// checked against its checksum and fetched again when missing or damaged.
+/// The pack's override files (configs, scripts…) only come back where they
+/// were deleted — the player's edits are never overwritten.
+#[tauri::command]
+pub async fn instances_repair_modpack_files(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> AppResult<Vec<InstallWarning>> {
+    ensure_not_running(&state, &instance_id)?;
+    let guard = state.begin_install(&instance_id)?;
+    let paths = state.paths.clone();
+    let id = instance_id.clone();
+    let instance = spawn_blocking(move || instances::get(&paths, &id)).await?;
+    let Some(modpack) = instance.modpack.clone() else {
+        return Ok(Vec::new());
+    };
+    let provider_ref = state
+        .providers
+        .get(&modpack.provider)
+        .ok_or_else(|| AppError::Provider(format!("provider inconnu: {}", modpack.provider)))?;
+
+    let resolved = cancellable(&guard.cancel, async {
+        Ok(provider_ref.resolve_version(&modpack.pack_id, &modpack.version_id).await?)
+    })
+    .await?;
+    let downloader = state.downloader.with_verify(Verify::Full);
+    let (placed, warnings) = cancellable(&guard.cancel, async {
+        Ok(download_pack_files(&app, &downloader, Some(provider_ref), &resolved, &instance.id, &instance.directory)
+            .await)
+    })
+    .await?;
+
+    let overrides = resolved.overrides_dirs.clone();
+    let dest = instance.directory.clone();
+    let restored = spawn_blocking(move || {
+        let mut all = Vec::new();
+        for dir in overrides {
+            all.extend(copy_dir_recursive(&dir, &dest, |rel| dest.join(rel).exists())?);
+        }
+        Ok(all)
+    })
+    .await?;
+
+    // Files placed by hand earlier (author-blocked downloads) are now
+    // tracked too, so the next update replaces them like the others.
+    let (paths, id) = (state.paths.clone(), instance.id.clone());
+    spawn_blocking(move || {
+        instances::update(&paths, &id, |i| {
+            if let Some(pack) = &mut i.modpack {
+                pack.installed_files.extend(placed.into_iter().chain(restored));
+                pack.installed_files.sort();
+                pack.installed_files.dedup();
+            }
+            Ok(())
+        })
+    })
+    .await?;
+    instances_changed(&app);
+    Ok(warnings)
 }
 
 /// Moves hand-downloaded modpack files from the Downloads folder into the
@@ -476,9 +561,26 @@ mod tests {
         let (items, warnings) = resolve_download_items(None, &r, Path::new("/instance")).await;
 
         assert_eq!(items.len(), 1);
-        assert!(items[0].dest.ends_with("mods/a.jar"));
+        assert!(items[0].0.dest.ends_with("mods/a.jar"));
+        assert_eq!(items[0].1, PathBuf::from("mods/a.jar"));
         assert_eq!(warnings.len(), 2);
         assert_eq!(warnings[0].file_name, "x");
+    }
+
+    #[tokio::test]
+    async fn a_mod_the_player_disabled_stays_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("mods")).unwrap();
+        std::fs::write(dir.path().join("mods/off.jar.disabled"), b"x").unwrap();
+        let r = resolved(vec![
+            file_ref("mods/off.jar", Some("https://example.com/off.jar")),
+            file_ref("mods/on.jar", Some("https://example.com/on.jar")),
+        ]);
+        let (items, _) = resolve_download_items(None, &r, dir.path()).await;
+
+        assert!(items[0].0.dest.ends_with("mods/off.jar.disabled"));
+        assert_eq!(items[0].1, PathBuf::from("mods/off.jar"));
+        assert!(items[1].0.dest.ends_with("mods/on.jar"));
     }
 
     #[test]

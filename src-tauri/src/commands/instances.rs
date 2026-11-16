@@ -6,6 +6,7 @@ use std::path::Path;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::error::{AppError, AppResult};
+use crate::instances::doctor::{self, KnownIssue};
 use crate::instances::{self, CreateInstanceInput, Instance};
 use crate::providers::LoaderKind;
 use crate::state::AppState;
@@ -31,6 +32,20 @@ pub(super) fn ensure_not_running(state: &AppState, id: &str) -> AppResult<()> {
         return Err(AppError::Instance("une installation est en cours sur cette instance".to_string()));
     }
     Ok(())
+}
+
+/// Known problems of this instance the launcher can fix (see the "Réparer" dialog).
+#[tauri::command]
+pub async fn instance_diagnose(state: State<'_, AppState>, id: String) -> AppResult<Vec<KnownIssue>> {
+    let instance = instances::get(&state.paths, &id)?;
+    spawn_blocking(move || Ok(doctor::diagnose(&instance))).await
+}
+
+#[tauri::command]
+pub async fn instance_fix_issue(state: State<'_, AppState>, id: String, issue: String) -> AppResult<()> {
+    ensure_not_running(&state, &id)?;
+    let instance = instances::get(&state.paths, &id)?;
+    spawn_blocking(move || doctor::fix(&instance, &issue)).await
 }
 
 #[tauri::command]
